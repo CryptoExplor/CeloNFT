@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=390, initial-scale=1.0" />
+  <title>Farcaster Celo Free NFT Mint</title>
+
+  <!-- Farcaster Mini App Metadata -->
+  <meta name="fc:miniapp" content='{
+    "version":"1",
+    "imageUrl":"https://your-celo-app.vercel.app/image.png",
+    "button":{
+      "title":"Celo NFT",
+      "action":{
+        "type":"launch_frame",
+        "name":"MINT",
+        "url":"https://your-celo-app.vercel.app",
+        "splashImageUrl":"https://your-celo-app.vercel.app/splash.png",
+        "splashBackgroundColor":"#111111"
+      }
+    }
+  }' />
+
+  <style>
+    body {
+      margin: 0;
+      background: #111;
+      color: white;
+      font-family: sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      padding: 16px 0;
+      box-sizing: border-box;
+    }
+    .tradingview-widget-container {
+      width: 100%;
+      max-width: 390px;
+      height: 300px;
+      border: 1px solid #333;
+      border-radius: 12px;
+      overflow: hidden;
+      margin-bottom: 16px;
+    }
+    #celo-chart {
+        height: 100%;
+        width: 100%;
+    }
+    .status-box {
+      font-size: 1rem;
+      padding: 8px 12px;
+      border-radius: 8px;
+      text-align: center;
+      width: 90%;
+      max-width: 320px;
+      margin-bottom: 12px;
+    }
+    .status-warning { background: #b45309; }
+    .status-success { background: #1d4ed8; }
+    .status-error { background: #b91c1c; } /* Added for errors */
+    .mint-button {
+      padding: 1rem 2rem;
+      font-size: 1.4rem;
+      font-weight: bold;
+      color: #0f0f0f;
+      background: linear-gradient(90deg, #49dfb5, #7dd3fc);
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      margin-bottom: 12px;
+      box-shadow: 0 2px 8px #0008;
+      transition: background 0.2s, color 0.2s;
+    }
+    .mint-button:disabled {
+      background: #888 !important;
+      color: #444;
+      cursor: not-allowed;
+    }
+    .addresses-box {
+      background: #131417;
+      font-size: 0.9rem;
+      padding: 6px 10px;
+      border-radius: 7px;
+      margin-bottom: 12px;
+      width: 85%;
+      max-width: 330px;
+      word-break: break-all;
+      color: #c3cfe8;
+    }
+    footer {
+      margin-top: auto;
+      display: flex;
+      gap: 24px;
+      padding-bottom: 12px;
+    }
+    footer svg {
+      fill: #fafafa;
+      width: 28px;
+      height: 28px;
+    }
+    .hidden { display:none; }
+  </style>
+</head>
+<body>
+
+  <!-- 1. Live CELOUSD chart -->
+  <div class="tradingview-widget-container">
+    <div id="celo-chart"></div>
+    <script src="https://s3.tradingview.com/tv.js"></script>
+    <script>
+      new TradingView.widget({
+        autosize: true,
+        symbol: "CELOUSDC",
+        interval: "60",
+        theme: "dark",
+        style: "1",
+        hide_top_toolbar: true,
+        withdateranges: false,
+        toolbar_bg: "#1f1f1f",
+        locale: "en",
+        enable_publishing: false,
+        allow_symbol_change: false,
+        container_id: "celo-chart"
+      });
+    </script>
+  </div>
+
+  <h1>Mint Your Celo NFT</h1>
+
+  <!-- User Address -->
+  <div id="userAddressBox" class="addresses-box hidden"></div>
+  <!-- Total Minted -->
+  <div id="totalSupply" class="status-box status-warning">
+    Loading minted NFTs…
+  </div>
+  <!-- Mint Button -->
+  <button class="mint-button">MINT (Celo)</button>
+  <div id="statusBox" class="status-box"></div>
+
+  <!-- Footer -->
+  <footer>
+    <a href="https://farcaster.xyz/dare1.eth" target="_blank" aria-label="Farcaster">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M12 2C6.486 2 2 6.486 2 12s4.486 10 10 10 10-4.486 10-10S17.514 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z"/><path d="M12 7c-2.757 0-5 2.243-5 5s2.243 5 5 5 5-2.243 5-5-2.243-5-5-5zm0 8c-1.654 0-3-1.346-3-3s1.346-3 3-3 3 1.346 3 3-1.346 3-3 3z"/></svg>
+    </a>
+    <a href="https://x.com/kumar14700" target="_blank" aria-label="Twitter">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 16 16"><path d="M12.6.75h2.454l-5.36 6.142L16 15.25h-4.937l-3.867-5.07-4.425 5.07H.316l5.733-6.57L0 .75h5.063l3.495 4.633L12.601.75Zm-.86 13.028h1.36L4.323 2.145H2.865l8.875 11.633Z"/></svg>
+    </a>
+  </footer>
+
+  <!-- Farcaster SDK -->
+  <script type="module">
+    import { sdk } from 'https://esm.sh/@farcaster/miniapp-sdk';
+    sdk.actions.ready({ disableNativeGestures: true });
+  </script>
+
+  <!-- Wagmi + Celo Logic -->
+  <script type="module">
+    import {
+      createConfig,
+      connect,
+      writeContract,
+      readContract,
+      http
+    } from 'https://esm.sh/@wagmi/core';
+    import { celo } from 'https://esm.sh/@wagmi/core/chains';
+    import { farcasterMiniApp } from 'https://esm.sh/@farcaster/miniapp-wagmi-connector';
+    import { parseEther } from 'https://esm.sh/viem';
+
+    const statusBox = document.getElementById('statusBox');
+    const supplyBox  = document.getElementById('totalSupply');
+    const mintBtn    = document.querySelector('.mint-button');
+    const userAddrBox = document.getElementById('userAddressBox');
+
+    function setStatus(msg, type = 'info') {
+      statusBox.className = `status-box status-${type}`;
+      statusBox.innerHTML = msg;
+    }
+    function showAddress(addr) {
+      const shortAddr = `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+      userAddrBox.textContent = `Your address: ${shortAddr}`;
+      userAddrBox.classList.remove('hidden');
+    }
+    // Setup wagmi config for Celo
+    const config = createConfig({
+      chains: [celo],
+      transports: { [celo.id]: http() }
+    });
+
+    (async () => {
+      let address, abi, contract;
+      // Connect wallet
+      try {
+        const conn = await connect(config, { connector: farcasterMiniApp() });
+        address = conn.accounts[0];
+        showAddress(address);
+      } catch (e) { setStatus("Wallet connect failed.", 'error'); console.error(e); }
+      
+      // Load contract JSON
+      try {
+        // NOTE: You need to create and serve a 'contract.json' file with the ABI and address
+        contract = await fetch('./contract.json').then(r => r.json());
+        abi = contract.abi;
+      } catch (e) { setStatus("Missing contract details.", 'error'); console.error(e); mintBtn.disabled = true; }
+      
+      if(!contract || !abi || !address) {
+          mintBtn.disabled = true;
+          return;
+      }
+
+      // Fetch totalSupply
+      try {
+        const total = await readContract(config, {
+          address: contract.address,
+          abi,
+          functionName: 'totalSupply'
+        });
+        supplyBox.textContent = `Total Minted: ${total}`;
+      } catch (e) {
+        supplyBox.textContent = 'Total Minted: N/A';
+        console.error(e);
+      }
+    })();
+
+    // Mint handler
+    mintBtn.addEventListener('click', async () => {
+      mintBtn.disabled = true;
+      mintBtn.innerText = 'Minting…';
+      try {
+        const { address, abi } = await fetch('./contract.json').then(r => r.json());
+        const hash = await writeContract(config, {
+          address,
+          abi,
+          functionName: 'mint',
+          args: [],
+          value: parseEther('0')
+        });
+        setStatus(
+          `✅ Mint Successful <a href="https://celoscan.io/tx/${hash}" target="_blank" style="color:#fff;text-decoration:underline">View Tx</a>`,
+          'success'
+        );
+      } catch (e) {
+        const errorMsg = e.shortMessage || "Mint rejected or failed.";
+        setStatus(errorMsg, 'error');
+        console.error(e);
+      } finally {
+        mintBtn.disabled = false;
+        mintBtn.innerText = 'MINT';
+      }
+    });
+  </script>
+</body>
+</html>
