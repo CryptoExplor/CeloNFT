@@ -177,17 +177,15 @@
     const mintBtn      = document.querySelector('.mint-button');
     const userAddrBox = document.getElementById('userAddressBox');
 
-    // Celo brand assets in base64. Replace with your actual files.
-    const logoBase64 = "data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPCEtLSBHZW5lcmF0b3I6IEFkb2JlIElsbHVzdHJhdG9yIDI3LjAuMCwgU1ZHIEV4cG9ydCBQbHVnLUluIC4gU1ZHIFZlcnNpb246IDYuMDAgQnVpbGQgMCkgIC0tPgo8c3ZnIHZlcnNpb249IjEuMSIgaWQ9IkxheWVyXzEiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgeG1sbnM6eGxpbms9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkveGxpbmsiIHg9IjBweCIgeT0iMHB4IgoJIHZpZXdCb3g9IjAgMCAyNTAgMjUwIiBzdHlsZT0iZW5hYmxlLWJhY2tncm91bmQ6bmV3IDAgMCAyNTAgMjUwOyIgeG1sOnNwYWNlPSJwcmVzZXJ2ZSI+CjxzdHlsZSB0eXBlPSJ0ZXh0L2NzcyI+Cgkuc3Qwe2ZpbGw6I0ZDRkY1Mjt9Cjwvc3R5bGU+CjxjaXJjbGUgY2xhc3M9InN0MCIgY3g9IjEyNSIgY3k9IjEyNSIgcj0iMTI1Ii8+CjxwYXRoIGQ9Ik0xODguOSw2MC43SDYwLjd2MTI4LjJoMTI4LjJ2LTQ0LjhoLTIxLjNjLTcuMywxNi4zLTIzLjgsMjcuNy00Mi43LDI3LjdjLTI2LDAtNDcuMS0yMS4zLTQ3LjEtNDcuMWMwLTI1LjksMjEuMS00Nyw0Ny4xLTQ3CgljMTkuMywwLDM1LjgsMTEuNyw0My4xLDI4LjRoMjAuOVY2MC43eiIvPgo8L3N2Zz4K";
-    function setStatus(msg, type = 'info') {
-      statusBox.className = `status-box status-${type}`;
-      statusBox.innerHTML = msg;
-    }
-    function showAddress(addr) {
-      const shortAddr = `${addr.slice(0, 6)}...${addr.slice(-4)}`;
-      userAddrBox.textContent = `Your address: ${shortAddr}`;
-      userAddrBox.classList.remove('hidden');
-    }
+    function setStatus(msg, type = 'info') {
+      statusBox.className = `status-box status-${type}`;
+      statusBox.innerHTML = msg;
+    }
+    function showAddress(addr) {
+      const shortAddr = `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+      userAddrBox.textContent = `Your address: ${shortAddr}`;
+      userAddrBox.classList.remove('hidden');
+    }
 
     // --- Price fetching function ---
     async function fetchCeloPrice() {
@@ -239,12 +237,11 @@
         <rect x="5" y="5" width="390" height="390" rx="25"
               stroke="url(#rainbow)" stroke-width="10" fill="#1C1C1C"/>
     
-        <!-- Celo logo -->
-        <image
-          href="data:image/svg+xml;base64,${logoBase64}"
-          x="150" y="50"
-          width="100" height="100"
-        />
+        <!-- Celo-style logo circle -->
+        <circle cx="200" cy="120" r="60" fill="#FBCC5C" stroke="white" stroke-width="4"/>
+        <text x="200" y="130" font-family="'Orbitron', sans-serif" font-size="36" font-weight="700"
+            fill="#1C1C1C" text-anchor="middle" alignment-baseline="middle">CELO</text>
+
     
         <!-- Price text -->
         <text x="200" y="240" font-family="Arial, sans-serif" font-size="42" font-weight="bold"
