@@ -239,31 +239,31 @@
     
         <!-- Celo logo circle -->
         <circle cx="200" cy="120" r="60" fill="#FBCC5C" stroke="white" stroke-width="4"/>
-        <text x="200" y="125" font-family="Arial, sans-serif" font-size="34" font-weight="bold"
-              fill="#1C1C1C" text-anchor="middle" alignment-baseline="middle">CELO</text>
+        <text x="200" y="125" font-family="Arial, sans-serif" font-size="36" font-weight="700"
+              fill="##FFFF66" text-anchor="middle" alignment-baseline="middle">CELO</text>
     
         <!-- Price text -->
-        <text x="200" y="240" font-family="Arial, sans-serif" font-size="42" font-weight="bold"
+        <text x="200" y="240" font-family="Arial, sans-serif" font-size="42" font-weight="700"
               fill="#35D07F" text-anchor="middle" alignment-baseline="middle">
           $${price}
         </text>
         
         <!-- Rarity text -->
-        <text x="200" y="290" font-family="Arial, sans-serif" font-size="24" font-weight="bold"
+        <text x="200" y="290" font-family="Arial, sans-serif" font-size="24" font-weight="700"
               fill="#c0c0c0" text-anchor="middle" alignment-baseline="middle">
-              <tspan fill="#35D07F">${rarity}</tspan> Rarity
+              <tspan fill="#35D07F">${rarity}</tspan>
         </text>
       </svg>
       `;
     }
 
-    function base64Encode(str) {
-      return btoa(unescape(encodeURIComponent(str)));
-    }
+    function base64Encode(str) {
+      return btoa(unescape(encodeURIComponent(str)));
+    }
 
-    function buildTokenURI(tokenId, price, rarity) {
-      const svg = createStylishSVG(tokenId, price, rarity);
-      const image = "data:image/svg+xml;base64," + base64Encode(svg);
+    function buildTokenURI(tokenId, price, rarity) {
+      const svg = createStylishSVG(tokenId, price, rarity);
+      const image = "data:image/svg+xml;base64," + base64Encode(svg);
 
       const metadata = {
         name: `Celo Price NFT #${tokenId}`,
@@ -276,15 +276,15 @@
         ]
       };
 
-      return "data:application/json;base64," + base64Encode(JSON.stringify(metadata));
-    }
-    // --- End on-chain metadata functions ---
+      return "data:application/json;base64," + base64Encode(JSON.stringify(metadata));
+    }
+    // --- End on-chain metadata functions ---
 
-    // Setup wagmi config for Celo
-    const config = createConfig({
-      chains: [celo],
-      transports: { [celo.id]: http() }
-    });
+    // Setup wagmi config for Celo
+    const config = createConfig({
+      chains: [celo],
+      transports: { [celo.id]: http() }
+    });
 
     (async () => {
       let address, abi, contract;
@@ -295,12 +295,12 @@
         showAddress(address);
       } catch (e) { setStatus("Wallet connect failed.", 'error'); console.error(e); }
 
-      // Load contract JSON
-      try {
-        // NOTE: You need to create and serve a 'contract.json' file with the ABI and address
-        contract = await fetch('./contract.json').then(r => r.json());
-        abi = contract.abi;
-      } catch (e) { setStatus("Missing contract details.", 'error'); console.error(e); mintBtn.disabled = true; }
+      // Load contract JSON
+      try {
+        // NOTE: You need to create and serve a 'contract.json' file with the ABI and address
+        contract = await fetch('./contract.json').then(r => r.json());
+        abi = contract.abi;
+      } catch (e) { setStatus("Missing contract details.", 'error'); console.error(e); mintBtn.disabled = true; }
 
       if(!contract || !abi || !address) {
           mintBtn.disabled = true;
@@ -349,8 +349,8 @@
         const tokenId = Number(total) + 1;
         const rarity = getRandomRarity();
 
-        // Build the on-chain metadata with the fetched price and rarity
-        const tokenURI = buildTokenURI(tokenId, price.toFixed(4), rarity);
+        // Build the on-chain metadata with the fetched price and rarity
+        const tokenURI = buildTokenURI(tokenId, price.toFixed(4), rarity);
 
         // Mint
         const hash = await writeContract(config, {
@@ -366,15 +366,15 @@
         );
         supplyBox.textContent = `Total Minted: ${tokenId}`;
 
-      } catch (e) {
-        const errorMsg = e.shortMessage || "Mint rejected or failed.";
-        setStatus(errorMsg, 'error');
-        console.error(e);
-      } finally {
-        mintBtn.disabled = false;
-        mintBtn.innerText = 'MINT';
-      }
-    });
-  </script>
+      } catch (e) {
+        const errorMsg = e.shortMessage || "Mint rejected or failed.";
+        setStatus(errorMsg, 'error');
+        console.error(e);
+      } finally {
+        mintBtn.disabled = false;
+        mintBtn.innerText = 'MINT';
+      }
+    });
+  </script>
 </body>
 </html>
