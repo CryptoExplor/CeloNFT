@@ -249,7 +249,7 @@
         <!-- Price text -->
         <text x="200" y="240" font-family="Arial, sans-serif" font-size="42" font-weight="bold"
               fill="#35D07F" text-anchor="middle" alignment-baseline="middle">
-          $${price.toFixed(4)}
+          $${price}
         </text>
         
         <!-- Rarity text -->
@@ -269,16 +269,16 @@
       const svg = createStylishSVG(tokenId, price, rarity);
       const image = "data:image/svg+xml;base64," + base64Encode(svg);
 
-      const metadata = {
-        name: `Celo Price NFT #${tokenId}`,
-        description: "A dynamic CELO Price NFT with rainbow border and rarity-based animation speed.",
-        image,
-        attributes: [
-          { trait_type: "Price", value: `$${price.toFixed(4)}` },
-          { trait_type: "Rarity", value: rarity },
-          { trait_type: "Border", value: "Rainbow Animated" }
-        ]
-      };
+      const metadata = {
+        name: `Celo Price NFT #${tokenId}`,
+        description: "A dynamic CELO Price NFT with rainbow border and rarity-based animation speed.",
+        image,
+        attributes: [
+          { trait_type: "Price", value: `$${price}` },
+          { trait_type: "Rarity", value: rarity },
+          { trait_type: "Border", value: "Rainbow Animated" }
+        ]
+      };
 
       return "data:application/json;base64," + base64Encode(JSON.stringify(metadata));
     }
