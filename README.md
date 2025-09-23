@@ -1,6 +1,6 @@
 # CeloNFT
 
-**Live Mint:** celo-nft-phi.vercel.app
+**Live Mint:** https://celo-nft-phi.vercel.app
 
 ## Overview
 
