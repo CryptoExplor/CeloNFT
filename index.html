@@ -178,8 +178,7 @@
     const userAddrBox = document.getElementById('userAddressBox');
 
     // Celo brand assets in base64. Replace with your actual files.
-    const logoBase64 = "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPCEtLSBHZW5lcmF0b3I6IEFkb2JlIElsbHVzdHJhdG9yIDI3LjAuMCwgU1ZHIEV4cG9ydCBQbHVnLUluIC4gU1ZHIFZlcnNpb246IDYuMDAgQnVpbGQgMCkgIC0tPgo8c3ZnIHZlcnNpb249IjEuMSIgaWQ9IkxheWVyXzEiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgeG1sbnM6eGxpbms9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkveGxpbmsiIHg9IjBweCIgeT0iMHB4IgoJIHZpZXdCb3g9IjAgMCAyNTAgMjUwIiBzdHlsZT0iZW5hYmxlLWJhY2tncm91bmQ6bmV3IDAgMCAyNTAgMjUwOyIgeG1sOnNwYWNlPSJwcmVzZXJ2ZSI+CjxzdHlsZSB0eXBlPSJ0ZXh0L2NzcyI+Cgkuc3Qwe2ZpbGw6I0ZDRkY1Mjt9Cjwvc3R5bGU+CjxjaXJjbGUgY2xhc3M9InN0MCIgY3g9IjEyNSIgY3k9IjEyNSIgcj0iMTI1Ii8+CjxwYXRoIGQ9Ik0xODguOSw2MC43SDYwLjd2MTI4LjJoMTI4LjJ2LTQ0LjhoLTIxLjNjLTcuMywxNi4zLTIzLjgsMjcuNy00Mi43LDI3LjdjLTI2LDAtNDcuMS0yMS4zLTQ3LjEtNDcuMWMwLTI1LjksMjEuMS00Nyw0Ny4xLTQ3CgljMTkuMywwLDM1LjgsMTEuNyw0My4xLDI4LjRoMjAuOVY2MC43eiIvPgo8L3N2Zz4K";
-    const pulseSpeed = "4s"; // Speed of the pulsing animation
+    const logoBase64 = "data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPCEtLSBHZW5lcmF0b3I6IEFkb2JlIElsbHVzdHJhdG9yIDI3LjAuMCwgU1ZHIEV4cG9ydCBQbHVnLUluIC4gU1ZHIFZlcnNpb246IDYuMDAgQnVpbGQgMCkgIC0tPgo8c3ZnIHZlcnNpb249IjEuMSIgaWQ9IkxheWVyXzEiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgeG1sbnM6eGxpbms9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkveGxpbmsiIHg9IjBweCIgeT0iMHB4IgoJIHZpZXdCb3g9IjAgMCAyNTAgMjUwIiBzdHlsZT0iZW5hYmxlLWJhY2tncm91bmQ6bmV3IDAgMCAyNTAgMjUwOyIgeG1sOnNwYWNlPSJwcmVzZXJ2ZSI+CjxzdHlsZSB0eXBlPSJ0ZXh0L2NzcyI+Cgkuc3Qwe2ZpbGw6I0ZDRkY1Mjt9Cjwvc3R5bGU+CjxjaXJjbGUgY2xhc3M9InN0MCIgY3g9IjEyNSIgY3k9IjEyNSIgcj0iMTI1Ii8+CjxwYXRoIGQ9Ik0xODguOSw2MC43SDYwLjd2MTI4LjJoMTI4LjJ2LTQ0LjhoLTIxLjNjLTcuMywxNi4zLTIzLjgsMjcuNy00Mi43LDI3LjdjLTI2LDAtNDcuMS0yMS4zLTQ3LjEtNDcuMWMwLTI1LjksMjEuMS00Nyw0Ny4xLTQ3CgljMTkuMywwLDM1LjgsMTEuNyw0My4xLDI4LjRoMjAuOVY2MC43eiIvPgo8L3N2Zz4K";
     function setStatus(msg, type = 'info') {
       statusBox.className = `status-box status-${type}`;
       statusBox.innerHTML = msg;
@@ -250,7 +249,6 @@
         <!-- Price text -->
         <text x="200" y="240" font-family="Arial, sans-serif" font-size="42" font-weight="bold"
               fill="#35D07F" text-anchor="middle" alignment-baseline="middle">
-          <animate attributeName="opacity" values="1;0.6;1" dur="${pulseSpeed}s" repeatCount="indefinite"/>
           $${price.toFixed(4)}
         </text>
         
