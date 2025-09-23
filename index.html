@@ -181,6 +181,35 @@
       userAddrBox.textContent = `Your address: ${shortAddr}`;
       userAddrBox.classList.remove('hidden');
     }
+    
+    // --- On-chain metadata functions ---
+    function createSVG(tokenId) {
+      return `<svg xmlns='http://www.w3.org/2000/svg' width='350' height='350'>
+        <rect width='100%' height='100%' fill='black'/>
+        <text x='50%' y='50%' fill='white' font-size='28' text-anchor='middle' dominant-baseline='middle'>
+          Celo Mini NFT #${tokenId}
+        </text>
+      </svg>`;
+    }
+
+    function base64Encode(str) {
+      return btoa(unescape(encodeURIComponent(str)));
+    }
+
+    function buildTokenURI(tokenId) {
+      const svg = createSVG(tokenId);
+      const image = "data:image/svg+xml;base64," + base64Encode(svg);
+      const metadata = {
+        name: `Celo Mini NFT #${tokenId}`,
+        description: "Fully on-chain NFT",
+        image,
+        attributes: [{ trait_type: "Type", value: "OnChain" }]
+      };
+      const jsonStr = JSON.stringify(metadata);
+      return "data:application/json;base64," + base64Encode(jsonStr);
+    }
+    // --- End on-chain metadata functions ---
+
     // Setup wagmi config for Celo
     const config = createConfig({
       chains: [celo],
@@ -224,27 +253,43 @@
 
     // Mint handler
     mintBtn.addEventListener('click', async () => {
-      mintBtn.disabled = true; mintBtn.innerText = 'Minting…';
+      mintBtn.disabled = true;
+      mintBtn.innerText = 'Minting…';
       try {
-        // NOTE: You need to create and serve a 'contract.json' file with the ABI and address
-        const contract = await fetch('./contract.json').then(r => r.json());
+        const { address, abi } = await fetch('./contract.json').then(r => r.json());
+
+        // Get the next token ID
+        const total = await readContract(config, {
+          address,
+          abi,
+          functionName: 'totalSupply'
+        });
+        const tokenId = Number(total) + 1;
+
+        // Build the on-chain metadata
+        const tokenURI = buildTokenURI(tokenId);
+
+        // Call the mint function with the tokenURI
         const hash = await writeContract(config, {
-          address: contract.address,
-          abi: contract.abi,
+          address,
+          abi,
           functionName: 'mint',
-          args: [],
+          args: [tokenURI],
           value: parseEther('0')
         });
         setStatus(
           `✅ Mint Successful <a href="https://celoscan.io/tx/${hash}" target="_blank" style="color:#fff;text-decoration:underline">View Tx</a>`,
           'success'
         );
+        supplyBox.textContent = `Total Minted: ${tokenId}`;
+
       } catch (e) {
         const errorMsg = e.shortMessage || "Mint rejected or failed.";
         setStatus(errorMsg, 'error');
         console.error(e);
       } finally {
-        mintBtn.disabled = false; mintBtn.innerText = 'MINT';
+        mintBtn.disabled = false;
+        mintBtn.innerText = 'MINT';
       }
     });
   </script>
