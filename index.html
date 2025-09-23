@@ -187,76 +187,75 @@
       userAddrBox.classList.remove('hidden');
     }
 
-    // --- Price fetching function ---
-    async function fetchCeloPrice() {
-      try {
-        const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=celo&vs_currencies=usd');
-        const data = await response.json();
-        const price = data.celo.usd;
-        return price;
-      } catch (e) {
-        console.error("Failed to fetch CELO price:", e);
-        throw new Error("Failed to fetch CELO price. Please try again.");
-      }
-    }
-    
-    // --- Rarity function ---
-    function getRandomRarity() {
-      const rand = Math.random();
-      if (rand < 0.05) return "Legendary"; // 5% chance
-      if (rand < 0.20) return "Rare";      // 15% chance
-      return "Common";                    // 80% chance
-    }
+    // --- Price fetching function ---
+    async function fetchCeloPrice() {
+      try {
+        const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=celo&vs_currencies=usd');
+        const data = await response.json();
+        const price = data.celo.usd;
+        return price;
+      } catch (e) {
+        console.error("Failed to fetch CELO price:", e);
+        throw new Error("Failed to fetch CELO price. Please try again.");
+      }
+    }
+    
+    // --- Rarity function ---
+    function getRandomRarity() {
+      const rand = Math.random();
+      if (rand < 0.05) return "Legendary"; // 5% chance
+      if (rand < 0.20) return "Rare";      // 15% chance
+      return "Common";                    // 80% chance
+    }
 
-    // --- On-chain metadata functions ---
-    function createStylishSVG(tokenId, price, rarity = "Common") {
-      // Set rainbow animation speed by rarity
-      let speed = "8s";
-      if (rarity === "Rare") speed = "5s";
-      if (rarity === "Legendary") speed = "2s";
-    
-      return `
-      <svg xmlns="http://www.w3.org/2000/svg" width="400" height="400">
-        <defs>
-          <!-- Animated rainbow border -->
-          <linearGradient id="rainbow" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stop-color="red">
-              <animate attributeName="stop-color"
-                       values="red;orange;yellow;green;blue;indigo;violet;red"
-                       dur="${speed}" repeatCount="indefinite"/>
-            </stop>
-            <stop offset="100%" stop-color="violet">
-              <animate attributeName="stop-color"
-                       values="violet;red;orange;yellow;green;blue;indigo;violet"
-                       dur="${speed}" repeatCount="indefinite"/>
-            </stop>
-          </linearGradient>
-        </defs>
-    
-        <!-- Border rectangle -->
-        <rect x="5" y="5" width="390" height="390" rx="25"
-              stroke="url(#rainbow)" stroke-width="10" fill="#1C1C1C"/>
-    
-        <!-- Celo-style logo circle -->
+    // --- On-chain metadata functions ---
+    function createStylishSVG(tokenId, price, rarity = "Common") {
+      // Set rainbow animation speed by rarity
+      let speed = "8s";
+      if (rarity === "Rare") speed = "5s";
+      if (rarity === "Legendary") speed = "2s";
+    
+      return `
+      <svg xmlns="http://www.w3.org/2000/svg" width="400" height="400">
+        <defs>
+          <!-- Animated rainbow border -->
+          <linearGradient id="rainbow" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="red">
+              <animate attributeName="stop-color"
+                       values="red;orange;yellow;green;blue;indigo;violet;red"
+                       dur="${speed}" repeatCount="indefinite"/>
+            </stop>
+            <stop offset="100%" stop-color="violet">
+              <animate attributeName="stop-color"
+                       values="violet;red;orange;yellow;green;blue;indigo;violet"
+                       dur="${speed}" repeatCount="indefinite"/>
+            </stop>
+          </linearGradient>
+        </defs>
+    
+        <!-- Border rectangle -->
+        <rect x="5" y="5" width="390" height="390" rx="25"
+              stroke="url(#rainbow)" stroke-width="10" fill="#1C1C1C"/>
+    
+        <!-- Celo logo circle -->
         <circle cx="200" cy="120" r="60" fill="#FBCC5C" stroke="white" stroke-width="4"/>
-        <text x="200" y="130" font-family="'Orbitron', sans-serif" font-size="36" font-weight="700"
-            fill="#1C1C1C" text-anchor="middle" alignment-baseline="middle">CELO</text>
-
-    
-        <!-- Price text -->
-        <text x="200" y="240" font-family="Arial, sans-serif" font-size="42" font-weight="bold"
-              fill="#35D07F" text-anchor="middle" alignment-baseline="middle">
-          $${price}
-        </text>
-        
-        <!-- Rarity text -->
-        <text x="200" y="300" font-family="Arial, sans-serif" font-size="24" font-weight="bold"
-              fill="#c0c0c0" text-anchor="middle" alignment-baseline="middle">
-          <tspan fill="#35D07F">${rarity} NFT</tspan>
-        </text>
-      </svg>
-      `;
-    }
+        <text x="200" y="125" font-family="Arial, sans-serif" font-size="34" font-weight="bold"
+              fill="#1C1C1C" text-anchor="middle" alignment-baseline="middle">CELO</text>
+    
+        <!-- Price text -->
+        <text x="200" y="240" font-family="Arial, sans-serif" font-size="42" font-weight="bold"
+              fill="#35D07F" text-anchor="middle" alignment-baseline="middle">
+          $${price}
+        </text>
+        
+        <!-- Rarity text -->
+        <text x="200" y="290" font-family="Arial, sans-serif" font-size="24" font-weight="bold"
+              fill="#c0c0c0" text-anchor="middle" alignment-baseline="middle">
+              <tspan fill="#35D07F">${rarity}</tspan> Rarity
+        </text>
+      </svg>
+      `;
+    }
 
     function base64Encode(str) {
       return btoa(unescape(encodeURIComponent(str)));
@@ -287,16 +286,14 @@
       transports: { [celo.id]: http() }
     });
 
-    (async () => {
-      let address, abi, contract;
-      let reason = 'An unknown error occurred.';
-
-      // Connect wallet
-      try {
-        const conn = await connect(config, { connector: farcasterMiniApp() });
-        address = conn.accounts[0];
-        showAddress(address);
-      } catch (e) { setStatus("Wallet connect failed.", 'error'); console.error(e); }
+    (async () => {
+      let address, abi, contract;
+      // Connect wallet
+      try {
+        const conn = await connect(config, { connector: farcasterMiniApp() });
+        address = conn.accounts[0];
+        showAddress(address);
+      } catch (e) { setStatus("Wallet connect failed.", 'error'); console.error(e); }
 
       // Load contract JSON
       try {
@@ -305,52 +302,52 @@
         abi = contract.abi;
       } catch (e) { setStatus("Missing contract details.", 'error'); console.error(e); mintBtn.disabled = true; }
 
-      if(!contract || !abi || !address) {
-          mintBtn.disabled = true;
-          return;
-      }
+      if(!contract || !abi || !address) {
+          mintBtn.disabled = true;
+          return;
+      }
 
-      // Fetch totalSupply
-      try {
-        const total = await readContract(config, {
-          address: contract.address,
-          abi,
-          functionName: 'totalSupply'
-        });
-        supplyBox.textContent = `Total Minted: ${total}`;
-      } catch (e) {
-        supplyBox.textContent = 'Total Minted: N/A';
-        console.error(e);
-      }
-    })();
+      // Fetch totalSupply
+      try {
+        const total = await readContract(config, {
+          address: contract.address,
+          abi,
+          functionName: 'totalSupply'
+        });
+        supplyBox.textContent = `Total Minted: ${total}`;
+      } catch (e) {
+        supplyBox.textContent = 'Total Minted: N/A';
+        console.error(e);
+      }
+    })();
 
-    // Mint handler
-    mintBtn.addEventListener('click', async () => {
-      mintBtn.disabled = true;
-      mintBtn.innerText = 'Fetching Price…';
-      let price;
-      try {
-        price = await fetchCeloPrice();
-      } catch (e) {
-        setStatus(e.message, 'error');
-        mintBtn.disabled = false;
-        mintBtn.innerText = 'MINT';
-        return;
-      }
+    // Mint handler
+    mintBtn.addEventListener('click', async () => {
+      mintBtn.disabled = true;
+      mintBtn.innerText = 'Fetching Price…';
+      let price;
+      try {
+        price = await fetchCeloPrice();
+      } catch (e) {
+        setStatus(e.message, 'error');
+        mintBtn.disabled = false;
+        mintBtn.innerText = 'MINT';
+        return;
+      }
 
-      setStatus('Price fetched! Minting…', 'info');
-      mintBtn.innerText = 'Minting…';
-      try {
-        const { address, abi } = await fetch('./contract.json').then(r => r.json());
+      setStatus('Price fetched! Minting…', 'info');
+      mintBtn.innerText = 'Minting…';
+      try {
+        const { address, abi } = await fetch('./contract.json').then(r => r.json());
 
-        // Get the next token ID
-        const total = await readContract(config, {
-          address,
-          abi,
-          functionName: 'totalSupply'
-        });
-        const tokenId = Number(total) + 1;
-        const rarity = getRandomRarity();
+        // Get the next token ID
+        const total = await readContract(config, {
+          address,
+          abi,
+          functionName: 'totalSupply'
+        });
+        const tokenId = Number(total) + 1;
+        const rarity = getRandomRarity();
 
         // Build the on-chain metadata with the fetched price and rarity
         const tokenURI = buildTokenURI(tokenId, price.toFixed(4), rarity);
