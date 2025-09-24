@@ -209,26 +209,11 @@
     }
 
     // --- On-chain metadata functions ---
-    function createUniqueCeloNFT(tokenId, price, rarity) {
-      const glow = rarity === "Legendary" ? "8px" : rarity === "Rare" ? "4px" : "2px";
-      const sparkleCount = rarity === "Legendary" ? 5 : rarity === "Rare" ? 2 : 0;
-      const rotationSpeed = (Math.random() * 10 + 5).toFixed(2);
-      const pulseSpeed = (Math.random() * 2 + 1).toFixed(2);
-    
-      // Generate sparkles
-      let sparkles = "";
-      for (let j = 0; j < sparkleCount; j++) {
-        const cx = Math.floor(Math.random() * 400);
-        const cy = Math.floor(Math.random() * 400);
-        const dur = (Math.random() + 0.5).toFixed(2);
-        sparkles += `
-          <circle cx="${cx}" cy="${cy}" r="2" fill="white">
-            <animate attributeName="opacity" values="0;1;0" dur="${dur}s" repeatCount="indefinite"/>
-          </circle>`;
-      }
-    
-      // Randomize gradient rotation start angle
-      const gradientStart = (Math.random() * 360).toFixed(2);
+    function createStylishSVGWithLogo(tokenId, price, rarity) {
+      // Set rainbow animation speed by rarity
+      let speed = "8s";
+      if (rarity === "Rare") speed = "5s";
+      if (rarity === "Legendary") speed = "2s";
     
       return `
       <svg xmlns="http://www.w3.org/2000/svg" width="400" height="400">
