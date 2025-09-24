@@ -209,7 +209,7 @@
     }
 
     // --- On-chain metadata functions ---
-    function createUniqueCeloNFT(tokenId, price, rarity, logoBase64, wordmarkBase64) {
+    function createUniqueCeloNFT(tokenId, price, rarity) {
       const glow = rarity === "Legendary" ? "8px" : rarity === "Rare" ? "4px" : "2px";
       const sparkleCount = rarity === "Legendary" ? 5 : rarity === "Rare" ? 2 : 0;
       const rotationSpeed = (Math.random() * 10 + 5).toFixed(2);
@@ -255,31 +255,24 @@
           </radialGradient>
         </defs>
     
-        <rect x="5" y="5" width="390" height="390" rx="25" stroke="url(#rainbowGrad)" stroke-width="10"
-              fill="url(#bgGlow)" filter="drop-shadow(0 0 ${glow} #35D07F)"/>
+        <!-- Border rectangle -->
+        <rect x="5" y="5" width="390" height="390" rx="25"
+              stroke="url(#rainbow)" stroke-width="10" fill="#1C1C1C"/>
     
-        ${sparkles}
-        <image
-        href="${logoCircleBase64 ? "data:image/svg+xml;base64," + logoCircleBase64 : "https://celo-nft-phi.vercel.app/icon.svg"}"
-          x="150" y="20"
-          width="100" height="100"
-          preserveAspectRatio="xMidYMid meet"
-        />
-        
-        <!-- Wordmark below the logo -->
-        <image
-          href="${wordmarkBase64 ? "data:image/svg+xml;base64," + wordmarkBase64 : "https://celo-nft-phi.vercel.app/wordmark.svg"}"
-          x="100" y="140"
-          width="200" height="50"
-          preserveAspectRatio="xMidYMid meet"
-        />
+        <!-- Celo logo circle -->
+        <circle cx="200" cy="120" r="60" fill="#FFFF66" stroke="white" stroke-width="0"/>
+        <text x="200" y="125" font-family="Arial, sans-serif" font-size="36" font-weight="700"
+              fill="#1C1C1C" text-anchor="middle" alignment-baseline="middle">CELO</text>
+    
+        <!-- Price text -->
 
-        <text x="200" y="240" font-size="42" font-weight="bold" class="customFont"
+        <text x="200" y="250" font-size="42" font-weight="500" class="customFont"
               fill="#35D07F" text-anchor="middle" alignment-baseline="middle">
           <animate attributeName="opacity" values="1;0.6;1" dur="${pulseSpeed}s" repeatCount="indefinite"/>
           $${price.toFixed(4)}
         </text>
     
+        <!-- Rarity / trait label -->
         <text x="200" y="320" font-size="20" font-weight="500" class="customFont"
               fill="#FFFF66" text-anchor="middle" alignment-baseline="middle">
               <tspan fill="#FFFF66">${rarity}</tspan>
