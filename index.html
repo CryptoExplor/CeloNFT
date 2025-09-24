@@ -209,7 +209,7 @@
     }
 
     // --- On-chain metadata functions ---
-    function createStylishSVG(tokenId, price, rarity = "Common") {
+    function createStylishSVGWithLogo(tokenId, price, rarity) {
       // Set rainbow animation speed by rarity
       let speed = "8s";
       if (rarity === "Rare") speed = "5s";
@@ -243,15 +243,15 @@
               fill="##FFFF66" text-anchor="middle" alignment-baseline="middle">CELO</text>
     
         <!-- Price text -->
-        <text x="200" y="240" font-family="Arial, sans-serif" font-size="42" font-weight="700"
+        <text x="200" y="240" font-family="Arial, sans-serif" font-size="42" font-weight="500"
               fill="#35D07F" text-anchor="middle" alignment-baseline="middle">
           $${price}
         </text>
-        
-        <!-- Rarity text -->
-        <text x="200" y="290" font-family="Arial, sans-serif" font-size="24" font-weight="700"
-              fill="#c0c0c0" text-anchor="middle" alignment-baseline="middle">
-              <tspan fill="#35D07F">${rarity}</tspan>
+    
+        <!-- Rarity / trait label -->
+        <text x="200" y="320" font-family="Arial, sans-serif" font-size="20" font-weight="500"
+              fill="#FBCC5C" text-anchor="middle" alignment-baseline="middle">
+          ${rarity} Border
         </text>
       </svg>
       `;
@@ -262,7 +262,7 @@
     }
 
     function buildTokenURI(tokenId, price, rarity) {
-      const svg = createStylishSVG(tokenId, price, rarity);
+      const svg = createStylishSVGWithLogo(tokenId, price, rarity);
       const image = "data:image/svg+xml;base64," + base64Encode(svg);
 
       const metadata = {
