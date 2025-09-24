@@ -209,47 +209,78 @@
     }
 
     // --- On-chain metadata functions ---
-    function createStylishSVGWithLogo(tokenId, price, rarity) {
-      // Set rainbow animation speed by rarity
-      let speed = "8s";
-      if (rarity === "Rare") speed = "5s";
-      if (rarity === "Legendary") speed = "2s";
+    function createUniqueCeloNFT(tokenId, price, rarity, logoBase64, wordmarkBase64) {
+      const glow = rarity === "Legendary" ? "8px" : rarity === "Rare" ? "4px" : "2px";
+      const sparkleCount = rarity === "Legendary" ? 5 : rarity === "Rare" ? 2 : 0;
+      const rotationSpeed = (Math.random() * 10 + 5).toFixed(2);
+      const pulseSpeed = (Math.random() * 2 + 1).toFixed(2);
+    
+      // Generate sparkles
+      let sparkles = "";
+      for (let j = 0; j < sparkleCount; j++) {
+        const cx = Math.floor(Math.random() * 400);
+        const cy = Math.floor(Math.random() * 400);
+        const dur = (Math.random() + 0.5).toFixed(2);
+        sparkles += `
+          <circle cx="${cx}" cy="${cy}" r="2" fill="white">
+            <animate attributeName="opacity" values="0;1;0" dur="${dur}s" repeatCount="indefinite"/>
+          </circle>`;
+      }
+    
+      // Randomize gradient rotation start angle
+      const gradientStart = (Math.random() * 360).toFixed(2);
     
       return `
       <svg xmlns="http://www.w3.org/2000/svg" width="400" height="400">
         <defs>
-          <!-- Animated rainbow border -->
-          <linearGradient id="rainbow" x1="0%" y1="0%" x2="100%" y2="0%">
+          <style>
+            @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@700&display=swap');
+            .customFont { font-family: 'Orbitron', sans-serif; }
+          </style>
+    
+          <linearGradient id="rainbowGrad" x1="0%" y1="0%" x2="100%" y2="0%">
             <stop offset="0%" stop-color="red">
-              <animate attributeName="stop-color"
-                       values="red;orange;yellow;green;blue;indigo;violet;red"
-                       dur="${speed}" repeatCount="indefinite"/>
+              <animate attributeName="stop-color" values="red;orange;yellow;green;blue;indigo;violet;red" dur="8s" repeatCount="indefinite"/>
             </stop>
             <stop offset="100%" stop-color="violet">
-              <animate attributeName="stop-color"
-                       values="violet;red;orange;yellow;green;blue;indigo;violet"
-                       dur="${speed}" repeatCount="indefinite"/>
+              <animate attributeName="stop-color" values="violet;red;orange;yellow;green;blue;indigo;violet" dur="8s" repeatCount="indefinite"/>
             </stop>
           </linearGradient>
+    
+          <radialGradient id="bgGlow" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="#35D07F" stop-opacity="0.3">
+              <animateTransform attributeName="gradientTransform" type="rotate" from="${gradientStart} 0.5 0.5" to="${parseFloat(gradientStart)+360} 0.5 0.5" dur="${rotationSpeed}s" repeatCount="indefinite"/>
+            </stop>
+            <stop offset="100%" stop-color="#000" stop-opacity="0"/>
+          </radialGradient>
         </defs>
     
-        <!-- Border rectangle -->
-        <rect x="5" y="5" width="390" height="390" rx="25"
-              stroke="url(#rainbow)" stroke-width="10" fill="#1C1C1C"/>
+        <rect x="5" y="5" width="390" height="390" rx="25" stroke="url(#rainbowGrad)" stroke-width="10"
+              fill="url(#bgGlow)" filter="drop-shadow(0 0 ${glow} #35D07F)"/>
     
-        <!-- Celo logo circle -->
-        <circle cx="200" cy="120" r="60" fill="#FFFF66" stroke="white" stroke-width="0"/>
-        <text x="200" y="125" font-family="Arial, sans-serif" font-size="36" font-weight="700"
-              fill="#1C1C1C" text-anchor="middle" alignment-baseline="middle">CELO</text>
-    
-        <!-- Price text -->
-        <text x="200" y="250" font-family="Arial, sans-serif" font-size="42" font-weight="500"
+        ${sparkles}
+        <image
+        href="${logoCircleBase64 ? "data:image/svg+xml;base64," + logoCircleBase64 : "https://celo-nft-phi.vercel.app/icon.svg"}"
+          x="150" y="20"
+          width="100" height="100"
+          preserveAspectRatio="xMidYMid meet"
+        />
+        
+        <!-- Wordmark below the logo -->
+        <image
+          href="${wordmarkBase64 ? "data:image/svg+xml;base64," + wordmarkBase64 : "https://celo-nft-phi.vercel.app/wordmark.svg"}"
+          x="100" y="140"
+          width="200" height="50"
+          preserveAspectRatio="xMidYMid meet"
+        />
+
+        <text x="200" y="240" font-size="42" font-weight="bold" class="customFont"
               fill="#35D07F" text-anchor="middle" alignment-baseline="middle">
-          $${price}
+          <animate attributeName="opacity" values="1;0.6;1" dur="${pulseSpeed}s" repeatCount="indefinite"/>
+          $${price.toFixed(4)}
         </text>
     
-        <!-- Rarity / trait label -->
-        <text x="200" y="320" font-family="Arial, sans-serif" font-size="20" font-weight="500"
+        <text x="200" y="320" font-size="20" font-weight="500" class="customFont"
               fill="#FFFF66" text-anchor="middle" alignment-baseline="middle">
               <tspan fill="#FFFF66">${rarity}</tspan>
         </text>
@@ -270,7 +301,7 @@
         description: "A dynamic CELO Price NFT with rainbow border and rarity-based animation speed.",
         image,
         attributes: [
-          { trait_type: "Price", value: `$${price}` },
+          { trait_type: "Price", value: `$${price.toFixed(4)}` },
           { trait_type: "Rarity", value: rarity },
           { trait_type: "Border", value: "Rainbow Animated" }
         ]
@@ -343,7 +374,7 @@
         const price = await fetchCeloPrice();
 
         // Build metadata
-        const tokenURI = buildTokenURI(tokenId, price, rarity);
+        const tokenURI = buildTokenURI(tokenId, price.toFixed(4), rarity);
 
         // Mint
         const hash = await writeContract(config, {
