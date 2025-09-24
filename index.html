@@ -321,54 +321,49 @@
       }
     })();
 
-    // Mint handler
+    // Minting Handler
     mintBtn.addEventListener('click', async () => {
       mintBtn.disabled = true;
-      mintBtn.innerText = 'Fetching Price…';
-      let price;
-      try {
-        price = await fetchCeloPrice();
-      } catch (e) {
-        setStatus(e.message, 'error');
-        mintBtn.disabled = false;
-        mintBtn.innerText = 'MINT';
-        return;
-      }
-
-      setStatus('Price fetched! Minting…', 'info');
       mintBtn.innerText = 'Minting…';
       try {
         const { address, abi } = await fetch('./contract.json').then(r => r.json());
 
-        // Get the next token ID
+        // Get next tokenId
         const total = await readContract(config, {
           address,
           abi,
           functionName: 'totalSupply'
         });
         const tokenId = Number(total) + 1;
-        const rarity = getRandomRarity();
 
-        // Build the on-chain metadata with the fetched price and rarity
+        // Assign rarity (simple % distribution)
+        let rarity = "Common";
+        const roll = Math.random();
+        if (roll > 0.9) rarity = "Legendary";
+        else if (roll > 0.6) rarity = "Rare";
+
+        // Fetch CELO price
+        const price = await fetchCeloPrice();
+
+        // Build metadata
         const tokenURI = buildTokenURI(tokenId, price.toFixed(4), rarity);
 
-        // Mint
-        const hash = await writeContract(config, {
-          address,
-          abi,
-          functionName: 'mint',
-          args: [tokenURI],
-          value: parseEther('0')
-        });
-        setStatus(
-          `✅ Mint Successful (Rarity: ${rarity}) <a href="https://celoscan.io/tx/${hash}" target="_blank" rel="noopener noreferrer" style="color:#fff;text-decoration:underline">View Tx</a>`,
-          'success'
-        );
-        supplyBox.textContent = `Total Minted: ${tokenId}`;
+        // Mint
+        const hash = await writeContract(config, {
+          address,
+          abi,
+          functionName: 'mint',
+          args: [tokenURI],
+          value: parseEther('0')
+        });
+        setStatus(
+          `✅ Mint Successful (Rarity: ${rarity}) <a href="https://celoscan.io/tx/${hash}" target="_blank" style="color:#fff;text-decoration:underline">View Tx</a>`,
+          'success'
+        );
+        supplyBox.textContent = `Total Minted: ${tokenId}`;
 
       } catch (e) {
-        const errorMsg = e.shortMessage || "Mint rejected or failed.";
-        setStatus(errorMsg, 'error');
+        setStatus(e.shortMessage || "Mint failed.", 'error');
         console.error(e);
       } finally {
         mintBtn.disabled = false;
