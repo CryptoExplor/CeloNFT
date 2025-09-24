@@ -336,17 +336,14 @@
         });
         const tokenId = Number(total) + 1;
 
-        // Assign rarity (simple % distribution)
-        let rarity = "Common";
-        const roll = Math.random();
-        if (roll > 0.9) rarity = "Legendary";
-        else if (roll > 0.6) rarity = "Rare";
+        // Assign rarity
+        let rarity = getRandomRarity();
 
         // Fetch CELO price
         const price = await fetchCeloPrice();
 
         // Build metadata
-        const tokenURI = buildTokenURI(tokenId, price.toFixed(4), rarity);
+        const tokenURI = buildTokenURI(tokenId, price, rarity);
 
         // Mint
         const hash = await writeContract(config, {
