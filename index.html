@@ -243,14 +243,13 @@
               fill="#1C1C1C" text-anchor="middle" alignment-baseline="middle">CELO</text>
     
         <!-- Price text -->
-
-        <text x="200" y="250" font-size="42" font-weight="500" class="customFont"
+        <text x="200" y="250" font-family="Arial, sans-serif" font-size="42" font-weight="500"
               fill="#35D07F" text-anchor="middle" alignment-baseline="middle">
-          $${price.toFixed(4)}
+          $${price}
         </text>
     
         <!-- Rarity / trait label -->
-        <text x="200" y="320" font-size="20" font-weight="500" class="customFont"
+        <text x="200" y="320" font-family="Arial, sans-serif" font-size="20" font-weight="500"
               fill="#FFFF66" text-anchor="middle" alignment-baseline="middle">
               <tspan fill="#FFFF66">${rarity}</tspan>
         </text>
@@ -271,7 +270,7 @@
         description: "A dynamic CELO Price NFT with rainbow border and rarity-based animation speed.",
         image,
         attributes: [
-          { trait_type: "Price", value: `$${price.toFixed(4)}` },
+          { trait_type: "Price", value: `$${price}` },
           { trait_type: "Rarity", value: rarity },
           { trait_type: "Border", value: "Rainbow Animated" }
         ]
@@ -337,8 +336,11 @@
         });
         const tokenId = Number(total) + 1;
 
-        // Assign rarity
-        let rarity = getRandomRarity();
+        // Assign rarity (simple % distribution)
+        let rarity = "Common";
+        const roll = Math.random();
+        if (roll > 0.9) rarity = "Legendary";
+        else if (roll > 0.6) rarity = "Rare";
 
         // Fetch CELO price
         const price = await fetchCeloPrice();
