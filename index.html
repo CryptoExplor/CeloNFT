@@ -218,12 +218,8 @@
       return `
       <svg xmlns="http://www.w3.org/2000/svg" width="400" height="400">
         <defs>
-          <style>
-            @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@700&display=swap');
-            .customFont { font-family: 'Orbitron', sans-serif; }
-          </style>
-    
-          <linearGradient id="rainbowGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+          <!-- Animated rainbow border -->
+          <linearGradient id="rainbow" x1="0%" y1="0%" x2="100%" y2="0%">
             <stop offset="0%" stop-color="red">
               <animate attributeName="stop-color"
                        values="red;orange;yellow;green;blue;indigo;violet;red"
