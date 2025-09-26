@@ -1,16 +1,17 @@
+import { Redis } from '@upstash/redis';
 import { kv } from "@vercel/kv";
+import { NextResponse } from 'next/server';
+
+// Initialize Redis
+const redis = Redis.fromEnv();
 
 // --- Rarity and Color Generation ---
 function getRandomTrait(type) {
   const rand = Math.random();
   if (type === 'rarity') {
-    if (rand < 0.05) {
-      return "Legendary"; // 5% chance
-    }
-    if (rand < 0.20) {
-      return "Rare"; // 15% chance
-    }
-    return "Common"; // 80% chance
+    if (rand < 0.05) return "Legendary"; // 5% chance
+    if (rand < 0.20) return "Rare";      // 15% chance
+    return "Common";                     // 80% chance
   }
   if (type === 'color') {
     const colors = ["Gold", "Silver", "Bronze", "Emerald", "Ruby", "Sapphire"];
@@ -18,51 +19,53 @@ function getRandomTrait(type) {
   }
 }
 
-export default async function handler(req, res) {
-  // Add CORS headers to allow requests from any origin
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
-  // Handle preflight OPTIONS request
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-
-  if (req.method !== 'POST') {
-    return res.status(405).json({
-      error: "Method Not Allowed"
-    });
-  }
-
-  const {
-    tokenId
-  } = req.body;
-
-  if (!tokenId) {
-    return res.status(400).json({
-      error: "tokenId is required"
-    });
-  }
-
+export const POST = async (req) => {
   try {
-    // Generate random traits for the new NFT
+    const body = await req.json();
+    const { tokenId } = body;
+
+    if (!tokenId) {
+      return new NextResponse(JSON.stringify({ error: "tokenId is required" }), { status: 400 });
+    }
+
+    // Generate random traits
     const traits = {
       rarity: getRandomTrait('rarity'),
       color: getRandomTrait('color'),
     };
 
-    // Store the traits in Vercel KV with the NFT's token ID as the key
-    await kv.set(`nft:${tokenId}`, JSON.stringify(traits));
+    // Store traits in Vercel KV
+    try {
+      await kv.set(`nft:${tokenId}`, JSON.stringify(traits));
+    } catch (error) {
+      console.error("KV set error:", error);
+      return new NextResponse(JSON.stringify({ error: "Failed to store traits." }), { status: 500 });
+    }
 
-    // Return the generated traits to the client
-    res.status(200).json({
-      traits
-    });
+    // Fetch Redis data
+    let redisData;
+    try {
+      redisData = await redis.get("item");
+    } catch (error) {
+      console.error("Redis fetch error:", error);
+      redisData = null; // continue even if Redis fails
+    }
+
+    // Return traits and Redis data
+    return new NextResponse(
+      JSON.stringify({
+        tokenId,
+        traits,
+        redisData
+      }),
+      {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      }
+    );
+
   } catch (error) {
-    console.error("Mint API error:", error);
-    res.status(500).json({
-      error: "Failed to generate and store NFT traits."
-    });
+    console.error("Mint POST error:", error);
+    return new NextResponse(JSON.stringify({ error: "Internal server error" }), { status: 500 });
   }
-}
+};
