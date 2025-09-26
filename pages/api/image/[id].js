@@ -2,41 +2,26 @@
 import { kv } from "@vercel/kv";
 
 export default async function handler(req, res) {
-  // CORS headers
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
-  // Handle OPTIONS preflight request
-  if (req.method === "OPTIONS") {
-    return res.status(200).end();
-  }
-
-  if (req.method !== "GET") {
-    return res.status(405).json({ error: "Method Not Allowed" });
-  }
+  if (req.method === "OPTIONS") return res.status(200).end();
+  if (req.method !== "GET") return res.status(405).json({ error: "Method Not Allowed" });
 
   const { id } = req.query;
-
-  // Validate ID
-  if (!id || !/^\d+$/.test(id)) {
-    return res.status(400).json({ error: "Invalid NFT ID." });
-  }
+  if (!id || !/^\d+$/.test(id)) return res.status(400).json({ error: "Invalid NFT ID." });
 
   let traits;
   try {
     const traitsString = await kv.get(`nft:${id}`);
-    if (traitsString) {
-      traits = JSON.parse(traitsString);
-    }
+    if (traitsString) traits = JSON.parse(traitsString);
   } catch (error) {
     console.error("KV get error:", error);
     return res.status(500).json({ error: "Error retrieving NFT traits." });
   }
 
-  if (!traits) {
-    return res.status(404).json({ error: "Traits not found — mint first." });
-  }
+  if (!traits) return res.status(404).json({ error: "Traits not found — mint first." });
 
   let price = "N/A";
   try {
