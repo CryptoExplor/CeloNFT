@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=390, initial-scale=1.0" />
-  <title>Farcaster Celo On-Chain NFT Mint</title>
-  <meta name="description" content="Mint a gas-efficient, on-chain Celo NFT that shows the live CELO price!" />
+  <title>Farcaster Celo Free NFT Mint</title>
+  <meta name="description" content="Mint a free Celo NFT that shows the live CELO price!" />
   <!-- Google Fonts for NFT typography -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -41,7 +41,7 @@
     }
     .tradingview-widget-container {
       width: 100%;
-      max-width: 390px;
+      max-width: 380px;
       height: 300px;
       border: 1px solid #333;
       border-radius: 12px;
@@ -179,13 +179,10 @@
     const mintBtn      = document.querySelector('.mint-button');
     const userAddrBox = document.getElementById('userAddressBox');
 
-    // Utility to update status messages
     function setStatus(msg, type = 'info') {
       statusBox.className = `status-box status-${type}`;
       statusBox.innerHTML = msg;
     }
-
-    // Utility to show user's connected address
     function showAddress(addr) {
       const shortAddr = `${addr.slice(0, 6)}...${addr.slice(-4)}`;
       userAddrBox.textContent = `Your address: ${shortAddr}`;
@@ -193,7 +190,6 @@
     }
 
     // --- Price fetching function ---
-    // Fetches price and returns it as a number
     async function fetchCeloPrice() {
       try {
         const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=celo&vs_currencies=usd');
