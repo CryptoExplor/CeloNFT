@@ -1,49 +1,65 @@
+import { Redis } from '@upstash/redis';
 import { kv } from "@vercel/kv";
+import { NextResponse } from 'next/server';
 
-export default async function handler(req, res) {
-  // Add CORS headers
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+// Initialize Redis
+const redis = Redis.fromEnv();
 
-  if (req.method === "OPTIONS") {
-    return res.status(200).end();
-  }
-
-  const { id } = req.query;
-
-  if (!id || isNaN(parseInt(id))) {
-    return res.status(400).json({ error: "Invalid NFT ID." });
-  }
-
-  let traits;
+export const POST = async (req) => {
   try {
-    const traitsString = await kv.get(`nft:${id}`);
-    if (traitsString) traits = JSON.parse(traitsString);
+    const body = await req.json();
+    const { id } = body;
+
+    if (!id || isNaN(parseInt(id))) {
+      return new NextResponse(JSON.stringify({ error: "Invalid NFT ID." }), { status: 400 });
+    }
+
+    // Fetch NFT traits from Vercel KV
+    let traits;
+    try {
+      const traitsString = await kv.get(`nft:${id}`);
+      if (traitsString) traits = JSON.parse(traitsString);
+    } catch (error) {
+      console.error("KV get error:", error);
+      return new NextResponse(JSON.stringify({ error: "Could not retrieve NFT traits." }), { status: 500 });
+    }
+
+    if (!traits) {
+      return new NextResponse(JSON.stringify({ error: "NFT traits not found — mint first." }), { status: 404 });
+    }
+
+    // Fetch Redis data in parallel
+    let redisData;
+    try {
+      redisData = await redis.get("item");
+    } catch (error) {
+      console.error("Redis error:", error);
+      redisData = null;
+    }
+
+    // Build base URL
+    const protocol = process.env.NEXT_PUBLIC_BASE_URL ? process.env.NEXT_PUBLIC_BASE_URL.split(":")[0] : "https";
+    const host = process.env.NEXT_PUBLIC_BASE_URL || process.env.VERCEL_URL || "localhost";
+    const baseUrl = `${protocol}://${host}`;
+
+    const metadata = {
+      name: `Celo NFT #${id}`,
+      description: "A dynamic CELO NFT with rarity-based animated border.",
+      image: `${baseUrl}/api/image/${id}`,
+      attributes: [
+        { trait_type: "Rarity", value: traits.rarity },
+        { trait_type: "Color", value: traits.color }
+      ],
+      redisData
+    };
+
+    return new NextResponse(JSON.stringify(metadata), {
+      status: 200,
+      headers: { "Content-Type": "application/json" }
+    });
+
   } catch (error) {
-    console.error("KV get error:", error);
-    return res.status(500).json({ error: "Could not retrieve NFT traits." });
+    console.error("Unexpected error:", error);
+    return new NextResponse(JSON.stringify({ error: "Internal server error." }), { status: 500 });
   }
-
-  if (!traits) {
-    return res.status(404).json({ error: "NFT traits not found — mint first." });
-  }
-
-  // ✅ Build base URL correctly
-  const forwardedProto = req.headers["x-forwarded-proto"];
-  const protocol = forwardedProto ? forwardedProto.split(",")[0] : "https";
-  const hostHeader = req.headers.host || process.env.VERCEL_URL;
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || `${protocol}://${hostHeader}`;
-
-  const metadata = {
-    name: `Celo NFT #${id}`,
-    description: "A dynamic CELO NFT with rarity-based animated border.",
-    image: `${baseUrl}/api/image/${id}`,
-    attributes: [
-      { trait_type: "Rarity", value: traits.rarity },
-      { trait_type: "Color", value: traits.color }
-    ]
-  };
-
-  res.status(200).json(metadata);
-}
+};
