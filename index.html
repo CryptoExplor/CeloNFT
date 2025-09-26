@@ -12,11 +12,20 @@
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700&display=swap" rel="stylesheet">
 
   <!-- Farcaster Mini App Metadata -->
-  <meta property="fc:frame" content="vNext" />
-  <meta property="fc:frame:image" content="https://celo-nft-kv.vercel.app/image.png" />
-  <meta property="fc:frame:button:1" content="MINT Celo NFT" />
-  <meta property="fc:frame:post_url" content="https://celo-nft-kv.vercel.app/api/frame" />
-
+  <meta name="fc:miniapp" content='{
+    "version":"1",
+    "imageUrl":"https://celo-nft-phi.vercel.app/image.png",
+    "button":{
+      "title":"Celo NFT",
+      "action":{
+        "type":"launch_frame",
+        "name":"MINT",
+        "url":"https://celo-nft-phi.vercel.app",
+        "splashImageUrl":"https://celo-nft-phi.vercel.app/splash.png",
+        "splashBackgroundColor":"#111111"
+      }
+    }
+  }' />
 
   <style>
     body {
