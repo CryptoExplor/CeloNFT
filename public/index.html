@@ -189,13 +189,10 @@
     const mintBtn     = document.querySelector('.mint-button');
     const userAddrBox = document.getElementById('userAddressBox');
 
-    // --- Contract Details (replace with your deployed address) ---
+    // --- Contract Details (placeholder, will be replaced dynamically) ---
     const contract = {
-      address: "0xYourContractAddressHere",
-      abi: [
-        { "inputs": [], "name": "totalSupply", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" },
-        { "inputs": [{ "internalType": "string", "name": "tokenURI", "type": "string" }], "name": "mint", "outputs": [], "stateMutability": "payable", "type": "function" }
-      ]
+      address: null,
+      abi: null,
     };
 
     // --- Helper Functions ---
@@ -283,6 +280,21 @@
             });
         }
         
+        // Load contract details from contract.json (Fix 2)
+        try {
+            const contractFile = await fetch('/contract.json').then(res => {
+                if (!res.ok) throw new Error("Could not load contract.json");
+                return res.json();
+            });
+            contract.address = contractFile.address;
+            contract.abi = contractFile.abi;
+        } catch (e) {
+            setStatus("Failed to load contract details. Minting disabled.", 'error');
+            console.error(e);
+            mintBtn.disabled = true;
+            return;
+        }
+
         // Connect Wallet
         try {
             const conn = await connect(wagmiConfig, { connector: farcasterMiniApp() });
@@ -324,9 +336,20 @@
         });
         const tokenId = Number(total) + 1;
 
-        // 2. Generate traits (rarity) client-side
-        const roll = Math.random();
-        const rarity = roll > 0.9 ? "Legendary" : roll > 0.6 ? "Rare" : "Common";
+        // 2. Fetch traits from API (Fix 1 & 3)
+        setStatus('Fetching NFT traits from API...', 'info');
+        const mintTraitsRes = await fetch('/api/mint', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tokenId })
+        });
+
+        if (!mintTraitsRes.ok) {
+            throw new Error(`API failed with status: ${mintTraitsRes.status}`);
+        }
+
+        const mintTraits = await mintTraitsRes.json();
+        const rarity = mintTraits?.traits?.rarity || "Common";
 
         // 3. Fetch CELO price
         setStatus('Fetching live CELO price...', 'info');
@@ -335,17 +358,19 @@
             throw new Error("Failed to fetch price. Aborting mint.");
         }
 
-        // 4. Build metadata URI
-        setStatus('Building NFT metadata...', 'info');
-        const tokenURI = buildTokenURI(tokenId, price, rarity);
+        // 4. Build metadata URL pointing to server API
+        setStatus('Preparing metadata URL...', 'info');
+        const protocol = window.location.protocol.replace(':','') || 'https';
+        const host = window.location.host;
+        const metadataUrl = `${protocol}://${host}/api/metadata/${tokenId}`;
 
-        // 5. Mint the NFT
+        // 5. Mint the NFT with server metadata URL
         setStatus('Please confirm in wallet...', 'info');
         const hash = await writeContract(wagmiConfig, {
           address: contract.address,
           abi: contract.abi,
           functionName: 'mint',
-          args: [tokenURI],
+          args: [metadataUrl],
           value: parseEther('0')
         });
 
@@ -355,8 +380,9 @@
         supplyBox.textContent = `Total Minted: ${tokenId}`;
 
       } catch (e) {
-        setStatus(e.shortMessage || "Mint failed.", 'error');
-        console.error(e);
+        // Improved Error Handling (Fix 6)
+        setStatus(e.message || "Mint failed.", 'error');
+        console.error("Minting Error:", e);
       } finally {
         mintBtn.disabled = false;
         mintBtn.innerText = 'MINT';
