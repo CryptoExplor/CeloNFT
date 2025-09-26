@@ -1,20 +1,29 @@
 import { kv } from "@vercel/kv";
+import { Redis } from "@upstash/redis";
+import { NextResponse } from "next/server";
 
+// Initialize Redis
+const redis = Redis.fromEnv();
+
+// POST endpoint — fetch Redis data
+export const POST = async () => {
+  const result = await redis.get("item");
+  return new NextResponse(JSON.stringify({ result }), { status: 200 });
+};
+
+// GET endpoint — generate NFT image
 export default async function handler(req, res) {
-  // Add CORS headers to allow all origins
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  // Add CORS headers
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
-  // Handle preflight OPTIONS request
-  if (req.method === 'OPTIONS') {
+  if (req.method === "OPTIONS") {
     return res.status(200).end();
   }
 
-  // Extract the NFT ID from the request query
   const { id } = req.query;
 
-  // Check for a valid ID
   if (!id || isNaN(parseInt(id))) {
     return res.status(400).send("Invalid NFT ID.");
   }
@@ -47,12 +56,20 @@ export default async function handler(req, res) {
     console.error("CELO price fetch failed:", e);
   }
 
+  // Fetch Redis data for inclusion in SVG
+  let redisData = null;
+  try {
+    redisData = await redis.get("item");
+  } catch (error) {
+    console.error("Redis fetch error:", error);
+  }
+
   // Determine animation speed based on rarity
   let speed = "8s";
   if (traits.rarity === "Rare") speed = "5s";
   if (traits.rarity === "Legendary") speed = "2s";
 
-  // Generate the SVG image markup
+  // Generate SVG
   const svg = `
   <svg xmlns="http://www.w3.org/2000/svg" width="400" height="400">
     <defs>
@@ -84,10 +101,13 @@ export default async function handler(req, res) {
           fill="#FFFF66" text-anchor="middle" alignment-baseline="middle">
       <tspan fill="#FFFF66">${traits.rarity}</tspan>
     </text>
+    <text x="200" y="360" font-family="Orbitron, sans-serif" font-size="14" font-weight="400"
+          fill="#FFFFFF" text-anchor="middle" alignment-baseline="middle">
+      Redis: ${redisData ?? "N/A"}
+    </text>
   </svg>
   `;
 
-  // Set the response header to indicate an SVG image and send the SVG
   res.setHeader("Content-Type", "image/svg+xml");
-  res.status(200).send(svg);
+  return res.status(200).send(svg);
 }
