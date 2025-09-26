@@ -360,8 +360,6 @@
 
         // 4. Build metadata URL pointing to server API
         setStatus('Preparing metadata URL...', 'info');
-        const protocol = window.location.protocol.replace(':','') || 'https';
-        const host = window.location.host;
         const metadataUrl = `${protocol}://${host}/api/metadata/${tokenId}`;
 
         // 5. Mint the NFT with server metadata URL
