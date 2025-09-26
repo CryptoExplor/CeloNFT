@@ -34,7 +34,7 @@ export default async function handler(req, res) {
     };
     await kv.set(`nft:${tokenId}`, JSON.stringify(traits));
 
-    return res.status(200).json({ traits });
+    return res.status(200).json({ tokenId, traits });
   } catch (error) {
     console.error("Mint API error:", error);
     return res.status(500).json({ error: "Failed to generate and store NFT traits." });
