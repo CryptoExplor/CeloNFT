@@ -1,16 +1,34 @@
 import { kv } from "@vercel/kv";
 
 export default async function handler(req, res) {
+  // Add CORS headers to allow all origins
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  // Handle preflight OPTIONS request
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
   // Extract the NFT ID from the request query
   const { id } = req.query;
+
+  // Check for a valid ID
+  if (!id || isNaN(parseInt(id))) {
+    return res.status(400).send("Invalid NFT ID.");
+  }
 
   // Fetch NFT traits from Vercel KV
   let traits;
   try {
-      traits = await kv.get(`nft:${id}`);
+    const traitsString = await kv.get(`nft:${id}`);
+    if (traitsString) {
+      traits = JSON.parse(traitsString);
+    }
   } catch (error) {
-      console.error("KV get error:", error);
-      return res.status(500).send("Error retrieving NFT traits.");
+    console.error("KV get error:", error);
+    return res.status(500).send("Error retrieving NFT traits.");
   }
 
   if (!traits) {
