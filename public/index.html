@@ -189,7 +189,7 @@
     const mintBtn     = document.querySelector('.mint-button');
     const userAddrBox = document.getElementById('userAddressBox');
 
-    // --- Contract Details (placeholder, will be replaced dynamically) ---
+    // --- Contract Details (placeholder) ---
     const contract = {
       address: null,
       abi: null,
@@ -207,7 +207,7 @@
       userAddrBox.classList.remove('hidden');
     }
 
-    // --- Client-side Metadata & Image Generation ---
+    // --- Client-side Metadata & Image Generation (Removed unnecessary functions) ---
     async function fetchCeloPrice() {
       try {
         const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=celo&vs_currencies=usd');
@@ -219,45 +219,6 @@
         setStatus("Could not fetch CELO price.", 'error');
         return null; // Return null to handle the error upstream
       }
-    }
-    
-    function createSVG(price, rarity) {
-      let speed = "8s";
-      if (rarity === "Rare") speed = "5s";
-      if (rarity === "Legendary") speed = "2s";
-    
-      return `
-      <svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" style="font-family: Orbitron, sans-serif;">
-        <defs>
-          <linearGradient id="rainbow" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stop-color="red"><animate attributeName="stop-color" values="red;orange;yellow;green;blue;indigo;violet;red" dur="${speed}" repeatCount="indefinite"/></stop>
-            <stop offset="100%" stop-color="violet"><animate attributeName="stop-color" values="violet;red;orange;yellow;green;blue;indigo;violet" dur="${speed}" repeatCount="indefinite"/></stop>
-          </linearGradient>
-        </defs>
-        <rect width="400" height="400" fill="#1C1C1C"/>
-        <rect x="5" y="5" width="390" height="390" rx="25" stroke="url(#rainbow)" stroke-width="10" fill="none"/>
-        <circle cx="200" cy="120" r="60" fill="#FFFF66"/>
-        <text x="200" y="125" font-size="36" font-weight="700" fill="#1C1C1C" text-anchor="middle" alignment-baseline="middle">CELO</text>
-        <text x="200" y="250" font-size="42" font-weight="500" fill="#35D07F" text-anchor="middle" alignment-baseline="middle">$${price}</text>
-        <text x="200" y="320" font-size="20" font-weight="500" fill="#FFFF66" text-anchor="middle" alignment-baseline="middle">${rarity}</text>
-      </svg>`;
-    }
-
-    function buildTokenURI(tokenId, price, rarity) {
-      const svg = createSVG(price.toFixed(4), rarity);
-      const image = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(svg)));
-
-      const metadata = {
-        name: `Celo Price NFT #${tokenId}`,
-        description: "A dynamic CELO Price NFT with rarity-based animation speed.",
-        image: image,
-        attributes: [
-          { trait_type: "Price", value: `$${price.toFixed(4)}` },
-          { trait_type: "Rarity", value: rarity }
-        ]
-      };
-
-      return "data:application/json;base64," + btoa(JSON.stringify(metadata));
     }
 
     // --- Main App Logic ---
@@ -280,7 +241,7 @@
             });
         }
         
-        // Load contract details from contract.json (Fix 2)
+        // Load contract details from contract.json
         try {
             const contractFile = await fetch('/contract.json').then(res => {
                 if (!res.ok) throw new Error("Could not load contract.json");
@@ -336,7 +297,7 @@
         });
         const tokenId = Number(total) + 1;
 
-        // 2. Fetch traits from API (Fix 1 & 3)
+        // 2. Fetch traits from API
         setStatus('Fetching NFT traits from API...', 'info');
         const mintTraitsRes = await fetch('/api/mint', {
             method: 'POST',
@@ -358,11 +319,12 @@
             throw new Error("Failed to fetch price. Aborting mint.");
         }
 
-        // 4. Build metadata URL pointing to server API
+        // 4. Build metadata URL (using window.location.origin as you suggested)
         setStatus('Preparing metadata URL...', 'info');
-        const metadataUrl = `${protocol}://${host}/api/metadata/${tokenId}`;
+        const baseUrl = window.location.origin;
+        const metadataUrl = `${baseUrl}/api/metadata/${tokenId}`;
 
-        // 5. Mint the NFT with server metadata URL
+        // 5. Mint the NFT
         setStatus('Please confirm in wallet...', 'info');
         const hash = await writeContract(wagmiConfig, {
           address: contract.address,
@@ -378,7 +340,7 @@
         supplyBox.textContent = `Total Minted: ${tokenId}`;
 
       } catch (e) {
-        // Improved Error Handling (Fix 6)
+        // Improved Error Handling
         setStatus(e.message || "Mint failed.", 'error');
         console.error("Minting Error:", e);
       } finally {
