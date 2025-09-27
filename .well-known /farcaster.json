@@ -1,17 +1,23 @@
 {
   "frame": {
-    "name": "CeloNFT",
+    "name": "Celo NFT",
     "version": "1",
-    "iconUrl": "https://celo-nft-phi.vercel.app/icon.jpg",
+    "iconUrl": "https://celo-nft-phi.vercel.app/icon.png",
     "homeUrl": "https://celo-nft-phi.vercel.app",
     "imageUrl": "https://celo-nft-phi.vercel.app/image.png",
-    "buttonTitle": "Open Mini App To Mint",
+    "buttonTitle": "Mint Free Celo Price NFT",
     "splashImageUrl": "https://celo-nft-phi.vercel.app/splash.png",
     "splashBackgroundColor": "#111111",
     "webhookUrl": "https://celo-nft-phi.vercel.app/api/webhook",
-    "subtitle": "CeloNFT – A Community-Mintable Collection on Celo",
+    "primaryCategory": "art-creativity",
+    "tags": [
+      "celo",
+      "nft",
+      "free",
+      "celonft"
+    ],
     "description": "CeloNFT is an open ERC-721 collection deployed on the Celo blockchain. Anyone can mint new NFTs by providing a metadata URI, making it a fully permissionless and community-driven project. Each NFT is unique, stored on-chain with a transparent minting process, and transferable across the Celo ecosystem.",
-    "primaryCategory": "art-creativity"
+    "subtitle": "CeloNFT – A Community-Mintable Collection on Celo"
   },
   "accountAssociation": {
     "header": "eyJmaWQiOjYxMjA2NiwidHlwZSI6ImF1dGgiLCJrZXkiOiIweDE4MjhjNEJmNzhEQWI2NkI0QjdkZUJmYUEzOEYwQWQxMjVFYzhkMTUifQ",
