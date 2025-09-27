@@ -38,7 +38,7 @@
       align-items: center;
       min-height: 100vh;
       /* Keep body padding for spacing around the edges */
-      padding: 5px 5px;
+      padding: 5px 5px; 
       box-sizing: border-box;
       text-align: center; 
     }
@@ -125,10 +125,10 @@
         margin-top: 10px;
         margin-bottom: 10px;
         width: 100%; 
-        max-width: 380px; 
+        max-width: 390px; 
         background: #000;
         border: 2px solid #49dfb5;
-        border-radius: 12px;
+        border-radius: 10px;
         display: flex;
         justify-content: center; 
         align-items: center;
@@ -136,7 +136,7 @@
         position: relative; 
         /* allow vertical growth up to viewport, then scroll */
         max-height: 60vh;
-        overflow: auto;        /* <-- changed from hidden to auto */
+        overflow: hidden;      /* <-- Changed from auto to hidden to remove scroll */
         box-sizing: border-box;
     }
 
@@ -389,9 +389,9 @@
         }
       }
 
-      // Make sure container allows the svg to show fully (scroll if taller)
+      // We are removing the scroll, so only set max-height
       container.style.maxHeight = '60vh';
-      container.style.overflow = 'auto';
+      // container.style.overflow = 'auto'; // REMOVED to prevent scrollbar
     }
 
 
@@ -460,7 +460,7 @@
           // Update button label with price
           if (mintPriceWei > 0n) {
              const celoPrice = Number(mintPriceWei) / 1e18;
-             mintBtn.innerText = `MINT (${celoPrice.toFixed(4)} CELO)`;
+             mintBtn.innerText = `MINT (${celoPrice.toFixed(4)} CELO})`;
           }
 
       } catch (e) {
