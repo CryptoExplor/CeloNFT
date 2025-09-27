@@ -44,7 +44,7 @@
     }
     .tradingview-widget-container {
       width: 100%;
-      max-width: 390px;
+      max-width: 370px; 
       height: 300px;
       border: 1px solid #333;
       border-radius: 12px;
@@ -120,32 +120,35 @@
     }
     .hidden { display:none; }
     
-    /* FIX: Aggressively adjust NFT container to fit full available width */
+    /* FIX: Implement responsive, non-cropping scaling */
     #nft-preview-container {
         margin-top: 10px;
         margin-bottom: 10px;
-        width: 100%;
-        max-width: 380px;
+        width: 100%; 
+        max-width: 390px; 
         background: #000;
         border: 2px solid #49dfb5;
         border-radius: 12px;
         display: flex;
-        justify-content: center;
+        /* Center the SVG within the container */
+        justify-content: center; 
         align-items: center;
-        /* FIX: Remove internal padding to use max space for SVG */
+        /* Remove min-height to allow the container to hug the scaled SVG height */
+        min-height: 0; 
         padding: 0; 
-        min-height: 200px;
         position: relative; 
         overflow: hidden; 
-        box-sizing: border-box; /* Ensure padding/border is calculated inwards */
+        box-sizing: border-box; 
     }
     #nft-preview-container svg {
-        /* FIX: Ensure the SVG takes up 100% of the box both ways */
+        /* FIX 1: Use width: 100% and height: auto to ensure aspect ratio is kept */
         width: 100%;
         height: auto; 
-        display: block;
-        max-height: 100%;
-        object-fit: contain;
+        /* FIX 1: Set max-height to ensure it doesn't push off-screen vertically */
+        max-height: 100%; 
+        display: block; 
+        /* Although the SVG attribute handles this, this is good for raster images */
+        object-fit: contain; 
     }
     /* --- START NEW SPARKLE CSS (UNCHANGED) --- */
     .sparkles::before {
