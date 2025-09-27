@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <!-- Adjusted viewport for better mobile responsiveness, though original was targeting a specific width -->
+  <!-- FIX 1: Change viewport to use device-width for full responsiveness -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Farcaster Celo Free NFT Mint</title>
   <meta name="description" content="Mint a free Celo NFT that shows the live CELO price!" />
@@ -36,10 +36,10 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      min-height: 10vh;
+      min-height: 100vh;
       padding: 10px 10px;
       box-sizing: border-box;
-      /* FIX: Ensure all text content is centered */
+      /* Ensure all text content is centered */
       text-align: center; 
     }
     .tradingview-widget-container {
@@ -123,14 +123,16 @@
         margin-top: 10px;
         margin-bottom: 10px;
         width: 100%;
-        max-width: 380px;
+        /* Keep max-width high enough for NFT quality but allow for padding */
+        max-width: 380px; 
         background: #000;
         border: 2px solid #49dfb5;
         border-radius: 12px;
         display: flex;
         justify-content: center;
         align-items: center;
-        padding: 10px;
+        /* FIX 2: Reduce padding to reclaim space inside the container */
+        padding: 5px; 
         min-height: 200px;
         /* Ensure container has position:relative for absolute sparkle overlay */
         position: relative; 
@@ -139,6 +141,8 @@
     #nft-preview-container svg {
         width: 100%;
         height: auto;
+        /* Ensure SVG itself scales within the container */
+        display: block; 
     }
     /* Spinner CSS for Loading Indicator */
     .spinner {
@@ -492,7 +496,6 @@
             if (!base64Json) throw new Error("Invalid tokenURI format.");
 
             // FIX: Use decodeURIComponent before atob for robust Base64 decoding, 
-            // as token URIs often have URI-encoded Base64 content.
             const jsonString = atob(decodeURIComponent(base64Json));
             const metadata = JSON.parse(jsonString);
             
