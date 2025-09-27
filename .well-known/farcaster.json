@@ -1,4 +1,9 @@
 {
+  "accountAssociation": {
+    "header": "eyJmaWQiOjYxMjA2NiwidHlwZSI6ImN1c3RvZHkiLCJrZXkiOiIweDg4ZDA1OGRCNmUwRjRmN2M5NjI0NDdGNTJDYTlkYUZiNUJhNzMyQWEifQ",
+    "payload": "eyJkb21haW4iOiJjZWxvLW5mdC1waGkudmVyY2VsLmFwcCJ9",
+    "signature": "MHg1YTExN2ZiNGE5ZmQ3Y2EyYmY0ZjIyMjJhZjM3MWU4ZmZmYjEyZmQ2YTIxNTBhOTdjNDcwNTc3ODgyNDYxY2UzMDJlOWQ3ODdlZWVlODM5MmMzMjZiNTY0NDYzNTMzNzc3NDU1MTdhNjU3YWRhNzNmN2QyMWE4ZDU2ZGQ4NDU3MzFj"
+  },
   "frame": {
     "name": "Celo NFT",
     "version": "1",
@@ -19,10 +24,5 @@
       "free",
       "mint"
     ]
-  },
-  "accountAssociation": {
-    "header": "eyJmaWQiOjYxMjA2NiwidHlwZSI6ImN1c3RvZHkiLCJrZXkiOiIweDg4ZDA1OGRCNmUwRjRmN2M5NjI0NDdGNTJDYTlkYUZiNUJhNzMyQWEifQ",
-    "payload": "eyJkb21haW4iOiJjZWxvLW5mdC1waGkudmVyY2VsLmFwcCJ9",
-    "signature": "MHg1YTExN2ZiNGE5ZmQ3Y2EyYmY0ZjIyMjJhZjM3MWU4ZmZmYjEyZmQ2YTIxNTBhOTdjNDcwNTc3ODgyNDYxY2UzMDJlOWQ3ODdlZWVlODM5MmMzMjZiNTY0NDYzNTMzNzc3NDU1MTdhNjU3YWRhNzNmN2QyMWE4ZDU2ZGQ4NDU3MzFj"
   }
 }
