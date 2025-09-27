@@ -1,8 +1,24 @@
 {
-  "address": "0x1e6BEB7AC6Af18EaF7EABe1CdB8895d3D7c14401",
+  "address": "0xe90EC6F3f5C15cC76861CA5d41CD879548208Eff",
   "abi":[
 	{
-		"inputs": [],
+		"inputs": [
+			{
+				"internalType": "string",
+				"name": "name_",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "symbol_",
+				"type": "string"
+			},
+			{
+				"internalType": "uint256",
+				"name": "_mintPriceWei",
+				"type": "uint256"
+			}
+		],
 		"stateMutability": "nonpayable",
 		"type": "constructor"
 	},
@@ -187,6 +203,37 @@
 			{
 				"indexed": true,
 				"internalType": "address",
+				"name": "owner",
+				"type": "address"
+			},
+			{
+				"indexed": true,
+				"internalType": "uint256",
+				"name": "tokenId",
+				"type": "uint256"
+			},
+			{
+				"indexed": false,
+				"internalType": "uint8",
+				"name": "rarity",
+				"type": "uint8"
+			},
+			{
+				"indexed": false,
+				"internalType": "uint128",
+				"name": "priceSnapshot",
+				"type": "uint128"
+			}
+		],
+		"name": "Minted",
+		"type": "event"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": true,
+				"internalType": "address",
 				"name": "previousOwner",
 				"type": "address"
 			},
@@ -309,18 +356,26 @@
 		"inputs": [
 			{
 				"internalType": "uint128",
-				"name": "price",
+				"name": "priceScaled",
 				"type": "uint128"
-			},
-			{
-				"internalType": "uint8",
-				"name": "rarity",
-				"type": "uint8"
 			}
 		],
 		"name": "mint",
 		"outputs": [],
 		"stateMutability": "payable",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "mintPrice",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
 		"type": "function"
 	},
 	{
@@ -331,30 +386,6 @@
 				"internalType": "string",
 				"name": "",
 				"type": "string"
-			}
-		],
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "uint256",
-				"name": "",
-				"type": "uint256"
-			}
-		],
-		"name": "nftData",
-		"outputs": [
-			{
-				"internalType": "uint128",
-				"name": "price",
-				"type": "uint128"
-			},
-			{
-				"internalType": "uint8",
-				"name": "rarity",
-				"type": "uint8"
 			}
 		],
 		"stateMutability": "view",
@@ -451,6 +482,19 @@
 		"type": "function"
 	},
 	{
+		"inputs": [],
+		"name": "saleActive",
+		"outputs": [
+			{
+				"internalType": "bool",
+				"name": "",
+				"type": "bool"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
 		"inputs": [
 			{
 				"internalType": "address",
@@ -466,6 +510,63 @@
 		"name": "setApprovalForAll",
 		"outputs": [],
 		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "_mintPriceWei",
+				"type": "uint256"
+			}
+		],
+		"name": "setMintPrice",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint128",
+				"name": "minScaled",
+				"type": "uint128"
+			},
+			{
+				"internalType": "uint128",
+				"name": "maxScaled",
+				"type": "uint128"
+			}
+		],
+		"name": "setSimulatedPriceRange",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "simulatedMaxPrice",
+		"outputs": [
+			{
+				"internalType": "uint128",
+				"name": "",
+				"type": "uint128"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "simulatedMinPrice",
+		"outputs": [
+			{
+				"internalType": "uint128",
+				"name": "",
+				"type": "uint128"
+			}
+		],
+		"stateMutability": "view",
 		"type": "function"
 	},
 	{
@@ -501,6 +602,42 @@
 		"type": "function"
 	},
 	{
+		"inputs": [],
+		"name": "toggleSale",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"name": "tokenTraits",
+		"outputs": [
+			{
+				"internalType": "uint128",
+				"name": "priceSnapshot",
+				"type": "uint128"
+			},
+			{
+				"internalType": "uint8",
+				"name": "rarity",
+				"type": "uint8"
+			},
+			{
+				"internalType": "uint40",
+				"name": "mintedAt",
+				"type": "uint40"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
 		"inputs": [
 			{
 				"internalType": "uint256",
@@ -514,19 +651,6 @@
 				"internalType": "string",
 				"name": "",
 				"type": "string"
-			}
-		],
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"inputs": [],
-		"name": "total",
-		"outputs": [
-			{
-				"internalType": "uint256",
-				"name": "",
-				"type": "uint256"
 			}
 		],
 		"stateMutability": "view",
@@ -577,6 +701,13 @@
 			}
 		],
 		"name": "transferOwnership",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "withdraw",
 		"outputs": [],
 		"stateMutability": "nonpayable",
 		"type": "function"
