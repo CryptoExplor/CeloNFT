@@ -9,14 +9,14 @@
     "splashImageUrl": "https://celo-nft-phi.vercel.app/splash.png",
     "splashBackgroundColor": "#111111",
     "webhookUrl": "https://celo-nft-phi.vercel.app/api/webhook",
-    "subtitle": "CeloNFT – A Community-Mintable Collection on Celo",
-    "description": "CeloNFT is an open ERC-721 collection deployed on the Celo blockchain. Anyone can mint new NFTs by providing a metadata URI, making it a fully permissionless and community-driven project. Each NFT is unique, stored on-chain with a transparent minting process, and transferable across the Celo ecosystem.",
+    "subtitle": "Mintable Collection on Celo",
+    "description": "CeloNFT: A community-driven ERC-721 on Celo. Mint unique on-chain NFTs with custom metadata, fully permissionless and transparent.",
     "primaryCategory": "art-creativity",
     "tags": [
+      "celonft",
       "celo",
       "nft",
       "free",
-      "celonft",
       "mint"
     ]
   },
