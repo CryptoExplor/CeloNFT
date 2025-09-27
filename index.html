@@ -290,7 +290,7 @@
     import { parseEther } from 'https://esm.sh/viem';
     
     // Configuration: Change this if your contract function name is different
-    const MAX_SUPPLY_FUNCTION_NAME = 'maxSupply'; // Kept for consistency, even if maxSupply is no longer used in the contract
+    const MAX_SUPPLY_FUNCTION_NAME = 'maxSupply'; 
 
     const statusBox    = document.getElementById('statusBox');
     const supplyBox    = document.getElementById('totalSupply');
@@ -462,7 +462,7 @@
           // Update button label with price
           if (mintPriceWei > 0n) {
              const celoPrice = Number(mintPriceWei) / 1e18;
-             mintBtn.innerText = `MINT (${celoPrice.toFixed(4)} CELO})`;
+             mintBtn.innerText = `MINT (${celoPrice.toFixed(4)} CELO)`;
           }
 
       } catch (e) {
@@ -656,17 +656,18 @@
         const price = await fetchCeloPrice();
         
         // 2. Prepare price for contract (uint128, x10000 for decimals)
-        // e.g., $0.6543 -> 6543
-        const priceForContract = Math.floor(price * 10000);
+        // Convert to BigInt for safe RPC parameter passing
+        const priceForContract = BigInt(Math.floor(price * 10000));
 
-        // 3. Mint with price only
+        // 3. Mint with price and the required payment
         const hash = await writeContract(config, {
           address,
           abi,
           functionName: 'mint',
-          // ONLY passing the price (uint128)
+          // Pass the price as a BigInt
           args: [priceForContract], 
-          value: parseEther('0') // Assuming a free mint
+          // Pass the contract's required payment (0n if free, or actual price)
+          value: mintPriceWei 
         });
         
         // 4. *** REVISED RELIABLE STEP ***: Fetch the NEW totalSupply.
