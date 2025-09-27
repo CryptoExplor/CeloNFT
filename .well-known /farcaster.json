@@ -1,4 +1,9 @@
 {
+ "accountAssociation": {
+    "header": "eyJmaWQiOjYxMjA2NiwidHlwZSI6ImF1dGgiLCJrZXkiOiIweDE4MjhjNEJmNzhEQWI2NkI0QjdkZUJmYUEzOEYwQWQxMjVFYzhkMTUifQ",
+    "payload": "eyJkb21haW4iOiJjZWxvLW5mdC1waGkudmVyY2VsLmFwcCJ9",
+    "signature": "g9ekfOpOiIkSBVomSVCqmDEXhNZSYgXvGWAnBl+IzWpjYwJmmZwPte/zuWkSBqZOzANg8dfPkraNpQ+ByXCbJRw="
+  },
   "frame": {
     "name": "Celo NFT",
     "version": "1",
@@ -18,10 +23,5 @@
     ],
     "description": "CeloNFT is an open ERC-721 collection deployed on the Celo blockchain. Anyone can mint new NFTs by providing a metadata URI, making it a fully permissionless and community-driven project. Each NFT is unique, stored on-chain with a transparent minting process, and transferable across the Celo ecosystem.",
     "subtitle": "CeloNFT – A Community-Mintable Collection on Celo"
-  },
-  "accountAssociation": {
-    "header": "eyJmaWQiOjYxMjA2NiwidHlwZSI6ImF1dGgiLCJrZXkiOiIweDE4MjhjNEJmNzhEQWI2NkI0QjdkZUJmYUEzOEYwQWQxMjVFYzhkMTUifQ",
-    "payload": "eyJkb21haW4iOiJjZWxvLW5mdC1waGkudmVyY2VsLmFwcCJ9",
-    "signature": "g9ekfOpOiIkSBVomSVCqmDEXhNZSYgXvGWAnBl+IzWpjYwJmmZwPte/zuWkSBqZOzANg8dfPkraNpQ+ByXCbJRw="
   }
 }
