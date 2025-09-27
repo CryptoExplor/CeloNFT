@@ -1,8 +1,8 @@
-<!DOCTYPE html>
+!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <!-- FIX 1: Change viewport to use device-width for full responsiveness -->
+  <!-- Correct Viewport for full responsiveness -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Farcaster Celo Free NFT Mint</title>
   <meta name="description" content="Mint a free Celo NFT that shows the live CELO price!" />
@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Monoton&family=Orbitron&family=Roboto+Mono&family=VT323&display=swap" rel="stylesheet">
 
-  <!-- Farcaster Mini App Metadata -->
+  <!-- Farcaster Mini App Metadata (UNCHANGED) -->
   <meta name="fc:miniapp" content='{
     "version":"1",
     "imageUrl":"https://celo-nft-phi.vercel.app/image.png",
@@ -37,9 +37,9 @@
       flex-direction: column;
       align-items: center;
       min-height: 100vh;
-      padding: 10px 10px;
+      /* Keep body padding for spacing around the edges */
+      padding: 10px 10px; 
       box-sizing: border-box;
-      /* Ensure all text content is centered */
       text-align: center; 
     }
     .tradingview-widget-container {
@@ -119,32 +119,70 @@
       height: 28px;
     }
     .hidden { display:none; }
+    
+    /* FIX: Aggressively adjust NFT container to fit full available width */
     #nft-preview-container {
         margin-top: 10px;
         margin-bottom: 10px;
-        width: 100%;
-        /* Keep max-width high enough for NFT quality but allow for padding */
-        max-width: 380px; 
+        width: 100%; /* Take up the full width minus body padding */
+        max-width: 350px; /* Set an absolute max size for desktop views */
         background: #000;
         border: 2px solid #49dfb5;
         border-radius: 12px;
         display: flex;
         justify-content: center;
         align-items: center;
-        /* FIX 2: Reduce padding to reclaim space inside the container */
-        padding: 5px; 
+        /* FIX: Remove internal padding to use max space for SVG */
+        padding: 0; 
         min-height: 200px;
-        /* Ensure container has position:relative for absolute sparkle overlay */
         position: relative; 
         overflow: hidden; 
+        box-sizing: border-box; /* Ensure padding/border is calculated inwards */
     }
     #nft-preview-container svg {
+        /* FIX: Ensure the SVG takes up 100% of the box both ways */
         width: 100%;
-        height: auto;
-        /* Ensure SVG itself scales within the container */
+        height: 100%; 
         display: block; 
     }
-    /* Spinner CSS for Loading Indicator */
+    /* --- START NEW SPARKLE CSS (UNCHANGED) --- */
+    .sparkles::before {
+      content: "";
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: radial-gradient(circle, white 2px, transparent 2px);
+      background-size: 20px 20px;
+      pointer-events: none;
+      opacity: 0.7;
+      animation: sparkle 6s linear infinite; 
+      z-index: 10; 
+    }
+
+    @keyframes sparkle {
+      0% { background-position: 0 0; opacity: 0.6; }
+      50% { background-position: 10px 10px; opacity: 1; }
+      100% { background-position: 0 0; opacity: 0.6; }
+    }
+
+    .common.sparkles::before {
+      background: radial-gradient(circle, #bbb 1.5px, transparent 2px); 
+      animation-duration: 6s;
+    }
+    .rare.sparkles::before {
+      background: radial-gradient(circle, #2196f3 2.5px, transparent 2px); 
+      animation-duration: 4s;
+    }
+    .legendary.sparkles::before {
+      background: radial-gradient(circle, gold 3.5px, transparent 2px);
+      animation-duration: 2s; 
+    }
+    .mythic.sparkles::before {
+      background: radial-gradient(circle, crimson 4px, transparent 2px);
+      animation-duration: 1.5s; 
+    }
+    /* --- END NEW SPARKLE CSS --- */
+    /* Spinner CSS for Loading Indicator (UNCHANGED) */
     .spinner {
       border: 2px solid #fff3;
       border-top: 2px solid #fff;
@@ -155,46 +193,6 @@
       animation: spin 0.6s linear infinite;
     }
     @keyframes spin { 100% { transform: rotate(360deg); } }
-
-    /* --- START NEW SPARKLE CSS --- */
-    /* Base sparkle effect */
-    .sparkles::before {
-      content: "";
-      position: absolute;
-      top: 0; left: 0;
-      width: 100%; height: 100%;
-      background: radial-gradient(circle, white 2px, transparent 2px);
-      background-size: 20px 20px;
-      pointer-events: none;
-      opacity: 0.7;
-      animation: sparkle 6s linear infinite; /* default slow */
-      z-index: 10; /* Ensure sparkles are on top of the SVG */
-    }
-
-    @keyframes sparkle {
-      0% { background-position: 0 0; opacity: 0.6; }
-      50% { background-position: 10px 10px; opacity: 1; }
-      100% { background-position: 0 0; opacity: 0.6; }
-    }
-
-    /* Rarity variations for color, size, and speed (4 Tiers: Common, Rare, Legendary, Mythic) */
-    .common.sparkles::before {
-      background: radial-gradient(circle, #bbb 1.5px, transparent 2px); /* dull silver */
-      animation-duration: 6s;
-    }
-    .rare.sparkles::before {
-      background: radial-gradient(circle, #2196f3 2.5px, transparent 2px); /* blue */
-      animation-duration: 4s;
-    }
-    .legendary.sparkles::before {
-      background: radial-gradient(circle, gold 3.5px, transparent 2px);
-      animation-duration: 2s; /* faster */
-    }
-    .mythic.sparkles::before {
-      background: radial-gradient(circle, crimson 4px, transparent 2px);
-      animation-duration: 1.5s; /* blazing fast */
-    }
-    /* --- END NEW SPARKLE CSS --- */
   </style>
 </head>
 <body>
@@ -252,13 +250,13 @@
     </a>
   </footer>
 
-  <!-- Farcaster SDK -->
+  <!-- Farcaster SDK (UNCHANGED) -->
   <script type="module">
     import { sdk } from 'https://esm.sh/@farcaster/miniapp-sdk';
     sdk.actions.ready({ disableNativeGestures: true });
   </script>
 
-  <!-- Wagmi + Celo Logic -->
+  <!-- Wagmi + Celo Logic (UNCHANGED) -->
   <script type="module">
     import {
       createConfig,
