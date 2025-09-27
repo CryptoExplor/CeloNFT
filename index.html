@@ -1,4 +1,4 @@
-!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -124,8 +124,8 @@
     #nft-preview-container {
         margin-top: 10px;
         margin-bottom: 10px;
-        width: 100%; /* Take up the full width minus body padding */
-        max-width: 350px; /* Set an absolute max size for desktop views */
+        width: 100%;
+        max-width: 380px;
         background: #000;
         border: 2px solid #49dfb5;
         border-radius: 12px;
@@ -142,8 +142,10 @@
     #nft-preview-container svg {
         /* FIX: Ensure the SVG takes up 100% of the box both ways */
         width: 100%;
-        height: 100%; 
-        display: block; 
+        height: auto; 
+        display: block;
+        max-height: 100%;
+        object-fit: contain;
     }
     /* --- START NEW SPARKLE CSS (UNCHANGED) --- */
     .sparkles::before {
