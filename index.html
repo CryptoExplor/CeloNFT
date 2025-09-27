@@ -302,6 +302,19 @@
       userAddrBox.classList.remove('hidden');
     }
 
+    // --- Price fetching function ---
+    async function fetchCeloPrice() {
+      try {
+        const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=celo&vs_currencies=usd');
+        const data = await response.json();
+        const price = data.celo.usd;
+        return price;
+      } catch (e) {
+        console.error("Failed to fetch CELO price:", e);
+        throw new Error("Failed to fetch CELO price. Please try again.");
+      }
+    }
+
     // Setup wagmi config for Celo
     const config = createConfig({
       chains: [celo],
@@ -549,20 +562,27 @@
       try {
         const { address, abi } = contractDetails;
         
-        // Read the current supply BEFORE minting to predict the new token ID.
-        // This is an optimistic prediction used ONLY for the link and local storage.
-        const currentSupply = await updateSupply();
-        const nextTokenId = Number(currentSupply) + 1;
+        // 1. Fetch CELO price
+        const price = await fetchCeloPrice();
+        
+        // 2. Prepare price for contract (uint128, x10000 for decimals)
+        // e.g., $0.6543 -> 6543
+        const priceForContract = Math.floor(price * 10000);
 
-        // 1. Call mint() - NO ARGUMENTS needed as the contract handles all logic now.
+        // 3. Mint with price only
         const hash = await writeContract(config, {
           address,
           abi,
           functionName: 'mint',
-          args: [], // <<< CRITICAL FIX: No arguments passed here.
-          value: mintPriceWei // <<< CRITICAL FIX: Pass the required mint price (0n for free mints)
+          // ONLY passing the price (uint128)
+          args: [priceForContract], 
+          value: parseEther('0') // Assuming a free mint
         });
-
+        
+        // Fetch the new total supply and optimistically assume the new count is the ID just minted.
+        const newSupply = await updateSupply();
+        const nextTokenId = Number(newSupply);
+        
         // Store in Local Storage
         localStorage.setItem("lastMintedTokenId", nextTokenId);
 
