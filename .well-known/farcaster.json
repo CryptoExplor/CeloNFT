@@ -1,27 +1,28 @@
 {
- "accountAssociation": {
-    "header": "eyJmaWQiOjYxMjA2NiwidHlwZSI6ImF1dGgiLCJrZXkiOiIweDE4MjhjNEJmNzhEQWI2NkI0QjdkZUJmYUEzOEYwQWQxMjVFYzhkMTUifQ",
-    "payload": "eyJkb21haW4iOiJjZWxvLW5mdC1waGkudmVyY2VsLmFwcCJ9",
-    "signature": "g9ekfOpOiIkSBVomSVCqmDEXhNZSYgXvGWAnBl+IzWpjYwJmmZwPte/zuWkSBqZOzANg8dfPkraNpQ+ByXCbJRw="
-  },
   "frame": {
     "name": "Celo NFT",
     "version": "1",
     "iconUrl": "https://celo-nft-phi.vercel.app/icon.png",
     "homeUrl": "https://celo-nft-phi.vercel.app",
     "imageUrl": "https://celo-nft-phi.vercel.app/image.png",
-    "buttonTitle": "Mint Free Celo Price NFT",
+    "buttonTitle": "Celo NFT",
     "splashImageUrl": "https://celo-nft-phi.vercel.app/splash.png",
     "splashBackgroundColor": "#111111",
     "webhookUrl": "https://celo-nft-phi.vercel.app/api/webhook",
+    "subtitle": "CeloNFT – A Community-Mintable Collection on Celo",
+    "description": "CeloNFT is an open ERC-721 collection deployed on the Celo blockchain. Anyone can mint new NFTs by providing a metadata URI, making it a fully permissionless and community-driven project. Each NFT is unique, stored on-chain with a transparent minting process, and transferable across the Celo ecosystem.",
     "primaryCategory": "art-creativity",
     "tags": [
       "celo",
       "nft",
       "free",
-      "celonft"
-    ],
-    "description": "CeloNFT is an open ERC-721 collection deployed on the Celo blockchain. Anyone can mint new NFTs by providing a metadata URI, making it a fully permissionless and community-driven project. Each NFT is unique, stored on-chain with a transparent minting process, and transferable across the Celo ecosystem.",
-    "subtitle": "CeloNFT – A Community-Mintable Collection on Celo"
+      "celonft",
+      "mint"
+    ]
+  },
+  "accountAssociation": {
+    "header": "eyJmaWQiOjYxMjA2NiwidHlwZSI6ImN1c3RvZHkiLCJrZXkiOiIweDg4ZDA1OGRCNmUwRjRmN2M5NjI0NDdGNTJDYTlkYUZiNUJhNzMyQWEifQ",
+    "payload": "eyJkb21haW4iOiJjZWxvLW5mdC1waGkudmVyY2VsLmFwcCJ9",
+    "signature": "MHg1YTExN2ZiNGE5ZmQ3Y2EyYmY0ZjIyMjJhZjM3MWU4ZmZmYjEyZmQ2YTIxNTBhOTdjNDcwNTc3ODgyNDYxY2UzMDJlOWQ3ODdlZWVlODM5MmMzMjZiNTY0NDYzNTMzNzc3NDU1MTdhNjU3YWRhNzNmN2QyMWE4ZDU2ZGQ4NDU3MzFj"
   }
 }
