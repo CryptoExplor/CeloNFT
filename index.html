@@ -38,13 +38,13 @@
       align-items: center;
       min-height: 100vh;
       /* Keep body padding for spacing around the edges */
-      padding: 0 0; 
+      padding: 10px 0; 
       box-sizing: border-box;
       text-align: center; 
     }
     .tradingview-widget-container {
       width: 100%;
-      max-width: 370px; 
+      max-width: 390px;
       height: 300px;
       border: 1px solid #333;
       border-radius: 12px;
@@ -130,25 +130,33 @@
         border: 2px solid #49dfb5;
         border-radius: 12px;
         display: flex;
-        /* Center the SVG within the container */
         justify-content: center; 
         align-items: center;
-        /* Remove min-height to allow the container to hug the scaled SVG height */
-        min-height: 0; 
         padding: 0; 
         position: relative; 
-        overflow: hidden; 
-        box-sizing: border-box; 
+        /* allow vertical growth up to viewport, then scroll */
+        max-height: 60vh;
+        overflow: auto;        /* <-- changed from hidden to auto */
+        box-sizing: border-box;
     }
+
+    /* Make inline SVG scale naturally without distortion */
     #nft-preview-container svg {
-        /* FIX 1: Use width: 100% and height: auto to ensure aspect ratio is kept */
-        width: 100%;
-        height: auto; 
-        /* FIX 1: Set max-height to ensure it doesn't push off-screen vertically */
-        max-height: 100%; 
-        display: block; 
-        /* Although the SVG attribute handles this, this is good for raster images */
-        object-fit: contain; 
+      display: block;
+      width: 100%;    /* scale horizontally up to container width */
+      height: auto;   /* preserve aspect ratio */
+      max-height: 60vh; /* prevents it pushing page off-screen */
+      margin: 0 auto;
+      box-sizing: border-box;
+    }
+
+    /* Fallback for image-type tokenURI (data:image/...), if present */
+    #nft-preview-container img {
+      display: block;
+      width: 100%;
+      height: auto;
+      max-height: 60vh;
+      margin: 0 auto;
     }
     /* --- START NEW SPARKLE CSS (UNCHANGED) --- */
     .sparkles::before {
@@ -261,7 +269,7 @@
     sdk.actions.ready({ disableNativeGestures: true });
   </script>
 
-  <!-- Wagmi + Celo Logic (UNCHANGED) -->
+  <!-- Wagmi + Celo Logic -->
   <script type="module">
     import {
       createConfig,
@@ -339,6 +347,53 @@
     });
 
     let contractDetails;
+
+    // Helper function to adjust injected SVG attributes for responsive scaling
+    function adjustInjectedSvg(container) {
+      const svg = container.querySelector('svg');
+      if (svg) {
+        // If no viewBox but width/height exist, create a viewBox from them
+        if (!svg.hasAttribute('viewBox')) {
+          const w = svg.getAttribute('width');
+          const h = svg.getAttribute('height');
+          if (w && h) {
+            // parseFloat to handle "400px" etc.
+            const W = parseFloat(w);
+            const H = parseFloat(h);
+            if (!isNaN(W) && !isNaN(H) && W > 0 && H > 0) {
+              svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+            }
+          }
+        }
+
+        // Preserve aspect ratio so nothing gets cropped
+        svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+
+        // Let CSS control the sizing (remove inline width/height)
+        svg.removeAttribute('width');
+        svg.removeAttribute('height');
+
+        // Ensure CSS max-height will work
+        svg.style.width = '100%';
+        svg.style.height = 'auto';
+        svg.style.maxHeight = '60vh';
+        svg.style.display = 'block';
+      } else {
+        // If metadata.image was a raster (PNG/JPEG) injected as <img>, style it
+        const img = container.querySelector('img');
+        if (img) {
+          img.style.width = '100%';
+          img.style.height = 'auto';
+          img.style.maxHeight = '60vh';
+          img.style.display = 'block';
+        }
+      }
+
+      // Make sure container allows the svg to show fully (scroll if taller)
+      container.style.maxHeight = '60vh';
+      container.style.overflow = 'auto';
+    }
+
 
     (async () => {
       // 1. Persist Last Mint: Load from localStorage on startup
@@ -515,6 +570,9 @@
             // 4. Inject the safe SVG into the container
             previewContainer.innerHTML = safeSvg;
             previewContainer.classList.remove('hidden');
+
+            // NEW: adjust the injected SVG so it scales correctly
+            adjustInjectedSvg(previewContainer);
             
             // 5. Apply Sparkle based on Rarity
             let rarityText = "Common"; // Default
