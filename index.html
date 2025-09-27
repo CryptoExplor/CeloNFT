@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=390, initial-scale=1.0" />
+  <!-- Adjusted viewport for better mobile responsiveness, though original was targeting a specific width -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Farcaster Celo Free NFT Mint</title>
   <meta name="description" content="Mint a free Celo NFT that shows the live CELO price!" />
   <!-- Google Fonts for NFT typography -->
@@ -35,9 +36,11 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      min-height: 100vh;
+      min-height: 10vh;
       padding: 10px 10px;
       box-sizing: border-box;
+      /* FIX: Ensure all text content is centered */
+      text-align: center; 
     }
     .tradingview-widget-container {
       width: 100%;
@@ -306,7 +309,14 @@
     async function fetchCeloPrice() {
       try {
         const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=celo&vs_currencies=usd');
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
         const data = await response.json();
+        // Check if data structure is as expected
+        if (!data || !data.celo || !data.celo.usd) {
+             throw new Error("Invalid response structure from CoinGecko.");
+        }
         const price = data.celo.usd;
         return price;
       } catch (e) {
@@ -357,7 +367,7 @@
         contractDetails = await fetch('./contract.json').then(r => r.json());
         contractAddress = contractDetails.address;
       } catch (e) { 
-        setStatus("Missing contract details.", 'error'); 
+        setStatus("Missing contract details. Ensure 'contract.json' is deployed.", 'error'); 
         console.error(e); 
         mintBtn.disabled = true; 
         return;
@@ -481,14 +491,17 @@
             const base64Json = tokenURI.split(',')[1];
             if (!base64Json) throw new Error("Invalid tokenURI format.");
 
-            const jsonString = atob(base64Json);
+            // FIX: Use decodeURIComponent before atob for robust Base64 decoding, 
+            // as token URIs often have URI-encoded Base64 content.
+            const jsonString = atob(decodeURIComponent(base64Json));
             const metadata = JSON.parse(jsonString);
             
             // 3. Decode the base64 SVG part
             const base64Svg = metadata.image.split(',')[1];
             if (!base64Svg) throw new Error("Invalid image data format.");
 
-            let svgString = atob(base64Svg);
+            // FIX: Apply the same robust decoding logic to the image (SVG) content.
+            let svgString = atob(decodeURIComponent(base64Svg));
             
             // Security: Sanitize injected SVG
             const safeSvg = svgString.replace(/<script.*?>.*?<\/script>/g, '');
@@ -524,9 +537,10 @@
             previewBtn.innerText = buttonLabel;
 
         } catch (e) {
+            // Error handling shows the exact error from the screenshot
             setStatus("Failed to load NFT preview. Check console for details.", 'error'); 
             previewBtn.innerText = 'Preview NFT Error';
-            console.error(e);
+            console.error("NFT Preview Error:", e); // Enhanced console logging
             // Clear preview on error
             previewContainer.classList.add('hidden');
         } finally {
@@ -589,27 +603,31 @@
         // Sanitize Links in Status (DOM manipulation)
         setStatus("Mint Successful. ", 'success'); 
         
-        const celoscanTokenUrl = `https://celoscan.io/token/${contractAddress}?a=${nextTokenId}`;
-        const celoscanTxUrl = `https://celoscan.io/tx/${hash}`;
-
-        // Create View Tx Link
-        const txLink = document.createElement("a");
-        txLink.href = celoscanTxUrl;
-        txLink.target = "_blank";
-        txLink.textContent = "View Tx";
-        txLink.style.cssText = "color:#fff;text-decoration:underline";
-        
-        // Create View on Celoscan Link
-        const tokenLink = document.createElement("a");
-        tokenLink.href = celoscanTokenUrl;
-        tokenLink.target = "_blank";
-        tokenLink.textContent = "View on Celoscan";
-        tokenLink.style.cssText = "color:#fff;text-decoration:underline";
-        
-        // Append elements to statusBox
-        statusBox.appendChild(txLink);
-        statusBox.insertAdjacentText('beforeend', ' | ');
-        statusBox.appendChild(tokenLink);
+        if (!contractAddress) {
+            setStatus("Mint Successful, but contract address is unknown.", 'success');
+        } else {
+            const celoscanTokenUrl = `https://celoscan.io/token/${contractAddress}?a=${nextTokenId}`;
+            const celoscanTxUrl = `https://celoscan.io/tx/${hash}`;
+    
+            // Create View Tx Link
+            const txLink = document.createElement("a");
+            txLink.href = celoscanTxUrl;
+            txLink.target = "_blank";
+            txLink.textContent = "View Tx";
+            txLink.style.cssText = "color:#fff;text-decoration:underline";
+            
+            // Create View on Celoscan Link
+            const tokenLink = document.createElement("a");
+            tokenLink.href = celoscanTokenUrl;
+            tokenLink.target = "_blank";
+            tokenLink.textContent = "View on Celoscan";
+            tokenLink.style.cssText = "color:#fff;text-decoration:underline";
+            
+            // Append elements to statusBox
+            statusBox.appendChild(txLink);
+            statusBox.insertAdjacentText('beforeend', ' | ');
+            statusBox.appendChild(tokenLink);
+        }
         
         lastMintedTokenId = nextTokenId;
         
@@ -623,7 +641,7 @@
       } catch (e) {
         // Use e.shortMessage for clearer error display from Wagmi/Viem
         setStatus(e.shortMessage || "Mint failed.", 'error'); 
-        console.error(e);
+        console.error("Mint Error:", e);
         
         // Reset preview button state on failure
         previewBtn.classList.add('hidden');
