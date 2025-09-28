@@ -283,7 +283,10 @@
       connect,
       writeContract,
       readContract,
-      http
+      http,
+      switchChain, // ADDED
+      watchAccount, // ADDED
+      getAccount // ADDED
     } from 'https://esm.sh/@wagmi/core';
     import { celo } from 'https://esm.sh/@wagmi/core/chains';
     import { farcasterMiniApp } from 'https://esm.sh/@farcaster/miniapp-wagmi-connector';
@@ -355,6 +358,74 @@
 
     let contractDetails;
 
+    // NEW: Function to force a chain switch to Celo Mainnet
+    async function ensureCeloChain() {
+        // Use getAccount() to read the current state from the Wagmi config store
+        const account = getAccount(config); 
+        
+        if (account.chainId !== celo.id) {
+            setStatus("Switching chain to Celo Mainnet (42220)...", 'info');
+            try {
+                // Request the switch
+                await switchChain(config, { chainId: celo.id });
+                setStatus("Successfully switched to Celo Mainnet.", 'success');
+                mintBtn.title = "";
+                mintBtn.disabled = false;
+                return true;
+            } catch (err) {
+                setStatus("Chain switch denied. Please manually switch to Celo Mainnet (42220).", 'error');
+                console.error("Chain switch failed:", err);
+                mintBtn.title = "Switch to Celo Mainnet to mint.";
+                mintBtn.disabled = true;
+                return false;
+            }
+        }
+        // Chain is already correct
+        setStatus("Connected to Celo Mainnet.", 'success');
+        mintBtn.title = "";
+        // Re-enable in case it was disabled by an earlier error
+        mintBtn.disabled = false;
+        return true;
+    }
+
+    // NEW: Centralized function to handle all wallet/chain state changes
+    async function handleAccountChange(address) {
+        if (!address) {
+            userAddrBox.classList.add('hidden');
+            mintBtn.disabled = true;
+            setStatus("No wallet connected. Please connect a wallet.", 'warning');
+            return;
+        }
+
+        showAddress(address);
+        console.log(`Wallet connected/switched: ${address}`);
+
+        // 1. Force chain switch if needed
+        // This is the core fix: ensure the chain is Celo on *any* account change
+        const isCelo = await ensureCeloChain();
+
+        if (isCelo) {
+            // 2. Re-enable minting and update supply
+            await updateSupply();
+            // Restore initial mint button label (it was reset in ensureCeloChain)
+            const celoPrice = Number(mintPriceWei) / 1e18;
+            mintBtn.innerText = mintPriceWei > 0n ? `MINT (${celoPrice.toFixed(4)} CELO)` : 'MINT';
+            
+            // 3. Re-check local storage for NFT preview
+            const localId = localStorage.getItem("lastMintedTokenId");
+            if (localId && Number(localId) > 0) {
+                lastMintedTokenId = Number(localId);
+                previewBtn.innerText = `Preview NFT #${lastMintedTokenId}`;
+                previewBtn.classList.remove('hidden');
+            } else {
+                 previewBtn.classList.add('hidden');
+            }
+        } else {
+            // mintBtn remains disabled if chain switch failed
+        }
+    }
+
+
     // Helper function to adjust injected SVG attributes for responsive scaling
     function adjustInjectedSvg(container) {
       const svg = container.querySelector('svg');
@@ -399,93 +470,7 @@
       // We are removing the scroll, so only set max-height
       container.style.maxHeight = '60vh';
     }
-
-    // *** REMOVED getLatestTokenIdByAddress: NOT SUPPORTED BY CONTRACT ***
     
-    (async () => {
-      let address;
-      let chainId;
-      
-      // Connect wallet
-      try {
-        const conn = await connect(config, { connector: farcasterMiniApp() });
-        address = conn.accounts[0];
-        chainId = conn.chainId;
-        showAddress(address);
-      } catch (e) { setStatus("Wallet connect failed.", 'error'); console.error(e); }
-
-      // 2. Network Guard
-      if (chainId !== celo.id) {
-          setStatus("Please switch to Celo Mainnet.", 'warning');
-          mintBtn.disabled = true;
-          mintBtn.title = "Switch to Celo Mainnet to mint.";
-          return;
-      } else {
-          mintBtn.title = ""; 
-      }
-
-      // 3. Load contract JSON
-      try {
-        contractDetails = await fetch('./contract.json').then(r => r.json());
-        contractAddress = contractDetails.address;
-      } catch (e) { 
-        setStatus("Missing contract details. Ensure 'contract.json' is deployed.", 'error'); 
-        console.error(e); 
-        mintBtn.disabled = true; 
-        return;
-      }
-
-      if(!contractDetails || !address) {
-          mintBtn.disabled = true;
-          return;
-      }
-      
-      // 4. Fetch MAX_SUPPLY & MINT_PRICE dynamically
-      try {
-          const [max, price] = await Promise.all([
-              // We keep reading maxSupply for completeness, but your contract no longer uses it for limits
-              readContract(config, {
-                  address: contractDetails.address,
-                  abi: contractDetails.abi,
-                  functionName: MAX_SUPPLY_FUNCTION_NAME
-              }),
-              readContract(config, {
-                  address: contractDetails.address,
-                  abi: contractDetails.abi,
-                  functionName: 'mintPrice'
-              })
-          ]);
-          // Note: Max supply is likely not used for limiting anymore
-          MAX_SUPPLY = Number(max);
-          mintPriceWei = BigInt(price);
-          
-          // Update button label with price
-          if (mintPriceWei > 0n) {
-             const celoPrice = Number(mintPriceWei) / 1e18;
-             mintBtn.innerText = `MINT (${celoPrice.toFixed(4)} CELO)`;
-          }
-
-      } catch (e) {
-          setStatus(`Could not read contract settings. Assuming unlimited/free.`, 'warning');
-          MAX_SUPPLY = 0; // 0 means unlimited/unknown for this logic
-          mintPriceWei = 0n;
-          console.warn(`Failed to read contract settings.`, e);
-      }
-
-      // 5. Fetch totalSupply
-      await updateSupply(true);
-
-      // 6. Initial Load Logic: Use localStorage as the only source for the user's last minted ID
-      // This is necessary because the contract lacks a token-listing function.
-      const localId = localStorage.getItem("lastMintedTokenId");
-      if (localId && Number(localId) > 0) {
-          lastMintedTokenId = Number(localId);
-          previewBtn.innerText = `Preview NFT #${lastMintedTokenId}`;
-          previewBtn.classList.remove('hidden');
-      }
-    })();
-
-
     // Function to update the total supply display and check for sold out status
     async function updateSupply(initialLoad = false) {
         if (initialLoad) {
@@ -623,6 +608,90 @@
             previewBtn.disabled = false;
         }
     }
+
+
+    (async () => {
+        // 1. Load contract JSON
+        try {
+            contractDetails = await fetch('./contract.json').then(r => r.json());
+            contractAddress = contractDetails.address;
+        } catch (e) { 
+            setStatus("Missing contract details. Ensure 'contract.json' is deployed.", 'error'); 
+            console.error(e); 
+            mintBtn.disabled = true; 
+            return;
+        }
+        
+        // 2. Fetch MAX_SUPPLY & MINT_PRICE dynamically
+        try {
+            const [max, price] = await Promise.all([
+                // We keep reading maxSupply for completeness
+                readContract(config, {
+                    address: contractDetails.address,
+                    abi: contractDetails.abi,
+                    functionName: MAX_SUPPLY_FUNCTION_NAME
+                }),
+                readContract(config, {
+                    address: contractDetails.address,
+                    abi: contractDetails.abi,
+                    functionName: 'mintPrice'
+                })
+            ]);
+            MAX_SUPPLY = Number(max);
+            mintPriceWei = BigInt(price);
+            
+            // Update button label with price
+            if (mintPriceWei > 0n) {
+                const celoPrice = Number(mintPriceWei) / 1e18;
+                mintBtn.innerText = `MINT (${celoPrice.toFixed(4)} CELO)`;
+            }
+
+        } catch (e) {
+            setStatus(`Could not read contract settings. Assuming unlimited/free.`, 'warning');
+            MAX_SUPPLY = 0; 
+            mintPriceWei = 0n;
+            console.warn(`Failed to read contract settings.`, e);
+        }
+
+
+        // 3. Initial Connect & Account Setup
+        try {
+            // Initial connection attempt with Farcaster Mini App connector
+            await connect(config, { connector: farcasterMiniApp() });
+        } catch (e) { 
+            // This is non-critical if the user connects via an external wallet later
+            console.warn("Initial Farcaster connect failed (expected outside of Farcaster frame).", e); 
+        }
+
+        // Get initial account state after any connect attempts
+        const initialAccount = getAccount(config);
+        await handleAccountChange(initialAccount.address);
+        
+        // 4. Setup Listeners for Dynamic Switching
+        
+        // A. Wagmi/External Wallet Watcher (Handles address/chain changes within the connected Wagmi connector)
+        watchAccount(config, {
+            onChange(account) {
+                console.log("Wagmi account/chain change detected:", account.address, account.chainId);
+                // Call handleAccountChange, which includes the ensureCeloChain logic
+                handleAccountChange(account.address);
+            }
+        });
+
+        // B. Farcaster Mini App SDK Watcher (Crucial for switching FROM external TO Farcaster)
+        sdk.wallet.onAccountsChanged(async (accounts) => {
+            if (accounts.length > 0) {
+                const newAddr = accounts[0].address;
+                console.log("Farcaster SDK account change detected:", newAddr);
+                // We use the new address from Farcaster. The chain is checked in handleAccountChange.
+                handleAccountChange(newAddr);
+            }
+        });
+
+        // 5. Initial Supply update
+        await updateSupply(true); 
+    })();
+
 
     // Minting Handler
     mintBtn.addEventListener('click', async () => {
