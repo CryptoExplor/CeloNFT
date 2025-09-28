@@ -398,11 +398,18 @@
 
       // We are removing the scroll, so only set max-height
       container.style.maxHeight = '60vh';
+      // container.style.overflow = 'auto'; // REMOVED to prevent scrollbar
     }
 
-    // *** REMOVED getLatestTokenIdByAddress: NOT SUPPORTED BY CONTRACT ***
-    
+
     (async () => {
+      // 1. Persist Last Mint: Load from localStorage on startup
+      lastMintedTokenId = localStorage.getItem("lastMintedTokenId");
+      if (lastMintedTokenId) {
+          previewBtn.innerText = `Preview NFT #${lastMintedTokenId}`;
+          previewBtn.classList.remove('hidden');
+      }
+      
       let address;
       let chainId;
       
@@ -443,7 +450,6 @@
       // 4. Fetch MAX_SUPPLY & MINT_PRICE dynamically
       try {
           const [max, price] = await Promise.all([
-              // We keep reading maxSupply for completeness, but your contract no longer uses it for limits
               readContract(config, {
                   address: contractDetails.address,
                   abi: contractDetails.abi,
@@ -455,14 +461,13 @@
                   functionName: 'mintPrice'
               })
           ]);
-          // Note: Max supply is likely not used for limiting anymore
           MAX_SUPPLY = Number(max);
           mintPriceWei = BigInt(price);
           
           // Update button label with price
           if (mintPriceWei > 0n) {
              const celoPrice = Number(mintPriceWei) / 1e18;
-             mintBtn.innerText = `MINT (${celoPrice.toFixed(4)} CELO)`;
+             mintBtn.innerText = `MINT (${celoPrice.toFixed(4)} CELO})`;
           }
 
       } catch (e) {
@@ -474,66 +479,66 @@
 
       // 5. Fetch totalSupply
       await updateSupply(true);
-
-      // 6. Initial Load Logic: Use localStorage as the only source for the user's last minted ID
-      // This is necessary because the contract lacks a token-listing function.
-      const localId = localStorage.getItem("lastMintedTokenId");
-      if (localId && Number(localId) > 0) {
-          lastMintedTokenId = Number(localId);
-          previewBtn.innerText = `Preview NFT #${lastMintedTokenId}`;
-          previewBtn.classList.remove('hidden');
-      }
     })();
 
 
     // Function to update the total supply display and check for sold out status
     async function updateSupply(initialLoad = false) {
         if (initialLoad) {
-             supplyBox.innerHTML = '<span class="spinner"></span> Loading supply…';
+            supplyBox.innerHTML = '<span class="spinner"></span> Loading supply...';
         }
-       
+
         try {
+            // Add a small delay if not initial load to allow blockchain state to update
+            if (!initialLoad) {
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+
             const total = await readContract(config, {
                 address: contractDetails.address,
                 abi: contractDetails.abi,
                 functionName: 'totalSupply'
             });
+
             const totalNumber = Number(total);
 
-            // Check if MAX_SUPPLY is defined (non-zero)
+            // Check if MAXSUPPLY is defined (non-zero)
             if (MAX_SUPPLY > 0) {
-                supplyBox.textContent = `Minted: ${totalNumber} / ${MAX_SUPPLY}`;
+                supplyBox.textContent = `Minted: ${totalNumber}/${MAX_SUPPLY}`;
 
                 // Disable mint button if sold out
                 if (totalNumber >= MAX_SUPPLY) {
                     mintBtn.disabled = true;
-                    mintBtn.innerText = 'SOLD OUT';
-                    mintBtn.title = 'The maximum supply has been reached.';
-                    supplyBox.className = `status-box status-error`;
+                    mintBtn.innerText = "SOLD OUT";
+                    mintBtn.title = "The maximum supply has been reached.";
+                    supplyBox.className = "status-box status-error";
+                    
                     if (!initialLoad) {
-                         setStatus(`⚠️ All ${MAX_SUPPLY} NFTs have been minted!`, 'warning');
+                        setStatus(`All ${MAX_SUPPLY} NFTs have been minted!`, "warning");
                     }
-                } else if (!initialLoad && mintBtn.innerText === 'SOLD OUT') {
+                } else if (!initialLoad) {
                     // Restore active state if it was previously sold out but updated
                     mintBtn.disabled = false;
                     const celoPrice = Number(mintPriceWei) / 1e18;
                     mintBtn.innerText = mintPriceWei > 0n ? `MINT (${celoPrice.toFixed(4)} CELO)` : 'MINT';
                     mintBtn.title = '';
-                    supplyBox.className = `status-box status-warning`;
+                    supplyBox.className = "status-box status-warning";
                 }
             } else {
-                 // Display total minted only if max supply is not set/unknown
-                 supplyBox.textContent = `Total Minted: ${totalNumber}`;
-                 supplyBox.className = `status-box status-info`;
-                 mintBtn.disabled = false;
-                 const celoPrice = Number(mintPriceWei) / 1e18;
-                 mintBtn.innerText = mintPriceWei > 0n ? `MINT (${celoPrice.toFixed(4)} CELO)` : 'MINT';
+                // Display total minted only if max supply is not set/unknown
+                supplyBox.textContent = `Total Minted: ${totalNumber}`;
+                supplyBox.className = "status-box status-info";
+                
+                if (!initialLoad) {
+                    mintBtn.disabled = false;
+                    const celoPrice = Number(mintPriceWei) / 1e18;
+                    mintBtn.innerText = mintPriceWei > 0n ? `MINT (${celoPrice.toFixed(4)} CELO)` : 'MINT';
+                }
             }
 
-            // Return the total number read from the contract
-            return totalNumber; 
+            return total;
         } catch (e) {
-            supplyBox.textContent = 'Total Minted: N/A';
+            supplyBox.textContent = "Total Minted: N/A";
             console.error(e);
             return 0;
         }
@@ -626,118 +631,123 @@
 
     // Minting Handler
     mintBtn.addEventListener('click', async () => {
-      if (!contractDetails) {
-          setStatus("Contract details are missing. Cannot mint.", 'error');
-          return;
-      }
-      
-      // Pre-check for sold out
-      if (mintBtn.disabled && mintBtn.innerText === 'SOLD OUT') {
-          setStatus("This NFT drop is sold out.", 'warning');
-          return;
-      }
-
-
-      // Hide preview button and container before minting
-      previewBtn.classList.add('hidden');
-      previewContainer.classList.add('hidden');
-      // Remove all sparkle/rarity classes
-      previewContainer.classList.remove("sparkles", ...ALL_RARITY_CLASSES); 
-
-      // Loading Indicator
-      mintBtn.disabled = true;
-      mintBtn.innerHTML = '<span class="spinner"></span> Minting…';
-      lastMintedTokenId = null;
-
-      try {
-        const { address, abi } = contractDetails;
-        
-        // 1. Fetch CELO price
-        const price = await fetchCeloPrice();
-        
-        // 2. Prepare price for contract (uint128, x10000 for decimals)
-        // Convert to BigInt for safe RPC parameter passing
-        const priceForContract = BigInt(Math.floor(price * 10000));
-
-        // 3. Mint with price and the required payment
-        const hash = await writeContract(config, {
-          address,
-          abi,
-          functionName: 'mint',
-          // Pass the price as a BigInt
-          args: [priceForContract], 
-          // Pass the contract's required payment (0n if free, or actual price)
-          value: mintPriceWei 
-        });
-        
-        // 4. *** REVISED RELIABLE STEP ***: Fetch the NEW totalSupply.
-        // Since the contract increments totalSupply before minting, the new totalSupply
-        // will be the ID of the token just minted.
-        const newSupply = await updateSupply();
-        lastMintedTokenId = Number(newSupply);
-        
-        // 5. Store in Local Storage
-        localStorage.setItem("lastMintedTokenId", lastMintedTokenId);
-
-        // 6. Update Status and Links
-        setStatus("Mint Successful. ", 'success'); 
-        
-        if (!contractAddress) {
-            setStatus("Mint Successful, but contract address is unknown.", 'success');
-        } else {
-            const celoscanTokenUrl = `https://celoscan.io/token/${contractAddress}?a=${lastMintedTokenId}`;
-            const celoscanTxUrl = `https://celoscan.io/tx/${hash}`;
-    
-            // Create View Tx Link
-            const txLink = document.createElement("a");
-            txLink.href = celoscanTxUrl;
-            txLink.target = "_blank";
-            txLink.textContent = "View Tx";
-            txLink.style.cssText = "color:#fff;text-decoration:underline";
-            
-            // Create View on Celoscan Link
-            const tokenLink = document.createElement("a");
-            tokenLink.href = celoscanTokenUrl;
-            tokenLink.target = "_blank";
-            tokenLink.textContent = "View on Celoscan";
-            tokenLink.style.cssText = "color:#fff;text-decoration:underline";
-            
-            // Append elements to statusBox
-            statusBox.appendChild(txLink);
-            statusBox.insertAdjacentText('beforeend', ' | ');
-            statusBox.appendChild(tokenLink);
+        if (!contractDetails) {
+            setStatus("Contract details are missing. Cannot mint.", "error");
+            return;
         }
-        
-        // 7. Preview Auto-Load
-        previewBtn.classList.remove('hidden');
-        await previewNft(lastMintedTokenId);
 
-      } catch (e) {
-        // Use e.shortMessage for clearer error display from Wagmi/Viem
-        setStatus(e.shortMessage || "Mint failed.", 'error'); 
-        console.error("Mint Error:", e);
-        
-        // Reset preview button state on failure
+        // Pre-check for sold out
+        if (mintBtn.disabled && mintBtn.innerText === "SOLD OUT") {
+            setStatus("This NFT drop is sold out.", "warning");
+            return;
+        }
+
+        // Hide preview button and container before minting
         previewBtn.classList.add('hidden');
         previewContainer.classList.add('hidden');
-        previewContainer.classList.remove("sparkles", ...ALL_RARITY_CLASSES);
-        lastMintedTokenId = null; 
-        
-        // Restore mint button if it wasn't sold out before failure
-        if (mintBtn.innerText !== 'SOLD OUT') {
-             mintBtn.disabled = false;
-             const celoPrice = Number(mintPriceWei) / 1e18;
-             mintBtn.innerText = mintPriceWei > 0n ? `MINT (${celoPrice.toFixed(4)} CELO)` : 'MINT';
-        }
+        // Remove all sparkle/rarity classes
+        previewContainer.classList.remove('sparkles', ...ALL_RARITY_CLASSES);
 
-      } finally {
-        // Only restore 'MINT' text if it's not sold out
-        if (mintBtn.innerText !== 'SOLD OUT') {
-             mintBtn.disabled = false;
-             const celoPrice = Number(mintPriceWei) / 1e18;
-             mintBtn.innerText = mintPriceWei > 0n ? `MINT (${celoPrice.toFixed(4)} CELO)` : 'MINT';
+        // Loading Indicator
+        mintBtn.disabled = true;
+        mintBtn.innerHTML = '<span class="spinner"></span> Minting...';
+        lastMintedTokenId = null;
+
+        try {
+            const { address, abi } = contractDetails;
+
+            // 1. Get current total supply BEFORE minting
+            const currentSupply = await readContract(config, {
+                address,
+                abi,
+                functionName: 'totalSupply'
+            });
+            
+            // 2. Calculate what the next token ID will be
+            // This depends on your contract implementation
+            // If tokens start from 1: nextTokenId = currentSupply + 1
+            // If tokens start from 0: nextTokenId = currentSupply
+            const nextTokenId = Number(currentSupply) + 1; // Adjust this based on your contract
+
+            // 3. Fetch CELO price
+            const price = await fetchCeloPrice();
+
+            // 4. Prepare price for contract (uint128, x10000 for decimals)
+            const priceForContract = Math.floor(price * 10000);
+
+            // 5. Mint with price only
+            const hash = await writeContract(config, {
+                address,
+                abi,
+                functionName: 'mint',
+                args: [priceForContract],
+                value: parseEther('0') // Assuming a free mint
+            });
+
+            // 6. Wait a bit for the transaction to be mined and then update supply
+            setTimeout(async () => {
+                await updateSupply();
+            }, 2000); // Wait 2 seconds before updating supply
+
+            // Store the correct token ID in Local Storage
+            localStorage.setItem('lastMintedTokenId', nextTokenId.toString());
+
+            // Success status
+            setStatus("Mint Successful! ", "success");
+            
+            if (!contractAddress) {
+                setStatus("Mint Successful, but contract address is unknown.", "success");
+            } else {
+                const celoscanTokenUrl = `https://celoscan.io/token/${contractAddress}?a=${nextTokenId}`;
+                const celoscanTxUrl = `https://celoscan.io/tx/${hash}`;
+
+                // Create View Tx Link
+                const txLink = document.createElement('a');
+                txLink.href = celoscanTxUrl;
+                txLink.target = '_blank';
+                txLink.textContent = 'View Tx';
+                txLink.style.cssText = 'color:#fff;text-decoration:underline;margin-left:8px;';
+
+                // Create View on Celoscan Link
+                const tokenLink = document.createElement('a');
+                tokenLink.href = celoscanTokenUrl;
+                tokenLink.target = '_blank';
+                tokenLink.textContent = 'View on Celoscan';
+                tokenLink.style.cssText = 'color:#fff;text-decoration:underline;margin-left:8px;';
+
+                // Append elements to statusBox
+                statusBox.appendChild(txLink);
+                statusBox.insertAdjacentText('beforeend', ' | ');
+                statusBox.appendChild(tokenLink);
+            }
+
+            lastMintedTokenId = nextTokenId;
+
+            // Show preview button and load the preview
+            previewBtn.classList.remove('hidden');
+            previewBtn.innerText = `Preview NFT ${nextTokenId}`;
+            
+            // Auto-load preview of the newly minted token
+            await previewNft(lastMintedTokenId);
+
+        } catch (e) {
+            setStatus(e.shortMessage || "Mint failed.", "error");
+            console.error('Mint Error:', e);
+
+            // Reset preview button state on failure
+            previewBtn.classList.add('hidden');
+            previewContainer.classList.add('hidden');
+            previewContainer.classList.remove('sparkles', ...ALL_RARITY_CLASSES);
+            localStorage.removeItem('lastMintedTokenId');
+            lastMintedTokenId = null;
+        } finally {
+            // Only restore MINT text if it's not sold out
+            if (mintBtn.innerText !== "SOLD OUT") {
+                mintBtn.disabled = false;
+                const celoPrice = Number(mintPriceWei) / 1e18;
+                mintBtn.innerText = mintPriceWei > 0n ? `MINT (${celoPrice.toFixed(4)} CELO)` : 'MINT';
+            }
         }
-      }
     });
 
     // Preview Handler 
