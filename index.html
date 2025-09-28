@@ -284,9 +284,9 @@
       writeContract,
       readContract,
       http,
-      switchChain, // ADDED
-      watchAccount, // ADDED
-      getAccount // ADDED
+      switchChain, 
+      watchAccount, 
+      getAccount 
     } from 'https://esm.sh/@wagmi/core';
     import { celo } from 'https://esm.sh/@wagmi/core/chains';
     import { farcasterMiniApp } from 'https://esm.sh/@farcaster/miniapp-wagmi-connector';
@@ -358,7 +358,7 @@
 
     let contractDetails;
 
-    // NEW: Function to force a chain switch to Celo Mainnet
+    // Function to force a chain switch to Celo Mainnet
     async function ensureCeloChain() {
         // Use getAccount() to read the current state from the Wagmi config store
         const account = getAccount(config); 
@@ -374,7 +374,7 @@
                 return true;
             } catch (err) {
                 setStatus("Chain switch denied. Please manually switch to Celo Mainnet (42220).", 'error');
-                console.error("Chain switch failed:", err);
+                console.error("Chain switch failed, user may need to approve:", err);
                 mintBtn.title = "Switch to Celo Mainnet to mint.";
                 mintBtn.disabled = true;
                 return false;
@@ -388,8 +388,14 @@
         return true;
     }
 
-    // NEW: Centralized function to handle all wallet/chain state changes
-    async function handleAccountChange(address) {
+    /**
+     * FIX: Centralized function to handle all wallet/chain state changes.
+     * Reads the current state from getAccount(config) for robust address updates.
+     */
+    async function handleAccountChange() {
+        const account = getAccount(config);
+        const address = account.address; // FIX: Read source address directly from Wagmi state
+
         if (!address) {
             userAddrBox.classList.add('hidden');
             mintBtn.disabled = true;
@@ -397,11 +403,10 @@
             return;
         }
 
-        showAddress(address);
+        showAddress(address); // FIX: The address is now updated here correctly
         console.log(`Wallet connected/switched: ${address}`);
 
         // 1. Force chain switch if needed
-        // This is the core fix: ensure the chain is Celo on *any* account change
         const isCelo = await ensureCeloChain();
 
         if (isCelo) {
@@ -663,32 +668,20 @@
             console.warn("Initial Farcaster connect failed (expected outside of Farcaster frame).", e); 
         }
 
-        // Get initial account state after any connect attempts
-        const initialAccount = getAccount(config);
-        await handleAccountChange(initialAccount.address);
-        
+        // Get initial account state and handle changes
+        await handleAccountChange(); // FIX: Call parameterless version
+
         // 4. Setup Listeners for Dynamic Switching
         
-        // A. Wagmi/External Wallet Watcher (Handles address/chain changes within the connected Wagmi connector)
+        // A. Wagmi/External Wallet Watcher
         watchAccount(config, {
-            onChange(account) {
-                console.log("Wagmi account/chain change detected:", account.address, account.chainId);
-                // Call handleAccountChange, which includes the ensureCeloChain logic
-                handleAccountChange(account.address);
-            }
+            onChange: handleAccountChange // FIX: Pass handleAccountChange directly for robust state reading
         });
 
-        // B. Farcaster Mini App SDK Watcher (Crucial for switching FROM external TO Farcaster)
-        sdk.wallet.onAccountsChanged(async (accounts) => {
-            if (accounts.length > 0) {
-                const newAddr = accounts[0].address;
-                console.log("Farcaster SDK account change detected:", newAddr);
-                // We use the new address from Farcaster. The chain is checked in handleAccountChange.
-                handleAccountChange(newAddr);
-            }
-        });
+        // B. Farcaster Mini App SDK Watcher
+        sdk.wallet.onAccountsChanged(handleAccountChange); // FIX: Pass handleAccountChange directly
 
-        // 5. Initial Supply update
+        // 5. Initial Supply update (Handled within handleAccountChange for consistency)
         await updateSupply(true); 
     })();
 
@@ -740,8 +733,6 @@
         });
         
         // 4. *** REVISED RELIABLE STEP ***: Fetch the NEW totalSupply.
-        // Since the contract increments totalSupply before minting, the new totalSupply
-        // will be the ID of the token just minted.
         const newSupply = await updateSupply();
         lastMintedTokenId = Number(newSupply);
         
@@ -750,6 +741,9 @@
 
         // 6. Update Status and Links
         setStatus("Mint Successful. ", 'success'); 
+        
+        // FIX: Update the preview button text *immediately* after determining the ID.
+        previewBtn.innerText = `Preview NFT #${lastMintedTokenId}`;
         
         if (!contractAddress) {
             setStatus("Mint Successful, but contract address is unknown.", 'success');
