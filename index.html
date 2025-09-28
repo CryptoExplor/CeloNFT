@@ -283,11 +283,12 @@
       connect,
       writeContract,
       readContract,
-      http
+      http,
+      watchAccount // <--- ADDED: Import watchAccount
     } from 'https://esm.sh/@wagmi/core';
     import { celo } from 'https://esm.sh/@wagmi/core/chains';
     import { farcasterMiniApp } from 'https://esm.sh/@farcaster/miniapp-wagmi-connector';
-    import { walletConnect } from 'https://esm.sh/@wagmi/connectors'; // Added import for WalletConnect
+    import { walletConnect } from 'https://esm.sh/@wagmi/connectors';
     import { parseEther } from 'https://esm.sh/viem';
     
     // WalletConnect Project ID (unchanged from user request)
@@ -309,6 +310,7 @@
     let lastMintedTokenId = null;
     let contractAddress = null;
     let mintPriceWei = 0n; // Use BigInt for wei values
+    let contractDetails = null; // Initialize contractDetails globally
 
     function setStatus(msg, type = 'info') {
       // Clear all previous content, including DOM elements used for links
@@ -363,8 +365,6 @@
       }
     });
 
-    let contractDetails;
-
     // Helper function to adjust injected SVG attributes for responsive scaling
     function adjustInjectedSvg(container) {
       const svg = container.querySelector('svg');
@@ -410,97 +410,113 @@
       container.style.maxHeight = '60vh';
     }
 
-    // Connect wallet on load and check network
-    (async () => {
-      let address;
-      let chainId;
-      
-      // Connect wallet (using the Farcaster Mini App connector first as intended)
-      try {
-        // Use the config defined above, which includes farcasterMiniApp connector
-        const conn = await connect(config, { connector: farcasterMiniApp({ projectId }) }); 
-        address = conn.accounts[0];
-        chainId = conn.chainId;
-        showAddress(address);
-      } catch (e) { 
-        setStatus("Wallet connect failed. Please check the console.", 'error'); 
-        console.error("Initial connect failed:", e); 
-      }
+    // *** NEW: Centralized function for all address-dependent initialization ***
+    async function initializeAppState(address, chainId) {
+        // 1. Network Guard: Check for Celo Mainnet
+        if (chainId !== celo.id) {
+            setStatus("Please switch to Celo Mainnet.", 'warning');
+            mintBtn.disabled = true;
+            mintBtn.title = "Switch to Celo Mainnet to mint.";
+            userAddrBox.classList.add('hidden');
+            return;
+        } else {
+            mintBtn.title = ""; 
+        }
 
-      // 2. Network Guard: Check for Celo Mainnet
-      if (chainId !== celo.id) {
-          setStatus("Please switch to Celo Mainnet.", 'warning');
-          mintBtn.disabled = true;
-          mintBtn.title = "Switch to Celo Mainnet to mint.";
-          return;
-      } else {
-          mintBtn.title = ""; 
-      }
+        // 2. Load contract JSON (only if not loaded)
+        if (!contractDetails) {
+            try {
+                contractDetails = await fetch('./contract.json').then(r => r.json());
+                contractAddress = contractDetails.address;
+            } catch (e) { 
+                setStatus("Missing contract details. Ensure 'contract.json' is deployed.", 'error'); 
+                console.error(e); 
+                mintBtn.disabled = true; 
+                return;
+            }
+        }
 
-      // 3. Load contract JSON
-      try {
-        contractDetails = await fetch('./contract.json').then(r => r.json());
-        contractAddress = contractDetails.address;
-      } catch (e) { 
-        setStatus("Missing contract details. Ensure 'contract.json' is deployed.", 'error'); 
-        console.error(e); 
-        mintBtn.disabled = true; 
-        return;
-      }
+        if(!contractDetails || !address) {
+            mintBtn.disabled = true;
+            return;
+        }
+        
+        // 3. Fetch MAX_SUPPLY & MINT_PRICE dynamically
+        try {
+            const [max, price] = await Promise.all([
+                readContract(config, {
+                    address: contractDetails.address,
+                    abi: contractDetails.abi,
+                    functionName: MAX_SUPPLY_FUNCTION_NAME
+                }),
+                readContract(config, {
+                    address: contractDetails.address,
+                    abi: contractDetails.abi,
+                    functionName: 'mintPrice'
+                })
+            ]);
+            MAX_SUPPLY = Number(max);
+            mintPriceWei = BigInt(price);
+            
+            // Update button label with price
+            if (mintPriceWei > 0n) {
+               const celoPrice = Number(mintPriceWei) / 1e18;
+               mintBtn.innerText = `MINT (${celoPrice.toFixed(4)} CELO)`;
+            }
 
-      if(!contractDetails || !address) {
-          mintBtn.disabled = true;
-          return;
-      }
-      
-      // 4. Fetch MAX_SUPPLY & MINT_PRICE dynamically
-      try {
-          const [max, price] = await Promise.all([
-              // We keep reading maxSupply for completeness
-              readContract(config, {
-                  address: contractDetails.address,
-                  abi: contractDetails.abi,
-                  functionName: MAX_SUPPLY_FUNCTION_NAME
-              }),
-              readContract(config, {
-                  address: contractDetails.address,
-                  abi: contractDetails.abi,
-                  functionName: 'mintPrice'
-              })
-          ]);
-          // Note: Max supply is likely not used for limiting anymore
-          MAX_SUPPLY = Number(max);
-          mintPriceWei = BigInt(price);
-          
-          // Update button label with price
-          if (mintPriceWei > 0n) {
-             const celoPrice = Number(mintPriceWei) / 1e18;
-             mintBtn.innerText = `MINT (${celoPrice.toFixed(4)} CELO)`;
-          }
+        } catch (e) {
+            setStatus(`Could not read contract settings. Assuming unlimited/free.`, 'warning');
+            MAX_SUPPLY = 0; // 0 means unlimited/unknown for this logic
+            mintPriceWei = 0n;
+            console.warn(`Failed to read contract settings.`, e);
+        }
 
-      } catch (e) {
-          setStatus(`Could not read contract settings. Assuming unlimited/free.`, 'warning');
-          MAX_SUPPLY = 0; // 0 means unlimited/unknown for this logic
-          mintPriceWei = 0n;
-          console.warn(`Failed to read contract settings.`, e);
-      }
+        // 4. Fetch totalSupply
+        await updateSupply(true);
 
-      // 5. Fetch totalSupply
-      await updateSupply(true);
+        // 5. Check Local Storage for the user's last minted ID
+        // Note: The key should ideally be scoped by the address, but for simplicity, we use the existing key.
+        const localId = localStorage.getItem("lastMintedTokenId");
+        if (localId && Number(localId) > 0) {
+            lastMintedTokenId = Number(localId);
+            previewBtn.innerText = `Preview NFT #${lastMintedTokenId}`;
+            previewBtn.classList.remove('hidden');
+        } else {
+             // Hide preview button if no local ID is found for the new wallet
+             previewBtn.classList.add('hidden');
+             previewContainer.classList.add('hidden');
+             lastMintedTokenId = null;
+        }
+    }
 
-      // 6. Initial Load Logic: Use localStorage as the only source for the user's last minted ID
-      // This is necessary because the contract lacks a token-listing function.
-      const localId = localStorage.getItem("lastMintedTokenId");
-      if (localId && Number(localId) > 0) {
-          lastMintedTokenId = Number(localId);
-          previewBtn.innerText = `Preview NFT #${lastMintedTokenId}`;
-          previewBtn.classList.remove('hidden');
-      }
-    })();
+    // *** NEW: Handler for account changes (switching wallets/disconnection) ***
+    function handleAccountChange(account) {
+        if (account.isConnected && account.address) {
+            // New wallet is connected, update UI and re-initialize
+            showAddress(account.address);
+            initializeAppState(account.address, account.chainId);
+        } else {
+            // Wallet disconnected
+            userAddrBox.classList.add('hidden');
+            setStatus("Wallet disconnected. Connect to mint.", 'info');
+            mintBtn.disabled = true;
+            mintBtn.innerText = 'MINT'; // Reset button text
+            mintBtn.title = 'Connect a wallet to mint.';
+
+            // Clear state
+            localStorage.removeItem("lastMintedTokenId");
+            lastMintedTokenId = null;
+            previewBtn.classList.add('hidden');
+            previewContainer.classList.add('hidden');
+            previewContainer.classList.remove("sparkles", ...ALL_RARITY_CLASSES);
+        }
+    }
 
 
     // Function to update the total supply display and check for sold out status
     async function updateSupply(initialLoad = false) {
+        if (!contractDetails) return 0; // Guard against uninitialized contract
+
         if (initialLoad) {
              supplyBox.innerHTML = '<span class="spinner"></span> Loading supply…';
         }
@@ -636,6 +652,25 @@
             previewBtn.disabled = false;
         }
     }
+
+    // *** MODIFIED: Logic for initial connection and setting up the listener ***
+    (async () => {
+      // 1. Set up the listener to handle wallet changes *after* the initial connect
+      watchAccount(config, { onChange: handleAccountChange });
+
+      // 2. Initial connection attempt (using the Farcaster Mini App connector first as intended)
+      try {
+        // The successful connection will trigger the 'handleAccountChange' listener,
+        // which will call initializeAppState() to set up the rest of the UI.
+        await connect(config, { connector: farcasterMiniApp({ projectId }) }); 
+      } catch (e) { 
+        // If the initial connection fails (e.g., user is not in a Farcaster client), 
+        // the 'handleAccountChange' listener will not be triggered and the UI will remain in a disconnected state.
+        console.warn("Initial MiniApp connect failed, waiting for user action to connect manually.", e); 
+      }
+    })();
+    // *** END MODIFIED INITIALIZATION BLOCK ***
+
 
     // Minting Handler
     mintBtn.addEventListener('click', async () => {
