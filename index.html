@@ -283,7 +283,8 @@
       connect,
       writeContract,
       readContract,
-      http
+      http,
+      waitForTransactionReceipt
     } from 'https://esm.sh/@wagmi/core';
     import { celo } from 'https://esm.sh/@wagmi/core/chains';
     import { farcasterMiniApp } from 'https://esm.sh/@farcaster/miniapp-wagmi-connector';
@@ -315,7 +316,7 @@
       if (type === 'success') icon = '✅ ';
       else if (type === 'error') icon = '❌ ';
       else if (type === 'warning') icon = '⚠️ ';
-      else icon = 'ℹ️ ';
+      else if (type === 'info') icon = 'ℹ️ '; // Use 'info' for neutral messages
       
       statusBox.className = `status-box status-${type}`;
       statusBox.insertAdjacentText('afterbegin', icon + msg);
@@ -398,7 +399,6 @@
 
       // We are removing the scroll, so only set max-height
       container.style.maxHeight = '60vh';
-      // container.style.overflow = 'auto'; // REMOVED to prevent scrollbar
     }
 
 
@@ -467,7 +467,7 @@
           // Update button label with price
           if (mintPriceWei > 0n) {
              const celoPrice = Number(mintPriceWei) / 1e18;
-             mintBtn.innerText = `MINT (${celoPrice.toFixed(4)} CELO})`;
+             mintBtn.innerText = `MINT (${celoPrice.toFixed(4)} CELO)`;
           }
 
       } catch (e) {
@@ -548,6 +548,10 @@
     // Function to fetch and display the NFT SVG
     async function previewNft(tokenId) {
         if (!contractDetails) return;
+
+        // Clear status from any previous attempts
+        statusBox.innerHTML = '';
+        statusBox.className = 'status-box';
         
         previewBtn.disabled = true;
         previewBtn.innerHTML = '<span class="spinner"></span> Loading Preview…';
@@ -621,7 +625,7 @@
             // Error handling shows the exact error from the screenshot
             setStatus("Failed to load NFT preview. Check console for details.", 'error'); 
             previewBtn.innerText = 'Preview NFT Error';
-            console.error("NFT Preview Error:", e); // Enhanced console logging
+            console.error(`NFT Preview Error for token ID ${tokenId}:`, e); // Enhanced console logging
             // Clear preview on error
             previewContainer.classList.add('hidden');
         } finally {
@@ -641,6 +645,10 @@
             setStatus("This NFT drop is sold out.", "warning");
             return;
         }
+        
+        // Clear status from any previous attempts
+        statusBox.innerHTML = '';
+        statusBox.className = 'status-box';
 
         // Hide preview button and container before minting
         previewBtn.classList.add('hidden');
@@ -664,18 +672,13 @@
             });
             
             // 2. Calculate what the next token ID will be
-            // This depends on your contract implementation
-            // If tokens start from 1: nextTokenId = currentSupply + 1
-            // If tokens start from 0: nextTokenId = currentSupply
-            const nextTokenId = Number(currentSupply) + 1; // Adjust this based on your contract
+            const nextTokenId = Number(currentSupply) + 1; // Assumes token IDs start from 1
 
             // 3. Fetch CELO price
             const price = await fetchCeloPrice();
-
-            // 4. Prepare price for contract (uint128, x10000 for decimals)
             const priceForContract = Math.floor(price * 10000);
 
-            // 5. Mint with price only
+            // 4. Submit mint transaction
             const hash = await writeContract(config, {
                 address,
                 abi,
@@ -683,39 +686,35 @@
                 args: [priceForContract],
                 value: parseEther('0') // Assuming a free mint
             });
+            
+            // 5. Wait for the transaction to be confirmed
+            setStatus("Confirming transaction...", "info");
+            const receipt = await waitForTransactionReceipt(config, { hash });
 
-            // 6. Wait a bit for the transaction to be mined and then update supply
-            setTimeout(async () => {
-                await updateSupply();
-            }, 2000); // Wait 2 seconds before updating supply
+            if (receipt.status === 'reverted') {
+                throw new Error('Transaction was reverted.');
+            }
 
-            // Store the correct token ID in Local Storage
+            // 6. Store ID and update UI now that it's confirmed
             localStorage.setItem('lastMintedTokenId', nextTokenId.toString());
-
-            // Success status
             setStatus("Mint Successful! ", "success");
             
-            if (!contractAddress) {
-                setStatus("Mint Successful, but contract address is unknown.", "success");
-            } else {
+            if (contractAddress) {
                 const celoscanTokenUrl = `https://celoscan.io/token/${contractAddress}?a=${nextTokenId}`;
                 const celoscanTxUrl = `https://celoscan.io/tx/${hash}`;
 
-                // Create View Tx Link
                 const txLink = document.createElement('a');
                 txLink.href = celoscanTxUrl;
                 txLink.target = '_blank';
                 txLink.textContent = 'View Tx';
                 txLink.style.cssText = 'color:#fff;text-decoration:underline;margin-left:8px;';
 
-                // Create View on Celoscan Link
                 const tokenLink = document.createElement('a');
                 tokenLink.href = celoscanTokenUrl;
                 tokenLink.target = '_blank';
                 tokenLink.textContent = 'View on Celoscan';
                 tokenLink.style.cssText = 'color:#fff;text-decoration:underline;margin-left:8px;';
 
-                // Append elements to statusBox
                 statusBox.appendChild(txLink);
                 statusBox.insertAdjacentText('beforeend', ' | ');
                 statusBox.appendChild(tokenLink);
@@ -723,18 +722,17 @@
 
             lastMintedTokenId = nextTokenId;
 
-            // Show preview button and load the preview
+            // 7. Update supply and auto-load preview
+            await updateSupply();
             previewBtn.classList.remove('hidden');
             previewBtn.innerText = `Preview NFT ${nextTokenId}`;
-            
-            // Auto-load preview of the newly minted token
             await previewNft(lastMintedTokenId);
 
         } catch (e) {
             setStatus(e.shortMessage || "Mint failed.", "error");
             console.error('Mint Error:', e);
-
-            // Reset preview button state on failure
+            
+            // Reset preview state on failure
             previewBtn.classList.add('hidden');
             previewContainer.classList.add('hidden');
             previewContainer.classList.remove('sparkles', ...ALL_RARITY_CLASSES);
