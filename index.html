@@ -398,11 +398,18 @@
 
       // We are removing the scroll, so only set max-height
       container.style.maxHeight = '60vh';
+      // container.style.overflow = 'auto'; // REMOVED to prevent scrollbar
     }
 
-    // *** REMOVED getLatestTokenIdByAddress: NOT SUPPORTED BY CONTRACT ***
-    
+
     (async () => {
+      // 1. Persist Last Mint: Load from localStorage on startup
+      lastMintedTokenId = localStorage.getItem("lastMintedTokenId");
+      if (lastMintedTokenId) {
+          previewBtn.innerText = `Preview NFT #${lastMintedTokenId}`;
+          previewBtn.classList.remove('hidden');
+      }
+      
       let address;
       let chainId;
       
@@ -443,7 +450,6 @@
       // 4. Fetch MAX_SUPPLY & MINT_PRICE dynamically
       try {
           const [max, price] = await Promise.all([
-              // We keep reading maxSupply for completeness, but your contract no longer uses it for limits
               readContract(config, {
                   address: contractDetails.address,
                   abi: contractDetails.abi,
@@ -455,14 +461,13 @@
                   functionName: 'mintPrice'
               })
           ]);
-          // Note: Max supply is likely not used for limiting anymore
           MAX_SUPPLY = Number(max);
           mintPriceWei = BigInt(price);
           
           // Update button label with price
           if (mintPriceWei > 0n) {
              const celoPrice = Number(mintPriceWei) / 1e18;
-             mintBtn.innerText = `MINT (${celoPrice.toFixed(4)} CELO)`;
+             mintBtn.innerText = `MINT (${celoPrice.toFixed(4)} CELO})`;
           }
 
       } catch (e) {
@@ -474,15 +479,6 @@
 
       // 5. Fetch totalSupply
       await updateSupply(true);
-
-      // 6. Initial Load Logic: Use localStorage as the only source for the user's last minted ID
-      // This is necessary because the contract lacks a token-listing function.
-      const localId = localStorage.getItem("lastMintedTokenId");
-      if (localId && Number(localId) > 0) {
-          lastMintedTokenId = Number(localId);
-          previewBtn.innerText = `Preview NFT #${lastMintedTokenId}`;
-          previewBtn.classList.remove('hidden');
-      }
     })();
 
 
@@ -530,8 +526,7 @@
                  mintBtn.innerText = mintPriceWei > 0n ? `MINT (${celoPrice.toFixed(4)} CELO)` : 'MINT';
             }
 
-            // Return the total number read from the contract
-            return totalNumber; 
+            return total;
         } catch (e) {
             supplyBox.textContent = 'Total Minted: N/A';
             console.error(e);
@@ -656,30 +651,27 @@
         const price = await fetchCeloPrice();
         
         // 2. Prepare price for contract (uint128, x10000 for decimals)
-        // Convert to BigInt for safe RPC parameter passing
-        const priceForContract = BigInt(Math.floor(price * 10000));
+        // e.g., $0.6543 -> 6543
+        const priceForContract = Math.floor(price * 10000);
 
-        // 3. Mint with price and the required payment
+        // 3. Mint with price only
         const hash = await writeContract(config, {
           address,
           abi,
           functionName: 'mint',
-          // Pass the price as a BigInt
+          // ONLY passing the price (uint128)
           args: [priceForContract], 
-          // Pass the contract's required payment (0n if free, or actual price)
-          value: mintPriceWei 
+          value: parseEther('0') // Assuming a free mint
         });
         
-        // 4. *** REVISED RELIABLE STEP ***: Fetch the NEW totalSupply.
-        // Since the contract increments totalSupply before minting, the new totalSupply
-        // will be the ID of the token just minted.
+        // Fetch the new total supply and optimistically assume the new count is the ID just minted.
         const newSupply = await updateSupply();
         const nextTokenId = Number(newSupply);
         
-        // 5. Store in Local Storage
-        localStorage.setItem("lastMintedTokenId", lastMintedTokenId);
+        // Store in Local Storage
+        localStorage.setItem("lastMintedTokenId", nextTokenId);
 
-        // 6. Update Status and Links
+        // Sanitize Links in Status (DOM manipulation)
         setStatus("Mint Successful. ", 'success'); 
         
         if (!contractAddress) {
@@ -708,7 +700,12 @@
             statusBox.appendChild(tokenLink);
         }
         
-        // 7. Preview Auto-Load
+        lastMintedTokenId = nextTokenId;
+        
+        // Update supply display (and potentially disable mint button if cap reached)
+        await updateSupply();
+
+        // Preview Auto-Load
         previewBtn.classList.remove('hidden');
         await previewNft(lastMintedTokenId);
 
@@ -721,7 +718,8 @@
         previewBtn.classList.add('hidden');
         previewContainer.classList.add('hidden');
         previewContainer.classList.remove("sparkles", ...ALL_RARITY_CLASSES);
-        lastMintedTokenId = null; 
+        localStorage.removeItem("lastMintedTokenId");
+        lastMintedTokenId = null;
         
         // Restore mint button if it wasn't sold out before failure
         if (mintBtn.innerText !== 'SOLD OUT') {
