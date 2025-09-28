@@ -733,10 +733,10 @@
             
             // NEW: Add specific advice for connection/RPC errors
             if (e.message && (e.message.includes("Invalid parameters were provided to the RPC method") || e.message.includes("RPC"))) {
-                errorMsg = "❌ Mint failed due to a connection error. Please reload/refresh the miniapp and try again.";
+                errorMsg = "Mint failed due to a connection error. Please reload/refresh the miniapp and try again.";
             } else if (!e.shortMessage) {
                 // Generic error catch: recommend refresh as it fixes many mini-app issues
-                errorMsg = "❌ Mint failed. This may be caused by a stale connection. Please reload/refresh the miniapp and try again.";
+                errorMsg = "Mint failed. This may be caused by a stale connection. Please reload/refresh the miniapp and try again.";
             }
             
             setStatus(errorMsg, "error");
