@@ -431,11 +431,10 @@
       if (chainId !== celo.id) {
           setStatus("Please switch to Celo Mainnet.", 'warning');
           mintBtn.disabled = true;
-          mintBtn.title = `Switch to Celo Mainnet (ID: ${celo.id}) to mint. Current ID: ${chainId}`;
+          mintBtn.title = "Switch to Celo Mainnet to mint.";
           return;
       } else {
           mintBtn.title = ""; 
-          setStatus(`Connected to Celo Mainnet (ID: ${celo.id})`, 'info');
       }
 
       // 3. Load contract JSON
