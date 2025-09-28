@@ -286,7 +286,9 @@
       http,
       switchChain, 
       watchAccount, 
-      getAccount 
+      getAccount,
+      // FIX: Added import for transaction confirmation
+      waitForTransactionReceipt 
     } from 'https://esm.sh/@wagmi/core';
     import { celo } from 'https://esm.sh/@wagmi/core/chains';
     import { farcasterMiniApp } from 'https://esm.sh/@farcaster/miniapp-wagmi-connector';
@@ -732,8 +734,14 @@
           value: mintPriceWei 
         });
         
+        // *** FIX: Wait for transaction to be confirmed ***
+        setStatus("Transaction sent. Waiting for confirmation...", 'info');
+        // This line blocks until the transaction is mined and confirmed
+        await waitForTransactionReceipt(config, { hash });
+        setStatus("Transaction confirmed!", 'info');
+        
         // 4. *** REVISED RELIABLE STEP ***: Fetch the NEW totalSupply.
-        const newSupply = await updateSupply();
+        const newSupply = await updateSupply(); // Now reads the post-confirmation state
         lastMintedTokenId = Number(newSupply);
         
         // 5. Store in Local Storage
@@ -777,7 +785,7 @@
 
       } catch (e) {
         // Use e.shortMessage for clearer error display from Wagmi/Viem
-        setStatus(e.shortMessage || "Mint failed.", 'error'); 
+        setStatus(e.shortMessage || "Mint failed. See console for details.", 'error'); 
         console.error("Mint Error:", e);
         
         // Reset preview button state on failure
