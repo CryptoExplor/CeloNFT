@@ -12,7 +12,7 @@
     "imageUrl": "https://celo-nft-phi.vercel.app/image.png",
     "buttonTitle": "Celo NFT",
     "splashImageUrl": "https://celo-nft-phi.vercel.app/splash.png",
-    "splashBackgroundColor": "#111111",
+    "splashBackgroundColor": "#FFFF66",
     "webhookUrl": "https://celo-nft-phi.vercel.app/api/webhook",
     "subtitle": "Mintable Collection on Celo",
     "description": "CeloNFT: A community-driven ERC-721 on Celo. Mint unique on-chain NFTs with custom metadata, fully permissionless and transparent.",
