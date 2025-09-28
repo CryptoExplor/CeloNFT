@@ -284,10 +284,7 @@
       writeContract,
       readContract,
       http,
-      waitForTransactionReceipt,
-      getAccount,
-      getChainId,
-      switchChain
+      waitForTransactionReceipt
     } from 'https://esm.sh/@wagmi/core';
     import { celo } from 'https://esm.sh/@wagmi/core/chains';
     import { farcasterMiniApp } from 'https://esm.sh/@farcaster/miniapp-wagmi-connector';
@@ -359,176 +356,131 @@
 
     let contractDetails;
 
-    // Helper function to get current wallet state
-    async function getCurrentWalletState() {
-        try {
-            const account = getAccount(config);
-            const chainId = getChainId(config);
-            
-            if (!account.address || !account.isConnected) {
-                throw new Error('Wallet not connected');
-            }
-            
-            return {
-                address: account.address,
-                chainId: chainId,
-                isConnected: account.isConnected
-            };
-        } catch (e) {
-            console.error('Failed to get wallet state:', e);
-            return null;
-        }
-    }
-
-    // Function to ensure proper wallet connection and network
-    async function ensureWalletReady() {
-        try {
-            let walletState = await getCurrentWalletState();
-            
-            // If not connected, try to connect
-            if (!walletState || !walletState.isConnected) {
-                console.log('Wallet not connected, attempting to connect...');
-                const conn = await connect(config, { connector: farcasterMiniApp() });
-                walletState = {
-                    address: conn.accounts[0],
-                    chainId: conn.chainId,
-                    isConnected: true
-                };
-                showAddress(walletState.address);
-            }
-            
-            // Check if on correct network
-            if (walletState.chainId !== celo.id) {
-                setStatus('Switching to Celo Mainnet...', 'info');
-                try {
-                    await switchChain(config, { chainId: celo.id });
-                    // Get updated state after chain switch
-                    walletState = await getCurrentWalletState();
-                } catch (switchError) {
-                    throw new Error('Please switch to Celo Mainnet to mint.');
-                }
-            }
-            
-            return walletState;
-        } catch (e) {
-            console.error('Wallet setup error:', e);
-            throw e;
-        }
-    }
-
     // Helper function to adjust injected SVG attributes for responsive scaling
     function adjustInjectedSvg(container) {
-        const svg = container.querySelector('svg');
-        if (svg) {
-            // If no viewBox but width/height exist, create a viewBox from them
-            if (!svg.hasAttribute('viewBox')) {
-                const w = svg.getAttribute('width');
-                const h = svg.getAttribute('height');
-                if (w && h) {
-                    // parseFloat to handle "400px" etc.
-                    const W = parseFloat(w);
-                    const H = parseFloat(h);
-                    if (!isNaN(W) && !isNaN(H) && W > 0 && H > 0) {
-                        svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
-                    }
-                }
+      const svg = container.querySelector('svg');
+      if (svg) {
+        // If no viewBox but width/height exist, create a viewBox from them
+        if (!svg.hasAttribute('viewBox')) {
+          const w = svg.getAttribute('width');
+          const h = svg.getAttribute('height');
+          if (w && h) {
+            // parseFloat to handle "400px" etc.
+            const W = parseFloat(w);
+            const H = parseFloat(h);
+            if (!isNaN(W) && !isNaN(H) && W > 0 && H > 0) {
+              svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
             }
-            
-            // Preserve aspect ratio so nothing gets cropped
-            svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
-            
-            // Let CSS control the sizing, remove inline width/height
-            svg.removeAttribute('width');
-            svg.removeAttribute('height');
-            
-            // Ensure CSS max-height will work
-            svg.style.width = '100%';
-            svg.style.height = 'auto';
-            svg.style.maxHeight = '60vh';
-            svg.style.display = 'block';
-        } else {
-            // If metadata.image was a raster PNG/JPEG injected as <img>, style it
-            const img = container.querySelector('img');
-            if (img) {
-                img.style.width = '100%';
-                img.style.height = 'auto';
-                img.style.maxHeight = '60vh';
-                img.style.display = 'block';
-            }
+          }
         }
-        
-        // We are removing the scroll, so only set max-height
-        container.style.maxHeight = '60vh';
+
+        // Preserve aspect ratio so nothing gets cropped
+        svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+
+        // Let CSS control the sizing (remove inline width/height)
+        svg.removeAttribute('width');
+        svg.removeAttribute('height');
+
+        // Ensure CSS max-height will work
+        svg.style.width = '100%';
+        svg.style.height = 'auto';
+        svg.style.maxHeight = '60vh';
+        svg.style.display = 'block';
+      } else {
+        // If metadata.image was a raster (PNG/JPEG) injected as <img>, style it
+        const img = container.querySelector('img');
+        if (img) {
+          img.style.width = '100%';
+          img.style.height = 'auto';
+          img.style.maxHeight = '60vh';
+          img.style.display = 'block';
+        }
+      }
+
+      // We are removing the scroll, so only set max-height
+      container.style.maxHeight = '60vh';
     }
 
-    // Main initialization
+
     (async () => {
-        // 1. Persist Last Mint: Load from localStorage on startup
-        lastMintedTokenId = localStorage.getItem('lastMintedTokenId');
-        if (lastMintedTokenId) {
-            previewBtn.innerText = `Preview NFT #${lastMintedTokenId}`;
-            previewBtn.classList.remove('hidden');
-        }
+      // 1. Persist Last Mint: Load from localStorage on startup
+      lastMintedTokenId = localStorage.getItem("lastMintedTokenId");
+      if (lastMintedTokenId) {
+          previewBtn.innerText = `Preview NFT #${lastMintedTokenId}`;
+          previewBtn.classList.remove('hidden');
+      }
+      
+      let address;
+      let chainId;
+      
+      // Connect wallet
+      try {
+        const conn = await connect(config, { connector: farcasterMiniApp() });
+        address = conn.accounts[0];
+        chainId = conn.chainId;
+        showAddress(address);
+      } catch (e) { setStatus("Wallet connect failed.", 'error'); console.error(e); }
 
-        try {
-            // 2. Connect wallet and ensure proper state
-            const walletState = await ensureWalletReady();
-            
-            // 3. Load contract JSON
-            try {
-                contractDetails = await fetch('./contract.json').then(r => r.json());
-                contractAddress = contractDetails.address;
-            } catch (e) {
-                setStatus('Missing contract details. Ensure contract.json is deployed.', 'error');
-                console.error(e);
-                mintBtn.disabled = true;
-                return;
-            }
+      // 2. Network Guard
+      if (chainId !== celo.id) {
+          setStatus("Please switch to Celo Mainnet.", 'warning');
+          mintBtn.disabled = true;
+          mintBtn.title = "Switch to Celo Mainnet to mint.";
+          return;
+      } else {
+          mintBtn.title = ""; 
+      }
 
-            if (!contractDetails || !walletState.address) {
-                mintBtn.disabled = true;
-                return;
-            }
+      // 3. Load contract JSON
+      try {
+        contractDetails = await fetch('./contract.json').then(r => r.json());
+        contractAddress = contractDetails.address;
+      } catch (e) { 
+        setStatus("Missing contract details. Ensure 'contract.json' is deployed.", 'error'); 
+        console.error(e); 
+        mintBtn.disabled = true; 
+        return;
+      }
 
-            // 4. Fetch MAXSUPPLY & MINTPRICE dynamically
-            try {
-                const [max, price] = await Promise.all([
-                    readContract(config, {
-                        address: contractDetails.address,
-                        abi: contractDetails.abi,
-                        functionName: MAX_SUPPLY_FUNCTION_NAME
-                    }),
-                    readContract(config, {
-                        address: contractDetails.address,
-                        abi: contractDetails.abi,
-                        functionName: 'mintPrice'
-                    })
-                ]);
+      if(!contractDetails || !address) {
+          mintBtn.disabled = true;
+          return;
+      }
+      
+      // 4. Fetch MAX_SUPPLY & MINT_PRICE dynamically
+      try {
+          const [max, price] = await Promise.all([
+              readContract(config, {
+                  address: contractDetails.address,
+                  abi: contractDetails.abi,
+                  functionName: MAX_SUPPLY_FUNCTION_NAME
+              }),
+              readContract(config, {
+                  address: contractDetails.address,
+                  abi: contractDetails.abi,
+                  functionName: 'mintPrice'
+              })
+          ]);
+          MAX_SUPPLY = Number(max);
+          mintPriceWei = BigInt(price);
+          
+          // Update button label with price
+          if (mintPriceWei > 0n) {
+             const celoPrice = Number(mintPriceWei) / 1e18;
+             mintBtn.innerText = `MINT (${celoPrice.toFixed(4)} CELO)`;
+          }
 
-                MAX_SUPPLY = Number(max);
-                mintPriceWei = BigInt(price);
+      } catch (e) {
+          setStatus(`Could not read contract settings. Assuming unlimited/free.`, 'warning');
+          MAX_SUPPLY = 0; // 0 means unlimited/unknown for this logic
+          mintPriceWei = 0n;
+          console.warn(`Failed to read contract settings.`, e);
+      }
 
-                // Update button label with price
-                if (mintPriceWei > 0n) {
-                    const celoPrice = Number(mintPriceWei) / 1e18;
-                    mintBtn.innerText = `MINT (${celoPrice.toFixed(4)} CELO)`;
-                }
-            } catch (e) {
-                setStatus('Could not read contract settings. Assuming unlimited/free.', 'warning');
-                MAX_SUPPLY = 0; // 0 means unlimited/unknown for this logic
-                mintPriceWei = 0n;
-                console.warn('Failed to read contract settings.', e);
-            }
-
-            // 5. Fetch totalSupply
-            await updateSupply(true);
-
-        } catch (e) {
-            setStatus('Initialization failed. Please refresh and try again.', 'error');
-            console.error('Initialization error:', e);
-            mintBtn.disabled = true;
-        }
+      // 5. Fetch totalSupply
+      await updateSupply(true);
     })();
+
 
     // Function to update the total supply display and check for sold out status
     async function updateSupply(initialLoad = false) {
@@ -592,6 +544,7 @@
         }
     }
 
+
     // Function to fetch and display the NFT SVG
     async function previewNft(tokenId) {
         if (!contractDetails) return;
@@ -599,14 +552,14 @@
         // Clear status from any previous attempts
         statusBox.innerHTML = '';
         statusBox.className = 'status-box';
-
+        
         previewBtn.disabled = true;
-        previewBtn.innerHTML = '<span class="spinner"></span> Loading Preview';
+        previewBtn.innerHTML = '<span class="spinner"></span> Loading Preview…';
         previewContainer.classList.add('hidden');
         previewContainer.innerHTML = ''; // Clear previous SVG
-
+        
         // Remove old sparkle and rarity classes before starting
-        previewContainer.classList.remove('sparkles', ...ALL_RARITY_CLASSES);
+        previewContainer.classList.remove("sparkles", ...ALL_RARITY_CLASSES); 
 
         try {
             // 1. Read the tokenURI from the contract
@@ -614,30 +567,26 @@
                 address: contractAddress,
                 abi: contractDetails.abi,
                 functionName: 'tokenURI',
-                args: [BigInt(tokenId)]
+                args: [BigInt(tokenId)] 
             });
 
             // 2. Decode the base64 JSON part
             const base64Json = tokenURI.split(',')[1];
-            if (!base64Json) {
-                throw new Error('Invalid tokenURI format.');
-            }
+            if (!base64Json) throw new Error("Invalid tokenURI format.");
 
-            // FIX: Use decodeURIComponent before atob for robust Base64 decoding,
+            // FIX: Use decodeURIComponent before atob for robust Base64 decoding, 
             const jsonString = atob(decodeURIComponent(base64Json));
             const metadata = JSON.parse(jsonString);
-
+            
             // 3. Decode the base64 SVG part
             const base64Svg = metadata.image.split(',')[1];
-            if (!base64Svg) {
-                throw new Error('Invalid image data format.');
-            }
+            if (!base64Svg) throw new Error("Invalid image data format.");
 
-            // FIX: Apply the same robust decoding logic to the image SVG content.
+            // FIX: Apply the same robust decoding logic to the image (SVG) content.
             let svgString = atob(decodeURIComponent(base64Svg));
-
+            
             // Security: Sanitize injected SVG
-            const safeSvg = svgString.replace(/<script.*?>.*?<\/script>/gs, '');
+            const safeSvg = svgString.replace(/<script.*?>.*?<\/script>/g, '');
 
             // 4. Inject the safe SVG into the container
             previewContainer.innerHTML = safeSvg;
@@ -645,37 +594,38 @@
 
             // NEW: adjust the injected SVG so it scales correctly
             adjustInjectedSvg(previewContainer);
-
+            
             // 5. Apply Sparkle based on Rarity
-            let rarityText = 'Common'; // Default
-            let priceText = 'N/A';
+            let rarityText = "Common"; // Default
+            let priceText = "N/A";
 
             if (metadata.attributes) {
                 const rarityAttr = metadata.attributes.find(attr => attr.trait_type === 'Rarity');
                 const priceAttr = metadata.attributes.find(attr => attr.trait_type === 'CELO Price Snapshot');
-
-                if (rarityAttr) rarityText = rarityAttr.value;
+                
+                if (rarityAttr) {
+                    rarityText = rarityAttr.value;
+                }
                 if (priceAttr) priceText = priceAttr.value;
             }
-
+            
             // --- Apply NEW Sparkle Logic ---
             // 1. Ensure base sparkle class is always present
-            previewContainer.classList.add('sparkles');
-
+            previewContainer.classList.add("sparkles"); 
+            
             // 2. Add the specific new rarity class (lowercase)
             const rarityClassLower = rarityText.toLowerCase();
-            previewContainer.classList.add(rarityClassLower);
+            previewContainer.classList.add(rarityClassLower); 
             // --- End NEW Sparkle Logic ---
 
-            const buttonLabel = `Preview NFT #${tokenId} (${rarityText}) $${priceText}`;
+            const buttonLabel = `Preview NFT #${tokenId} (${rarityText} / $${priceText})`;
             previewBtn.innerText = buttonLabel;
 
         } catch (e) {
             // Error handling shows the exact error from the screenshot
-            setStatus('Failed to load NFT preview. Check console for details.', 'error');
-            previewBtn.innerText = 'Preview NFT (Error)';
+            setStatus("Failed to load NFT preview. Check console for details.", 'error'); 
+            previewBtn.innerText = 'Preview NFT Error';
             console.error(`NFT Preview Error for token ID ${tokenId}:`, e); // Enhanced console logging
-
             // Clear preview on error
             previewContainer.classList.add('hidden');
         } finally {
@@ -683,7 +633,7 @@
         }
     }
 
-    // FIXED Minting Handler
+    // Minting Handler
     mintBtn.addEventListener('click', async () => {
         if (!contractDetails) {
             setStatus("Contract details are missing. Cannot mint.", "error");
@@ -695,7 +645,7 @@
             setStatus("This NFT drop is sold out.", "warning");
             return;
         }
-
+        
         // Clear status from any previous attempts
         statusBox.innerHTML = '';
         statusBox.className = 'status-box';
@@ -712,47 +662,40 @@
         lastMintedTokenId = null;
 
         try {
-            // 1. CRITICAL: Ensure wallet is properly connected and on correct network
-            const walletState = await ensureWalletReady();
-            if (!walletState || !walletState.isConnected) {
-                throw new Error('Wallet connection failed. Please try again.');
-            }
-
             const { address, abi } = contractDetails;
 
-            // 2. Get current total supply BEFORE minting
+            // 1. Get current total supply BEFORE minting
             const currentSupply = await readContract(config, {
                 address,
                 abi,
                 functionName: 'totalSupply'
             });
             
-            // 3. Calculate what the next token ID will be
+            // 2. Calculate what the next token ID will be
             const nextTokenId = Number(currentSupply) + 1; // Assumes token IDs start from 1
 
-            // 4. Fetch CELO price
+            // 3. Fetch CELO price
             const price = await fetchCeloPrice();
             const priceForContract = Math.floor(price * 10000);
 
-            // 5. FIXED: Submit mint transaction with proper parameter validation
+            // 4. Submit mint transaction
             const hash = await writeContract(config, {
                 address,
                 abi,
                 functionName: 'mint',
-                args: [priceForContract], // Ensure this matches your contract's mint function signature
-                value: parseEther('0'), // Assuming a free mint, adjust if needed
-                account: walletState.address // Explicitly pass the account
+                args: [priceForContract],
+                value: parseEther('0') // Assuming a free mint
             });
-
-            // 6. Wait for the transaction to be confirmed
-            setStatus('Confirming transaction...', 'info');
-            const receipt = await waitForTransactionReceipt(config, { hash });
             
+            // 5. Wait for the transaction to be confirmed
+            setStatus("Confirming transaction...", "info");
+            const receipt = await waitForTransactionReceipt(config, { hash });
+
             if (receipt.status === 'reverted') {
                 throw new Error('Transaction was reverted.');
             }
 
-            // 7. Store ID and update UI now that it's confirmed
+            // 6. Store ID and update UI now that it's confirmed
             localStorage.setItem('lastMintedTokenId', nextTokenId.toString());
             setStatus("Mint Successful! ", "success");
             
@@ -779,16 +722,26 @@
 
             lastMintedTokenId = nextTokenId;
 
-            // 8. Update supply and auto-load preview
+            // 7. Update supply and auto-load preview
             await updateSupply();
             previewBtn.classList.remove('hidden');
             previewBtn.innerText = `Preview NFT ${nextTokenId}`;
             await previewNft(lastMintedTokenId);
 
         } catch (e) {
-            setStatus(e.shortMessage || e.message || "Mint failed.", "error");
+            let errorMsg = e.shortMessage || "Mint failed.";
+            
+            // NEW: Add specific advice for connection/RPC errors
+            if (e.message && (e.message.includes("Invalid parameters were provided to the RPC method") || e.message.includes("RPC"))) {
+                errorMsg = "❌ Mint failed due to a connection error. Please reload/refresh the miniapp and try again.";
+            } else if (!e.shortMessage) {
+                // Generic error catch: recommend refresh as it fixes many mini-app issues
+                errorMsg = "❌ Mint failed. This may be caused by a stale connection. Please reload/refresh the miniapp and try again.";
+            }
+            
+            setStatus(errorMsg, "error");
             console.error('Mint Error:', e);
-
+            
             // Reset preview state on failure
             previewBtn.classList.add('hidden');
             previewContainer.classList.add('hidden');
@@ -805,12 +758,12 @@
         }
     });
 
-    // Preview Handler
+    // Preview Handler 
     previewBtn.addEventListener('click', async () => {
         if (lastMintedTokenId !== null) {
             await previewNft(lastMintedTokenId);
         } else {
-            setStatus("No token ID to preview. Please mint first.", "warning");
+            setStatus("No token ID to preview. Please mint first.", 'warning');
         }
     });
 
