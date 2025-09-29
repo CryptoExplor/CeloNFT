@@ -1,6 +1,7 @@
 # CeloNFT
 
-**Live Mint:** https://farcaster.xyz/miniapps/Tip8ngTAKnHC/celo-nft
+ **Live Mint:** 
+[![Farcaster](https://img.shields.io/badge/Farcaster-@CeloNFT?style=for-the-badge&logo=farcaster)](https://farcaster.xyz/miniapps/Tip8ngTAKnHC/celo-nft)
 
 ## Overview
 
