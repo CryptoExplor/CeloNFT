@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF--8" />
   <!-- Correct Viewport for full responsiveness -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Celo NFT Mint</title>
@@ -284,7 +284,8 @@
       writeContract,
       readContract,
       http,
-      waitForTransactionReceipt
+      waitForTransactionReceipt,
+      watchAccount // <-- IMPORTED watchAccount
     } from 'https://esm.sh/@wagmi/core';
     import { celo } from 'https://esm.sh/@wagmi/core/chains';
     import { farcasterMiniApp } from 'https://esm.sh/@farcaster/miniapp-wagmi-connector';
@@ -306,6 +307,7 @@
     let lastMintedTokenId = null;
     let contractAddress = null;
     let mintPriceWei = 0n; // Use BigInt for wei values
+    let userAddress = null; // <-- DECLARED userAddress to track state
 
     function setStatus(msg, type = 'info') {
       // Clear all previous content, including DOM elements used for links
@@ -349,7 +351,7 @@
     }
 
     // Setup wagmi config for Celo
-    const config = createConfig({
+    const wagmiConfig = createConfig({ // <-- RENAMED to wagmiConfig
       chains: [celo],
       transports: { [celo.id]: http() }
     });
@@ -410,15 +412,14 @@
           previewBtn.classList.remove('hidden');
       }
       
-      let address;
       let chainId;
       
       // Connect wallet
       try {
-        const conn = await connect(config, { connector: farcasterMiniApp() });
-        address = conn.accounts[0];
+        const conn = await connect(wagmiConfig, { connector: farcasterMiniApp() });
+        userAddress = conn.accounts[0]; // <-- SET userAddress
         chainId = conn.chainId;
-        showAddress(address);
+        showAddress(userAddress);
       } catch (e) { setStatus("Wallet connect failed.", 'error'); console.error(e); }
 
       // 2. Network Guard
@@ -442,7 +443,7 @@
         return;
       }
 
-      if(!contractDetails || !address) {
+      if(!contractDetails || !userAddress) {
           mintBtn.disabled = true;
           return;
       }
@@ -450,12 +451,12 @@
       // 4. Fetch MAX_SUPPLY & MINT_PRICE dynamically
       try {
           const [max, price] = await Promise.all([
-              readContract(config, {
+              readContract(wagmiConfig, {
                   address: contractDetails.address,
                   abi: contractDetails.abi,
                   functionName: MAX_SUPPLY_FUNCTION_NAME
               }),
-              readContract(config, {
+              readContract(wagmiConfig, {
                   address: contractDetails.address,
                   abi: contractDetails.abi,
                   functionName: 'mintPrice'
@@ -494,7 +495,7 @@
                 await new Promise(resolve => setTimeout(resolve, 1000));
             }
 
-            const total = await readContract(config, {
+            const total = await readContract(wagmiConfig, {
                 address: contractDetails.address,
                 abi: contractDetails.abi,
                 functionName: 'totalSupply'
@@ -563,7 +564,7 @@
 
         try {
             // 1. Read the tokenURI from the contract
-            const tokenURI = await readContract(config, {
+            const tokenURI = await readContract(wagmiConfig, {
                 address: contractAddress,
                 abi: contractDetails.abi,
                 functionName: 'tokenURI',
@@ -633,6 +634,46 @@
         }
     }
 
+    // --- START: ADDED CODE ---
+    // --- Event Listener for Wallet Changes ---
+    watchAccount(wagmiConfig, {
+        onChange(account) {
+            // Handle user switching accounts or disconnecting
+            if (account.address && account.isConnected) {
+                // User switched to a new account, treat as a new connection
+                console.log('Account changed to:', account.address);
+                userAddress = account.address;
+                showAddress(userAddress);
+                setStatus('Account changed.', 'info');
+                mintBtn.disabled = false;
+                
+                // Re-fetch all data for the new user context
+                updateSupply(true);
+                // Reset mint-specific UI
+                previewBtn.classList.add('hidden');
+                previewContainer.classList.add('hidden');
+                localStorage.removeItem('lastMintedTokenId');
+                lastMintedTokenId = null;
+
+            } else if (!account.isConnected && userAddress) {
+                // User disconnected the wallet
+                console.log('Wallet disconnected');
+                userAddress = null;
+                userAddrBox.classList.add('hidden');
+                setStatus('Wallet disconnected. Please refresh the app.', 'warning');
+                mintBtn.disabled = true;
+                
+                // Hide and reset everything
+                previewBtn.classList.add('hidden');
+                previewContainer.classList.add('hidden');
+                supplyBox.textContent = 'Connect wallet to see supply';
+                localStorage.removeItem('lastMintedTokenId');
+                lastMintedTokenId = null;
+            }
+        },
+    });
+    // --- END: ADDED CODE ---
+
     // Minting Handler
     mintBtn.addEventListener('click', async () => {
         if (!contractDetails) {
@@ -665,7 +706,7 @@
             const { address, abi } = contractDetails;
 
             // 1. Get current total supply BEFORE minting
-            const currentSupply = await readContract(config, {
+            const currentSupply = await readContract(wagmiConfig, {
                 address,
                 abi,
                 functionName: 'totalSupply'
@@ -679,17 +720,17 @@
             const priceForContract = Math.floor(price * 10000);
 
             // 4. Submit mint transaction
-            const hash = await writeContract(config, {
+            const hash = await writeContract(wagmiConfig, {
                 address,
                 abi,
                 functionName: 'mint',
                 args: [priceForContract],
-                value: parseEther('0') // Assuming a free mint
+                value: mintPriceWei 
             });
             
             // 5. Wait for the transaction to be confirmed
             setStatus("Confirming transaction...", "info");
-            const receipt = await waitForTransactionReceipt(config, { hash });
+            const receipt = await waitForTransactionReceipt(wagmiConfig, { hash });
 
             if (receipt.status === 'reverted') {
                 throw new Error('Transaction was reverted.');
@@ -725,7 +766,7 @@
             // 7. Update supply and auto-load preview
             await updateSupply();
             previewBtn.classList.remove('hidden');
-            previewBtn.innerText = `Preview NFT ${nextTokenId}`;
+            previewBtn.innerText = `Preview NFT #${nextTokenId}`;
             await previewNft(lastMintedTokenId);
 
         } catch (e) {
@@ -733,10 +774,10 @@
             
             // NEW: Add specific advice for connection/RPC errors
             if (e.message && (e.message.includes("Invalid parameters were provided to the RPC method") || e.message.includes("RPC"))) {
-                errorMsg = "Mint failed due to a connection error. Please reload/refresh the miniapp and try again.";
+                errorMsg = "❌ Mint failed due to a connection error. Please reload/refresh the miniapp and try again.";
             } else if (!e.shortMessage) {
                 // Generic error catch: recommend refresh as it fixes many mini-app issues
-                errorMsg = "Mint failed. This may be caused by a stale connection. Please reload/refresh the miniapp and try again.";
+                errorMsg = "❌ Mint failed. This may be caused by a stale connection. Please reload/refresh the miniapp and try again.";
             }
             
             setStatus(errorMsg, "error");
