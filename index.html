@@ -307,10 +307,6 @@
     let lastMintedTokenId = null;
     let contractAddress = null;
     let mintPriceWei = 0n; // Use BigInt for wei values
-    let userAddress = null; // <-- DECLARED userAddress to track state
-    
-    // Store the token ID to be loaded on init
-    let tokenIdToLoad = null;
 
     function setStatus(msg, type = 'info') {
       // Clear all previous content, including DOM elements used for links
@@ -413,12 +409,9 @@
       if (lastMintedTokenId) {
           previewBtn.innerText = `Preview NFT #${lastMintedTokenId}`;
           previewBtn.classList.remove('hidden');
-          // IMPORTANT: Store the ID but DON'T call previewNft yet, 
-          // because contractDetails is not available here.
-          tokenIdToLoad = lastMintedTokenId;
       }
       
-      let address;
+      let userAddress;
       let chainId;
       
       // Connect wallet
@@ -487,12 +480,6 @@
       
       // 5. Fetch totalSupply
       await updateSupply(true);
-
-      // 6. FINAL FIX: Load the preview only after contract details and network checks are complete
-      if (tokenIdToLoad) {
-          await previewNft(tokenIdToLoad);
-          tokenIdToLoad = null; // Clear the temporary variable
-      }
     })();
 
 
