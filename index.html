@@ -307,6 +307,10 @@
     let lastMintedTokenId = null;
     let contractAddress = null;
     let mintPriceWei = 0n; // Use BigInt for wei values
+    let userAddress = null; // <-- DECLARED userAddress to track state
+    
+    // Store the token ID to be loaded on init
+    let tokenIdToLoad = null;
 
     function setStatus(msg, type = 'info') {
       // Clear all previous content, including DOM elements used for links
@@ -409,9 +413,11 @@
       if (lastMintedTokenId) {
           previewBtn.innerText = `Preview NFT #${lastMintedTokenId}`;
           previewBtn.classList.remove('hidden');
+          // IMPORTANT: Store the ID but DON'T call previewNft yet, 
+          // because contractDetails is not available here.
+          tokenIdToLoad = lastMintedTokenId;
       }
       
-      let userAddress;
       let chainId;
       
       // Connect wallet
@@ -480,6 +486,12 @@
       
       // 5. Fetch totalSupply
       await updateSupply(true);
+
+      // 6. FINAL FIX: Load the preview only after contract details and network checks are complete
+      if (tokenIdToLoad) {
+          await previewNft(tokenIdToLoad);
+          tokenIdToLoad = null; // Clear the temporary variable
+      }
     })();
 
 
@@ -548,12 +560,8 @@
 
     // Function to fetch and display the NFT SVG
     async function previewNft(tokenId) {
-        // CRITICAL CHECK: Ensure contract details are available before proceeding
-        if (!contractDetails) {
-            console.warn("Cannot preview NFT: contractDetails is not loaded yet.");
-            return;
-        }
-        
+        if (!contractDetails) return;
+
         // Clear status from any previous attempts
         statusBox.innerHTML = '';
         statusBox.className = 'status-box';
