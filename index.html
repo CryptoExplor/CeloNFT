@@ -308,9 +308,6 @@
     let contractAddress = null;
     let mintPriceWei = 0n; // Use BigInt for wei values
     let userAddress = null; // <-- DECLARED userAddress to track state
-    
-    // Store the token ID to be loaded on init
-    let tokenIdToLoad = null;
 
     function setStatus(msg, type = 'info') {
       // Clear all previous content, including DOM elements used for links
@@ -406,71 +403,11 @@
       container.style.maxHeight = '60vh';
     }
 
-    // --- Helper: Get all token IDs owned by a wallet (Requires ERC721Enumerable) ---
-    async function getOwnedTokens(address) {
-      try {
-        const balance = await readContract(wagmiConfig, {
-          address: contractDetails.address,
-          abi: contractDetails.abi,
-          functionName: 'balanceOf',
-          args: [address],
-        });
-
-        const tokenIds = [];
-        for (let i = 0; i < Number(balance); i++) {
-          const tokenId = await readContract(wagmiConfig, {
-            address: contractDetails.address,
-            abi: contractDetails.abi,
-            functionName: 'tokenOfOwnerByIndex',
-            args: [address, BigInt(i)],
-          });
-          tokenIds.push(Number(tokenId));
-        }
-        return tokenIds;
-      } catch (err) {
-        // If the contract doesn't support ERC721Enumerable, this will fail.
-        console.warn("Error fetching owned tokens (ERC721Enumerable may not be supported):", err);
-        return [];
-      }
-    }
-
-    // --- Load user’s NFT preview after reload (main fix) ---
-    async function loadUserNftPreview() {
-      // Wait for wallet and contract details to be ready
-      if (!userAddress || !contractDetails) return; 
-
-      // Fallback: If localStorage token exists, try to load it first quickly
-      if (lastMintedTokenId) {
-          await previewNft(lastMintedTokenId);
-          return;
-      }
-
-      const owned = await getOwnedTokens(userAddress);
-      
-      if (owned.length > 0) {
-        // Pick last minted (highest ID)
-        const latestTokenId = Math.max(...owned);
-        
-        previewBtn.innerText = `Preview NFT #${latestTokenId}`;
-        previewBtn.classList.remove('hidden');
-        await previewNft(latestTokenId);
-        
-        // Update localStorage for quick loading on subsequent reloads
-        localStorage.setItem("lastMintedTokenId", latestTokenId);
-        lastMintedTokenId = latestTokenId;
-      } else {
-        console.log("User owns no tokens, hiding preview button.");
-        previewBtn.classList.add('hidden');
-        previewContainer.classList.add('hidden');
-      }
-    }
-
 
     (async () => {
       // 1. Persist Last Mint: Load from localStorage on startup
-      const storedTokenId = localStorage.getItem("lastMintedTokenId");
-      if (storedTokenId) {
-          lastMintedTokenId = Number(storedTokenId);
+      lastMintedTokenId = localStorage.getItem("lastMintedTokenId");
+      if (lastMintedTokenId) {
           previewBtn.innerText = `Preview NFT #${lastMintedTokenId}`;
           previewBtn.classList.remove('hidden');
       }
@@ -540,12 +477,9 @@
           mintPriceWei = 0n;
           console.warn(`Failed to read contract settings.`, e);
       }
-      
+
       // 5. Fetch totalSupply
       await updateSupply(true);
-
-      // 6. FINAL FIX: Query for owned NFTs and load the preview after everything is ready
-      await loadUserNftPreview();
     })();
 
 
@@ -715,17 +649,11 @@
                 
                 // Re-fetch all data for the new user context
                 updateSupply(true);
-                
-                // *** IMPORTANT UPDATE ***
-                // When account changes, we must clear localStorage and re-check ownership
+                // Reset mint-specific UI
                 previewBtn.classList.add('hidden');
                 previewContainer.classList.add('hidden');
                 localStorage.removeItem('lastMintedTokenId');
                 lastMintedTokenId = null;
-                // Since the wallet changed, we need to re-run the check to load the last owned token
-                // NOTE: This will run asynchronously in the main block when `loadUserNftPreview` is called
-                // but we also need to ensure it runs again after an account change
-                loadUserNftPreview();
 
             } else if (!account.isConnected && userAddress) {
                 // User disconnected the wallet
