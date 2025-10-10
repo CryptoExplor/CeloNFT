@@ -420,7 +420,19 @@
         userAddress = conn.accounts[0]; // <-- SET userAddress
         chainId = conn.chainId;
         showAddress(userAddress);
-      } catch (e) { setStatus("Wallet connect failed.", 'error'); console.error(e); }
+
+        // Optional: prompt to add app (requires valid farcaster.json).
+        const hasPromptedAddApp = sessionStorage.getItem('hasPromptedAddApp');
+        if (!hasPromptedAddApp && sdk?.actions?.addMiniApp) {
+          try {
+            await sdk.actions.addMiniApp();
+          } catch(_) {}
+          sessionStorage.setItem('hasPromptedAddApp', 'true');
+        }
+      } catch (err) {
+        console.error("Initialization failed:", err);
+        setStatus('Failed to initialize. Please reopen in Warpcast.', 'error');
+      }
 
       // 2. Network Guard
       if (chainId !== celo.id) {
