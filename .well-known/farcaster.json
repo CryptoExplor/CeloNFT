@@ -7,7 +7,7 @@
    "baseBuilder": {
     "allowedAddresses": ["0xA5f2c343813B6fb6fE947C2C4759F2c421a346a7"]
    },
-  "frame": {
+  "miniapp": {
     "name": "Celo NFT",
     "version": "1",
     "iconUrl": "https://celo-nft-phi.vercel.app/icon.png",
