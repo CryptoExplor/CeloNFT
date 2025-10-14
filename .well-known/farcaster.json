@@ -4,6 +4,9 @@
     "payload": "eyJkb21haW4iOiJjZWxvLW5mdC1waGkudmVyY2VsLmFwcCJ9",
     "signature": "MHg1YTExN2ZiNGE5ZmQ3Y2EyYmY0ZjIyMjJhZjM3MWU4ZmZmYjEyZmQ2YTIxNTBhOTdjNDcwNTc3ODgyNDYxY2UzMDJlOWQ3ODdlZWVlODM5MmMzMjZiNTY0NDYzNTMzNzc3NDU1MTdhNjU3YWRhNzNmN2QyMWE4ZDU2ZGQ4NDU3MzFj"
   },
+   "baseBuilder": {
+    "allowedAddresses": ["0xA5f2c343813B6fb6fE947C2C4759F2c421a346a7"]
+   },
   "frame": {
     "name": "Celo NFT",
     "version": "1",
