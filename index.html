@@ -32,6 +32,10 @@
   }' />
 
   <style>
+    * {
+      box-sizing: border-box;
+    }
+    
     body {
       margin: 0;
       background: #111;
@@ -42,9 +46,9 @@
       align-items: center;
       min-height: 100vh;
       padding: 5px 5px; 
-      box-sizing: border-box;
       text-align: center; 
     }
+    
     .tradingview-widget-container {
       width: 100%;
       max-width: 390px;
@@ -54,10 +58,17 @@
       overflow: hidden;
       margin-bottom: 16px;
     }
+    
     #celo-chart {
-        height: 100%;
-        width: 100%;
+      height: 100%;
+      width: 100%;
     }
+    
+    h1 {
+      font-size: 1.5rem;
+      margin: 10px 0;
+    }
+    
     .status-box {
       font-size: 1rem;
       padding: 8px 12px;
@@ -66,11 +77,14 @@
       width: 90%;
       max-width: 320px;
       margin-bottom: 12px;
+      word-wrap: break-word;
     }
+    
     .status-info { background: #1e40af; }
     .status-warning { background: #b45309; }
     .status-success { background: #16a34a; } 
     .status-error { background: #b91c1c; }
+    
     .action-button {
       padding: 1rem 2rem;
       font-size: 1.2rem;
@@ -87,17 +101,25 @@
       align-items: center;
       justify-content: center;
       gap: 8px;
+      font-family: 'Orbitron', sans-serif;
     }
+    
+    .action-button:hover:not(:disabled) {
+      opacity: 0.9;
+    }
+    
     .action-button:disabled {
       background: #888 !important;
       color: #444;
       cursor: not-allowed;
     }
+    
     .preview-button {
-        background: linear-gradient(90deg, #f97316, #fcd34d);
-        font-size: 1rem;
-        padding: 0.75rem 1.5rem;
+      background: linear-gradient(90deg, #f97316, #fcd34d);
+      font-size: 1rem;
+      padding: 0.75rem 1.5rem;
     }
+    
     .addresses-box {
       background: #131417;
       font-size: 0.9rem;
@@ -110,35 +132,47 @@
       color: #c3cfe8;
       text-align: center;
     }
+    
     footer {
       margin-top: auto;
       display: flex;
       gap: 24px;
-      padding-bottom: 12px;
+      padding: 20px 0;
     }
+    
+    footer a {
+      transition: opacity 0.2s;
+    }
+    
+    footer a:hover {
+      opacity: 0.7;
+    }
+    
     footer svg {
       fill: #fafafa;
       width: 28px;
       height: 28px;
     }
-    .hidden { display:none; }
+    
+    .hidden { 
+      display: none !important;
+    }
     
     #nft-preview-container {
-        margin-top: 10px;
-        margin-bottom: 10px;
-        width: 100%; 
-        max-width: 390px; 
-        background: #000;
-        border: 2px solid #49dfb5;
-        border-radius: 10px;
-        display: flex;
-        justify-content: center; 
-        align-items: center;
-        padding: 0; 
-        position: relative; 
-        max-height: 60vh;
-        overflow: hidden;
-        box-sizing: border-box;
+      margin-top: 10px;
+      margin-bottom: 10px;
+      width: 100%; 
+      max-width: 390px; 
+      background: #000;
+      border: 2px solid #49dfb5;
+      border-radius: 10px;
+      display: flex;
+      justify-content: center; 
+      align-items: center;
+      padding: 0; 
+      position: relative; 
+      max-height: 60vh;
+      overflow: hidden;
     }
 
     #nft-preview-container svg {
@@ -147,7 +181,6 @@
       height: auto;
       max-height: 60vh;
       margin: 0 auto;
-      box-sizing: border-box;
     }
 
     #nft-preview-container img {
@@ -181,14 +214,17 @@
       background: radial-gradient(circle, #bbb 1.5px, transparent 2px); 
       animation-duration: 6s;
     }
+    
     .rare.sparkles::before {
       background: radial-gradient(circle, #2196f3 2.5px, transparent 2px); 
       animation-duration: 4s;
     }
+    
     .legendary.sparkles::before {
       background: radial-gradient(circle, gold 3.5px, transparent 2px);
       animation-duration: 2s; 
     }
+    
     .mythic.sparkles::before {
       background: radial-gradient(circle, crimson 4px, transparent 2px);
       animation-duration: 1.5s; 
@@ -203,7 +239,10 @@
       display: inline-block;
       animation: spin 0.6s linear infinite;
     }
-    @keyframes spin { 100% { transform: rotate(360deg); } }
+    
+    @keyframes spin { 
+      100% { transform: rotate(360deg); } 
+    }
   </style>
 </head>
 <body>
@@ -255,18 +294,26 @@
 
   <!-- Footer -->
   <footer>
-    <a href="https://farcaster.xyz/dare1.eth" target="_blank" aria-label="Farcaster">
-        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M12 2C6.486 2 2 6.486 2 12s4.486 10 10 10 10-4.486 10-10S17.514 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z"/><path d="M12 7c-2.757 0-5 2.243-5 5s2.243 5 5 5 5-2.243 5-5-2.243-5-5-5zm0 8c-1.654 0-3-1.346-3-3s1.346-3 3-3 3 1.346 3 3-1.346 3-3 3z"/></svg>
+    <a href="https://farcaster.xyz/dare1.eth" target="_blank" rel="noopener noreferrer" aria-label="Farcaster">
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M12 2C6.486 2 2 6.486 2 12s4.486 10 10 10 10-4.486 10-10S17.514 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z"/><path d="M12 7c-2.757 0-5 2.243-5 5s2.243 5 5 5 5-2.243 5-5-2.243-5-5-5zm0 8c-1.654 0-3-1.346-3-3s1.346-3 3-3 3 1.346 3 3-1.346 3-3 3z"/></svg>
     </a>
-    <a href="https://x.com/kumar14700" target="_blank" aria-label="Twitter">
-        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 16 16"><path d="M12.6.75h2.454l-5.36 6.142L16 15.25h-4.937l-3.867-5.07-4.425 5.07H.316l5.733-6.57L0 .75h5.063l3.495 4.633L12.601.75Zm-.86 13.028h1.36L4.323 2.145H2.865l8.875 11.633Z"/></svg>
+    <a href="https://x.com/kumar14700" target="_blank" rel="noopener noreferrer" aria-label="Twitter">
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 16 16"><path d="M12.6.75h2.454l-5.36 6.142L16 15.25h-4.937l-3.867-5.07-4.425 5.07H.316l5.733-6.57L0 .75h5.063l3.495 4.633L12.601.75Zm-.86 13.028h1.36L4.323 2.145H2.865l8.875 11.633Z"/></svg>
     </a>
   </footer>
 
   <!-- Farcaster SDK -->
   <script type="module">
-    import { sdk } from 'https://esm.sh/@farcaster/miniapp-sdk';
-    sdk.actions.ready({ disableNativeGestures: true });
+    import { sdk } from 'https://esm.sh/@farcaster/miniapp-sdk@0.2.2';
+    
+    (async () => {
+      try {
+        await sdk.actions.ready({ disableNativeGestures: true });
+        console.log('Farcaster SDK initialized');
+      } catch (e) {
+        console.log('Farcaster SDK not available:', e);
+      }
+    })();
   </script>
 
   <!-- Main App Logic with Reown AppKit -->
@@ -283,7 +330,8 @@
       http
     } from 'https://esm.sh/@wagmi/core@2.13.4';
     import { celo } from 'https://esm.sh/@wagmi/core@2.13.4/chains';
-    import { farcasterMiniApp } from 'https://esm.sh/@farcaster/miniapp-wagmi-connector';
+    import { injected } from 'https://esm.sh/@wagmi/core@2.13.4/connectors';
+    import { farcasterMiniApp } from 'https://esm.sh/@farcaster/miniapp-wagmi-connector@0.2.2';
     import { createAppKit } from 'https://esm.sh/@reown/appkit@1.1.2';
     import { WagmiAdapter } from 'https://esm.sh/@reown/appkit-adapter-wagmi@1.1.2';
 
@@ -309,6 +357,7 @@
     let contractDetails = null;
     let modal = null;
     let isFarcasterEnvironment = false;
+    let wagmiConfig = null;
 
     // Helper Functions
     function setStatus(msg, type = 'info') {
@@ -341,11 +390,11 @@
       try {
         const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=celo&vs_currencies=usd');
         if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+          throw new Error(`HTTP error! status: ${response.status}`);
         }
         const data = await response.json();
         if (!data || !data.celo || !data.celo.usd) {
-             throw new Error("Invalid response structure from CoinGecko.");
+          throw new Error("Invalid response structure from CoinGecko.");
         }
         return data.celo.usd;
       } catch (e) {
@@ -388,123 +437,123 @@
     }
 
     async function updateSupply(initialLoad = false) {
-        if (initialLoad) {
-            supplyBox.innerHTML = '<span class="spinner"></span> Loading supply...';
+      if (initialLoad) {
+        supplyBox.innerHTML = '<span class="spinner"></span> Loading supply...';
+      }
+
+      try {
+        if (!initialLoad) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
         }
 
-        try {
+        const total = await readContract(wagmiConfig, {
+          address: contractDetails.address,
+          abi: contractDetails.abi,
+          functionName: 'totalSupply'
+        });
+
+        const totalNumber = Number(total);
+
+        if (MAX_SUPPLY > 0) {
+          supplyBox.textContent = `Minted: ${totalNumber}/${MAX_SUPPLY}`;
+
+          if (totalNumber >= MAX_SUPPLY) {
+            mintBtn.disabled = true;
+            mintBtn.innerText = "SOLD OUT";
+            mintBtn.title = "The maximum supply has been reached.";
+            supplyBox.className = "status-box status-error";
+            
             if (!initialLoad) {
-                await new Promise(resolve => setTimeout(resolve, 1000));
+              setStatus(`All ${MAX_SUPPLY} NFTs have been minted!`, "warning");
             }
-
-            const total = await readContract(wagmiConfig, {
-                address: contractDetails.address,
-                abi: contractDetails.abi,
-                functionName: 'totalSupply'
-            });
-
-            const totalNumber = Number(total);
-
-            if (MAX_SUPPLY > 0) {
-                supplyBox.textContent = `Minted: ${totalNumber}/${MAX_SUPPLY}`;
-
-                if (totalNumber >= MAX_SUPPLY) {
-                    mintBtn.disabled = true;
-                    mintBtn.innerText = "SOLD OUT";
-                    mintBtn.title = "The maximum supply has been reached.";
-                    supplyBox.className = "status-box status-error";
-                    
-                    if (!initialLoad) {
-                        setStatus(`All ${MAX_SUPPLY} NFTs have been minted!`, "warning");
-                    }
-                } else if (!initialLoad) {
-                    mintBtn.disabled = false;
-                    const celoPrice = Number(mintPriceWei) / 1e18;
-                    mintBtn.innerText = mintPriceWei > 0n ? `MINT (${celoPrice.toFixed(4)} CELO)` : 'MINT';
-                    mintBtn.title = '';
-                    supplyBox.className = "status-box status-warning";
-                }
-            } else {
-                supplyBox.textContent = `Total Minted: ${totalNumber}`;
-                supplyBox.className = "status-box status-info";
-                
-                if (!initialLoad) {
-                    mintBtn.disabled = false;
-                    const celoPrice = Number(mintPriceWei) / 1e18;
-                    mintBtn.innerText = mintPriceWei > 0n ? `MINT (${celoPrice.toFixed(4)} CELO)` : 'MINT';
-                }
-            }
-
-            return total;
-        } catch (e) {
-            supplyBox.textContent = "Total Minted: N/A";
-            console.error(e);
-            return 0;
+          } else if (!initialLoad) {
+            mintBtn.disabled = false;
+            const celoPrice = Number(mintPriceWei) / 1e18;
+            mintBtn.innerText = mintPriceWei > 0n ? `MINT (${celoPrice.toFixed(4)} CELO)` : 'MINT';
+            mintBtn.title = '';
+            supplyBox.className = "status-box status-warning";
+          }
+        } else {
+          supplyBox.textContent = `Total Minted: ${totalNumber}`;
+          supplyBox.className = "status-box status-info";
+          
+          if (!initialLoad) {
+            mintBtn.disabled = false;
+            const celoPrice = Number(mintPriceWei) / 1e18;
+            mintBtn.innerText = mintPriceWei > 0n ? `MINT (${celoPrice.toFixed(4)} CELO)` : 'MINT';
+          }
         }
+
+        return total;
+      } catch (e) {
+        supplyBox.textContent = "Total Minted: N/A";
+        console.error('Error updating supply:', e);
+        return 0;
+      }
     }
 
     async function previewNft(tokenId) {
-        if (!contractDetails) return;
+      if (!contractDetails) return;
 
-        statusBox.innerHTML = '';
-        statusBox.className = 'status-box';
+      statusBox.innerHTML = '';
+      statusBox.className = 'status-box';
+      
+      previewBtn.disabled = true;
+      previewBtn.innerHTML = '<span class="spinner"></span> Loading Preview…';
+      previewContainer.classList.add('hidden');
+      previewContainer.innerHTML = '';
+      previewContainer.classList.remove("sparkles", ...ALL_RARITY_CLASSES);
+
+      try {
+        const tokenURI = await readContract(wagmiConfig, {
+          address: contractAddress,
+          abi: contractDetails.abi,
+          functionName: 'tokenURI',
+          args: [BigInt(tokenId)] 
+        });
+
+        const base64Json = tokenURI.split(',')[1];
+        if (!base64Json) throw new Error("Invalid tokenURI format.");
+
+        const jsonString = atob(decodeURIComponent(base64Json));
+        const metadata = JSON.parse(jsonString);
         
-        previewBtn.disabled = true;
-        previewBtn.innerHTML = '<span class="spinner"></span> Loading Preview…';
-        previewContainer.classList.add('hidden');
-        previewContainer.innerHTML = '';
-        previewContainer.classList.remove("sparkles", ...ALL_RARITY_CLASSES);
+        const base64Svg = metadata.image.split(',')[1];
+        if (!base64Svg) throw new Error("Invalid image data format.");
 
-        try {
-            const tokenURI = await readContract(wagmiConfig, {
-                address: contractAddress,
-                abi: contractDetails.abi,
-                functionName: 'tokenURI',
-                args: [BigInt(tokenId)] 
-            });
+        let svgString = atob(decodeURIComponent(base64Svg));
+        const safeSvg = svgString.replace(/<script.*?>.*?<\/script>/g, '');
 
-            const base64Json = tokenURI.split(',')[1];
-            if (!base64Json) throw new Error("Invalid tokenURI format.");
+        previewContainer.innerHTML = safeSvg;
+        previewContainer.classList.remove('hidden');
+        adjustInjectedSvg(previewContainer);
+        
+        let rarityText = "Common";
+        let priceText = "N/A";
 
-            const jsonString = atob(decodeURIComponent(base64Json));
-            const metadata = JSON.parse(jsonString);
-            
-            const base64Svg = metadata.image.split(',')[1];
-            if (!base64Svg) throw new Error("Invalid image data format.");
-
-            let svgString = atob(decodeURIComponent(base64Svg));
-            const safeSvg = svgString.replace(/<script.*?>.*?<\/script>/g, '');
-
-            previewContainer.innerHTML = safeSvg;
-            previewContainer.classList.remove('hidden');
-            adjustInjectedSvg(previewContainer);
-            
-            let rarityText = "Common";
-            let priceText = "N/A";
-
-            if (metadata.attributes) {
-                const rarityAttr = metadata.attributes.find(attr => attr.trait_type === 'Rarity');
-                const priceAttr = metadata.attributes.find(attr => attr.trait_type === 'CELO Price Snapshot');
-                
-                if (rarityAttr) rarityText = rarityAttr.value;
-                if (priceAttr) priceText = priceAttr.value;
-            }
-            
-            previewContainer.classList.add("sparkles");
-            const rarityClassLower = rarityText.toLowerCase();
-            previewContainer.classList.add(rarityClassLower);
-
-            const buttonLabel = `Preview NFT #${tokenId} (${rarityText} / $${priceText})`;
-            previewBtn.innerText = buttonLabel;
-
-        } catch (e) {
-            setStatus("Failed to load NFT preview. Check console for details.", 'error'); 
-            previewBtn.innerText = 'Preview NFT Error';
-            console.error(`NFT Preview Error for token ID ${tokenId}:`, e);
-            previewContainer.classList.add('hidden');
-        } finally {
-            previewBtn.disabled = false;
+        if (metadata.attributes) {
+          const rarityAttr = metadata.attributes.find(attr => attr.trait_type === 'Rarity');
+          const priceAttr = metadata.attributes.find(attr => attr.trait_type === 'CELO Price Snapshot');
+          
+          if (rarityAttr) rarityText = rarityAttr.value;
+          if (priceAttr) priceText = priceAttr.value;
         }
+        
+        previewContainer.classList.add("sparkles");
+        const rarityClassLower = rarityText.toLowerCase();
+        previewContainer.classList.add(rarityClassLower);
+
+        const buttonLabel = `Preview NFT #${tokenId} (${rarityText} / $${priceText})`;
+        previewBtn.innerText = buttonLabel;
+
+      } catch (e) {
+        setStatus("Failed to load NFT preview. Check console for details.", 'error'); 
+        previewBtn.innerText = 'Preview NFT Error';
+        console.error(`NFT Preview Error for token ID ${tokenId}:`, e);
+        previewContainer.classList.add('hidden');
+      } finally {
+        previewBtn.disabled = false;
+      }
     }
 
     // Setup Wagmi Config with Reown AppKit
@@ -514,202 +563,227 @@
       ssr: false
     });
 
-    const wagmiConfig = wagmiAdapter.wagmiConfig;
+    wagmiConfig = wagmiAdapter.wagmiConfig;
 
     // Initialize App
     (async () => {
-      // Load last minted token from localStorage
-      lastMintedTokenId = localStorage.getItem("lastMintedTokenId");
-      if (lastMintedTokenId) {
+      try {
+        // Load last minted token from sessionStorage (not localStorage to avoid cross-session issues)
+        lastMintedTokenId = sessionStorage.getItem("lastMintedTokenId");
+        if (lastMintedTokenId) {
           previewBtn.innerText = `Preview NFT #${lastMintedTokenId}`;
           previewBtn.classList.remove('hidden');
-      }
-
-      // Check if running in Farcaster environment
-      try {
-        if (typeof sdk !== 'undefined' && sdk.context) {
-          isFarcasterEnvironment = true;
-          console.log('Running in Farcaster environment');
         }
-      } catch (e) {
-        console.log('Not in Farcaster environment');
-      }
 
-      // Try Farcaster connection first
-      let connected = false;
-      if (isFarcasterEnvironment) {
+        // Check if running in Farcaster environment
         try {
-          const farcasterConnector = wagmiConfig.connectors.find(c => c.id === 'farcasterMiniApp');
-          if (farcasterConnector) {
-            const conn = await connect(wagmiConfig, { connector: farcasterConnector });
-            userAddress = conn.accounts[0];
-            showAddress(userAddress);
-            connected = true;
-            
-            const hasPromptedAddApp = sessionStorage.getItem('hasPromptedAddApp');
-            if (!hasPromptedAddApp && sdk?.actions?.addMiniApp) {
-              try {
-                await sdk.actions.addMiniApp();
-              } catch(_) {}
-              sessionStorage.setItem('hasPromptedAddApp', 'true');
-            }
+          if (typeof sdk !== 'undefined' && sdk.context) {
+            isFarcasterEnvironment = true;
+            console.log('Running in Farcaster environment');
           }
         } catch (e) {
-          console.log('Farcaster connection failed:', e);
+          console.log('Not in Farcaster environment:', e);
         }
-      }
 
-      // If not connected via Farcaster, setup Reown AppKit
-      if (!connected) {
-        modal = createAppKit({
-          adapters: [wagmiAdapter],
-          networks: [celo],
-          projectId: PROJECT_ID,
-          features: {
-            analytics: true,
-            email: false,
-            socials: []
-          },
-          themeMode: 'dark',
-          themeVariables: {
-            '--w3m-accent': '#49dfb5'
+        // Try Farcaster connection first
+        let connected = false;
+        if (isFarcasterEnvironment) {
+          try {
+            const farcasterConnector = wagmiConfig.connectors.find(c => c.id === 'farcasterMiniApp');
+            if (farcasterConnector) {
+              const conn = await connect(wagmiConfig, { connector: farcasterConnector });
+              userAddress = conn.accounts[0];
+              showAddress(userAddress);
+              connected = true;
+              console.log('Connected via Farcaster:', userAddress);
+              
+              // Prompt to add mini app
+              const hasPromptedAddApp = sessionStorage.getItem('hasPromptedAddApp');
+              if (!hasPromptedAddApp && sdk?.actions?.addMiniApp) {
+                try {
+                  await sdk.actions.addMiniApp();
+                  sessionStorage.setItem('hasPromptedAddApp', 'true');
+                } catch(e) {
+                  console.log('Add mini app prompt declined or failed:', e);
+                }
+              }
+            }
+          } catch (e) {
+            console.log('Farcaster connection failed:', e);
           }
-        });
-
-        // Check if already connected
-        const currentAccount = getAccount(wagmiConfig);
-        if (currentAccount.isConnected && currentAccount.address) {
-          userAddress = currentAccount.address;
-          showAddress(userAddress);
-          connected = true;
-        } else {
-          // Show connect button for non-Farcaster users
-          showConnectButton();
-          setStatus('Connect your wallet to mint NFTs', 'info');
         }
-      }
 
-      // If still not connected, don't proceed with contract setup
-      if (!connected && !isFarcasterEnvironment) {
-        mintBtn.disabled = true;
-        return;
-      }
+        // If not connected via Farcaster, setup Reown AppKit
+        if (!connected) {
+          modal = createAppKit({
+            adapters: [wagmiAdapter],
+            networks: [celo],
+            projectId: PROJECT_ID,
+            features: {
+              analytics: true,
+              email: false,
+              socials: [],
+              connectMethodsOrder: ['wallet']
+            },
+            allWallets: 'SHOW',
+            themeMode: 'dark',
+            themeVariables: {
+              '--w3m-accent': '#49dfb5'
+            }
+          });
 
-      // Load contract details
-      try {
-        contractDetails = await fetch('./contract.json').then(r => r.json());
-        contractAddress = contractDetails.address;
-      } catch (e) { 
-        setStatus("Missing contract details. Ensure 'contract.json' is deployed.", 'error'); 
-        console.error(e); 
-        mintBtn.disabled = true; 
-        return;
-      }
+          // Check if already connected
+          const currentAccount = getAccount(wagmiConfig);
+          if (currentAccount.isConnected && currentAccount.address) {
+            userAddress = currentAccount.address;
+            showAddress(userAddress);
+            connected = true;
+            console.log('Already connected:', userAddress);
+          } else {
+            // Show connect button for non-Farcaster users
+            showConnectButton();
+            setStatus('Connect your wallet to mint NFTs', 'info');
+          }
+        }
 
-      if (!contractDetails) {
+        // If still not connected, don't proceed with contract setup
+        if (!connected && !isFarcasterEnvironment) {
           mintBtn.disabled = true;
           return;
-      }
+        }
 
-      // Get chain ID
-      const currentAccount = getAccount(wagmiConfig);
-      const chainId = currentAccount.chainId;
+        // Load contract details
+        try {
+          contractDetails = await fetch('./contract.json').then(r => r.json());
+          contractAddress = contractDetails.address;
+          console.log('Contract loaded:', contractAddress);
+        } catch (e) { 
+          setStatus("Missing contract details. Ensure 'contract.json' is deployed.", 'error'); 
+          console.error('Contract load error:', e); 
+          mintBtn.disabled = true; 
+          return;
+        }
 
-      // Network guard
-      if (chainId && chainId !== celo.id) {
+        if (!contractDetails) {
+          mintBtn.disabled = true;
+          return;
+        }
+
+        // Get chain ID
+        const currentAccount = getAccount(wagmiConfig);
+        const chainId = currentAccount.chainId;
+
+        // Network guard
+        if (chainId && chainId !== celo.id) {
           setStatus("Please switch to Celo Mainnet.", 'warning');
           mintBtn.disabled = true;
           mintBtn.title = "Switch to Celo Mainnet to mint.";
           return;
-      } else {
+        } else {
           mintBtn.title = ""; 
-      }
-      
-      // Fetch contract settings
-      try {
+        }
+        
+        // Fetch contract settings
+        try {
           const [max, price] = await Promise.all([
-              readContract(wagmiConfig, {
-                  address: contractDetails.address,
-                  abi: contractDetails.abi,
-                  functionName: MAX_SUPPLY_FUNCTION_NAME
-              }),
-              readContract(wagmiConfig, {
-                  address: contractDetails.address,
-                  abi: contractDetails.abi,
-                  functionName: 'mintPrice'
-              })
+            readContract(wagmiConfig, {
+              address: contractDetails.address,
+              abi: contractDetails.abi,
+              functionName: MAX_SUPPLY_FUNCTION_NAME
+            }),
+            readContract(wagmiConfig, {
+              address: contractDetails.address,
+              abi: contractDetails.abi,
+              functionName: 'mintPrice'
+            })
           ]);
           MAX_SUPPLY = Number(max);
           mintPriceWei = BigInt(price);
           
           if (mintPriceWei > 0n) {
-             const celoPrice = Number(mintPriceWei) / 1e18;
-             mintBtn.innerText = `MINT (${celoPrice.toFixed(4)} CELO)`;
+            const celoPrice = Number(mintPriceWei) / 1e18;
+            mintBtn.innerText = `MINT (${celoPrice.toFixed(4)} CELO)`;
           }
 
-      } catch (e) {
+          console.log('Contract settings:', { MAX_SUPPLY, mintPriceWei: mintPriceWei.toString() });
+
+        } catch (e) {
           setStatus(`Could not read contract settings. Assuming unlimited/free.`, 'warning');
           MAX_SUPPLY = 0;
           mintPriceWei = 0n;
           console.warn(`Failed to read contract settings.`, e);
-      }
+        }
 
-      // Fetch total supply
-      if (connected) {
-        await updateSupply(true);
+        // Fetch total supply
+        if (connected) {
+          await updateSupply(true);
+        }
+      } catch (error) {
+        console.error('Initialization error:', error);
+        setStatus('Failed to initialize. Please refresh the page.', 'error');
       }
     })();
 
     // Watch for account changes
     watchAccount(wagmiConfig, {
-        onChange(account) {
-            if (account.address && account.isConnected) {
-                console.log('Account changed to:', account.address);
-                userAddress = account.address;
-                showAddress(userAddress);
-                setStatus('Account changed.', 'info');
-                mintBtn.disabled = false;
-                
-                updateSupply(true);
-                previewBtn.classList.add('hidden');
-                previewContainer.classList.add('hidden');
-                localStorage.removeItem('lastMintedTokenId');
-                lastMintedTokenId = null;
+      onChange(account) {
+        try {
+          if (account.address && account.isConnected) {
+            console.log('Account changed to:', account.address);
+            userAddress = account.address;
+            showAddress(userAddress);
+            setStatus('Account connected.', 'info');
+            mintBtn.disabled = false;
+            
+            updateSupply(true);
+            previewBtn.classList.add('hidden');
+            previewContainer.classList.add('hidden');
+            sessionStorage.removeItem('lastMintedTokenId');
+            lastMintedTokenId = null;
 
-            } else if (!account.isConnected && userAddress) {
-                console.log('Wallet disconnected');
-                userAddress = null;
-                userAddrBox.classList.add('hidden');
-                showConnectButton();
-                setStatus('Wallet disconnected. Please connect again.', 'warning');
-                mintBtn.disabled = true;
-                
-                previewBtn.classList.add('hidden');
-                previewContainer.classList.add('hidden');
-                supplyBox.textContent = 'Connect wallet to see supply';
-                localStorage.removeItem('lastMintedTokenId');
-                lastMintedTokenId = null;
-            }
-        },
+          } else if (!account.isConnected && userAddress) {
+            console.log('Wallet disconnected');
+            userAddress = null;
+            userAddrBox.classList.add('hidden');
+            showConnectButton();
+            setStatus('Wallet disconnected. Please connect again.', 'warning');
+            mintBtn.disabled = true;
+            
+            previewBtn.classList.add('hidden');
+            previewContainer.classList.add('hidden');
+            supplyBox.textContent = 'Connect wallet to see supply';
+            sessionStorage.removeItem('lastMintedTokenId');
+            lastMintedTokenId = null;
+          }
+        } catch (error) {
+          console.error('Account change error:', error);
+        }
+      },
     });
 
     // Connect Button Handler
     connectBtn.addEventListener('click', async () => {
-      if (modal) {
-        modal.open();
+      try {
+        if (modal) {
+          modal.open();
+        }
+      } catch (error) {
+        console.error('Connect button error:', error);
+        setStatus('Failed to open wallet modal.', 'error');
       }
     });
 
     // Mint Button Handler
     mintBtn.addEventListener('click', async () => {
+      try {
         if (!contractDetails) {
-            setStatus("Contract details are missing. Cannot mint.", "error");
-            return;
+          setStatus("Contract details are missing. Cannot mint.", "error");
+          return;
         }
 
         if (mintBtn.disabled && mintBtn.innerText === "SOLD OUT") {
-            setStatus("This NFT drop is sold out.", "warning");
-            return;
+          setStatus("This NFT drop is sold out.", "warning");
+          return;
         }
         
         statusBox.innerHTML = '';
@@ -723,99 +797,107 @@
         mintBtn.innerHTML = '<span class="spinner"></span> Minting...';
         lastMintedTokenId = null;
 
-        try {
-            const { address, abi } = contractDetails;
+        const { address, abi } = contractDetails;
 
-            const currentSupply = await readContract(wagmiConfig, {
-                address,
-                abi,
-                functionName: 'totalSupply'
-            });
-            
-            const nextTokenId = Number(currentSupply) + 1;
+        const currentSupply = await readContract(wagmiConfig, {
+          address,
+          abi,
+          functionName: 'totalSupply'
+        });
+        
+        const nextTokenId = Number(currentSupply) + 1;
 
-            const price = await fetchCeloPrice();
-            const priceForContract = Math.floor(price * 10000);
+        const price = await fetchCeloPrice();
+        const priceForContract = Math.floor(price * 10000);
 
-            const hash = await writeContract(wagmiConfig, {
-                address,
-                abi,
-                functionName: 'mint',
-                args: [priceForContract],
-                value: mintPriceWei 
-            });
-            
-            setStatus("Confirming transaction...", "info");
-            const receipt = await waitForTransactionReceipt(wagmiConfig, { hash });
+        const hash = await writeContract(wagmiConfig, {
+          address,
+          abi,
+          functionName: 'mint',
+          args: [priceForContract],
+          value: mintPriceWei 
+        });
+        
+        setStatus("Confirming transaction...", "info");
+        const receipt = await waitForTransactionReceipt(wagmiConfig, { hash });
 
-            if (receipt.status === 'reverted') {
-                throw new Error('Transaction was reverted.');
-            }
-
-            localStorage.setItem('lastMintedTokenId', nextTokenId.toString());
-            setStatus("Mint Successful! ", "success");
-            
-            if (contractAddress) {
-                const celoscanTokenUrl = `https://celoscan.io/token/${contractAddress}?a=${nextTokenId}`;
-                const celoscanTxUrl = `https://celoscan.io/tx/${hash}`;
-
-                const txLink = document.createElement('a');
-                txLink.href = celoscanTxUrl;
-                txLink.target = '_blank';
-                txLink.textContent = 'View Tx';
-                txLink.style.cssText = 'color:#fff;text-decoration:underline;margin-left:8px;';
-
-                const tokenLink = document.createElement('a');
-                tokenLink.href = celoscanTokenUrl;
-                tokenLink.target = '_blank';
-                tokenLink.textContent = 'View on Celoscan';
-                tokenLink.style.cssText = 'color:#fff;text-decoration:underline;margin-left:8px;';
-
-                statusBox.appendChild(txLink);
-                statusBox.insertAdjacentText('beforeend', ' | ');
-                statusBox.appendChild(tokenLink);
-            }
-
-            lastMintedTokenId = nextTokenId;
-
-            await updateSupply();
-            previewBtn.classList.remove('hidden');
-            previewBtn.innerText = `Preview NFT #${nextTokenId}`;
-            await previewNft(lastMintedTokenId);
-
-        } catch (e) {
-            let errorMsg = e.shortMessage || "Mint failed.";
-            
-            if (e.message && (e.message.includes("Invalid parameters were provided to the RPC method") || e.message.includes("RPC"))) {
-                errorMsg = "❌ Mint failed due to a connection error. Please reload/refresh the miniapp and try again.";
-            } else if (!e.shortMessage) {
-                errorMsg = "❌ Mint failed. This may be caused by a stale connection. Please reload/refresh the miniapp and try again.";
-            }
-            
-            setStatus(errorMsg, "error");
-            console.error('Mint Error:', e);
-            
-            previewBtn.classList.add('hidden');
-            previewContainer.classList.add('hidden');
-            previewContainer.classList.remove('sparkles', ...ALL_RARITY_CLASSES);
-            localStorage.removeItem('lastMintedTokenId');
-            lastMintedTokenId = null;
-        } finally {
-            if (mintBtn.innerText !== "SOLD OUT") {
-                mintBtn.disabled = false;
-                const celoPrice = Number(mintPriceWei) / 1e18;
-                mintBtn.innerText = mintPriceWei > 0n ? `MINT (${celoPrice.toFixed(4)} CELO)` : 'MINT';
-            }
+        if (receipt.status === 'reverted') {
+          throw new Error('Transaction was reverted.');
         }
+
+        sessionStorage.setItem('lastMintedTokenId', nextTokenId.toString());
+        setStatus("Mint Successful! ", "success");
+        
+        if (contractAddress) {
+          const celoscanTokenUrl = `https://celoscan.io/token/${contractAddress}?a=${nextTokenId}`;
+          const celoscanTxUrl = `https://celoscan.io/tx/${hash}`;
+
+          const txLink = document.createElement('a');
+          txLink.href = celoscanTxUrl;
+          txLink.target = '_blank';
+          txLink.rel = 'noopener noreferrer';
+          txLink.textContent = 'View Tx';
+          txLink.style.cssText = 'color:#fff;text-decoration:underline;margin-left:8px;';
+
+          const tokenLink = document.createElement('a');
+          tokenLink.href = celoscanTokenUrl;
+          tokenLink.target = '_blank';
+          tokenLink.rel = 'noopener noreferrer';
+          tokenLink.textContent = 'View on Celoscan';
+          tokenLink.style.cssText = 'color:#fff;text-decoration:underline;margin-left:8px;';
+
+          statusBox.appendChild(txLink);
+          statusBox.insertAdjacentText('beforeend', ' | ');
+          statusBox.appendChild(tokenLink);
+        }
+
+        lastMintedTokenId = nextTokenId;
+
+        await updateSupply();
+        previewBtn.classList.remove('hidden');
+        previewBtn.innerText = `Preview NFT #${nextTokenId}`;
+        await previewNft(lastMintedTokenId);
+
+      } catch (e) {
+        let errorMsg = e.shortMessage || "Mint failed.";
+        
+        if (e.message && (e.message.includes("Invalid parameters were provided to the RPC method") || e.message.includes("RPC"))) {
+          errorMsg = "Mint failed due to a connection error. Please reload/refresh the miniapp and try again.";
+        } else if (e.message && e.message.includes("User rejected")) {
+          errorMsg = "Transaction was rejected.";
+        } else if (!e.shortMessage) {
+          errorMsg = "Mint failed. This may be caused by a stale connection. Please reload/refresh the miniapp and try again.";
+        }
+        
+        setStatus(errorMsg, "error");
+        console.error('Mint Error:', e);
+        
+        previewBtn.classList.add('hidden');
+        previewContainer.classList.add('hidden');
+        previewContainer.classList.remove('sparkles', ...ALL_RARITY_CLASSES);
+        sessionStorage.removeItem('lastMintedTokenId');
+        lastMintedTokenId = null;
+      } finally {
+        if (mintBtn.innerText !== "SOLD OUT") {
+          mintBtn.disabled = false;
+          const celoPrice = Number(mintPriceWei) / 1e18;
+          mintBtn.innerText = mintPriceWei > 0n ? `MINT (${celoPrice.toFixed(4)} CELO)` : 'MINT';
+        }
+      }
     });
 
     // Preview Button Handler
     previewBtn.addEventListener('click', async () => {
+      try {
         if (lastMintedTokenId !== null) {
-            await previewNft(lastMintedTokenId);
+          await previewNft(lastMintedTokenId);
         } else {
-            setStatus("No token ID to preview. Please mint first.", 'warning');
+          setStatus("No token ID to preview. Please mint first.", 'warning');
         }
+      } catch (error) {
+        console.error('Preview error:', error);
+        setStatus('Failed to load preview.', 'error');
+      }
     });
 
   </script>
