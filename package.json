@@ -13,6 +13,7 @@
     "@reown/appkit": "^1.8.2",
     "@reown/appkit-adapter-wagmi": "^1.8.2",
     "@wagmi/core": "^2.13.4",
+    "canvas-confetti": "^1.9.3",
     "viem": "^2.21.0"
   },
   "devDependencies": {
