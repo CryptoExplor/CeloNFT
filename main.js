@@ -53,10 +53,17 @@ function setStatus(msg, type = 'info') {
 
 function showAddress(addr) {
   const shortAddr = `${addr.slice(0, 6)}...${addr.slice(-4)}`;
-  userAddrBox.textContent = `Your address: ${shortAddr}`;
+  userAddrBox.innerHTML = `<span style="cursor: pointer;" title="Click to change wallet">Your address: ${shortAddr}</span>`;
   userAddrBox.classList.remove('hidden');
   connectBtn.classList.add('hidden');
   mintBtn.classList.remove('hidden');
+  
+  // Make address clickable to open wallet modal
+  userAddrBox.onclick = () => {
+    if (modal) {
+      modal.open();
+    }
+  };
 }
 
 function showConnectButton() {
@@ -334,14 +341,24 @@ wagmiConfig = wagmiAdapter.wagmiConfig;
       }
     }
 
-    // Load contract details
+    // Load contract details - try multiple paths
     try {
-      const response = await fetch('./contract.json');
+      let response;
+      try {
+        response = await fetch('./contract.json');
+      } catch {
+        response = await fetch('/contract.json');
+      }
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
       contractDetails = await response.json();
       contractAddress = contractDetails.address;
       console.log('Contract loaded:', contractAddress);
     } catch (e) { 
-      setStatus("Missing contract details. Ensure 'contract.json' is deployed.", 'error'); 
+      setStatus("Missing contract details. Ensure 'contract.json' is in the public folder.", 'error'); 
       console.error('Contract load error:', e); 
       mintBtn.disabled = true; 
       return;
