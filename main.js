@@ -21,7 +21,6 @@ const PROJECT_ID = 'e0dd881bad824ac3418617434a79f917';
 
 // DOM Elements
 const statusBox = document.getElementById('statusBox');
-const supplyBox = document.getElementById('totalSupply');
 const mintBtn = document.getElementById('mintBtn');
 const previewBtn = document.getElementById('previewBtn');
 const connectBtn = document.getElementById('connectBtn');
@@ -43,6 +42,20 @@ let modal = null;
 let isFarcasterEnvironment = false;
 let wagmiConfig = null;
 let userMintCount = 0;
+
+// Improved Farcaster Detection
+function isFarcasterEmbed() {
+  // Method 1: Check if in iframe
+  const isIframe = window.self !== window.top;
+  
+  // Method 2: Check for Farcaster-specific properties
+  const hasFarcasterContext = typeof sdk !== 'undefined' && sdk.context;
+  
+  // Method 3: Check user agent (some Farcaster clients)
+  const isFarcasterUA = /farcaster/i.test(navigator.userAgent);
+  
+  return isIframe || hasFarcasterContext || isFarcasterUA;
+}
 
 // Helper Functions
 function celebrateMint() {
@@ -197,14 +210,8 @@ function adjustInjectedSvg(container) {
 }
 
 async function updateSupply(initialLoad = false) {
-  if (initialLoad) {
-    supplyBox.innerHTML = '<span class="spinner"></span> Loading supply...';
-  }
-
   try {
-    if (!initialLoad) {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-    }
+    if (!contractDetails) return 0;
 
     const total = await readContract(wagmiConfig, {
       address: contractDetails.address,
@@ -214,7 +221,7 @@ async function updateSupply(initialLoad = false) {
 
     const totalNumber = Number(total);
 
-    // Update stats
+    // Update stats counter
     if (totalMintedStat) {
       const current = parseInt(totalMintedStat.textContent) || 0;
       if (current !== totalNumber) {
@@ -229,39 +236,24 @@ async function updateSupply(initialLoad = false) {
       remainingStat.textContent = '∞';
     }
 
-    if (MAX_SUPPLY > 0) {
-      supplyBox.textContent = `Minted: ${totalNumber}/${MAX_SUPPLY}`;
-
-      if (totalNumber >= MAX_SUPPLY) {
-        mintBtn.disabled = true;
-        mintBtn.innerText = "SOLD OUT";
-        mintBtn.title = "The maximum supply has been reached.";
-        supplyBox.className = "status-box status-error";
-        
-        if (!initialLoad) {
-          setStatus(`All ${MAX_SUPPLY} NFTs have been minted!`, "warning");
-        }
-      } else if (!initialLoad) {
-        mintBtn.disabled = false;
-        const celoPrice = Number(mintPriceWei) / 1e18;
-        mintBtn.innerText = mintPriceWei > 0n ? `MINT (${celoPrice.toFixed(4)} CELO)` : 'MINT';
-        mintBtn.title = '';
-        supplyBox.className = "status-box status-warning";
-      }
-    } else {
-      supplyBox.textContent = `Total Minted: ${totalNumber}`;
-      supplyBox.className = "status-box status-info";
+    // Check if sold out
+    if (MAX_SUPPLY > 0 && totalNumber >= MAX_SUPPLY) {
+      mintBtn.disabled = true;
+      mintBtn.innerText = "SOLD OUT";
+      mintBtn.title = "The maximum supply has been reached.";
       
       if (!initialLoad) {
-        mintBtn.disabled = false;
-        const celoPrice = Number(mintPriceWei) / 1e18;
-        mintBtn.innerText = mintPriceWei > 0n ? `MINT (${celoPrice.toFixed(4)} CELO)` : 'MINT';
+        setStatus(`All ${MAX_SUPPLY} NFTs have been minted!`, "warning");
       }
+    } else if (!initialLoad && mintBtn.innerText !== "SOLD OUT") {
+      mintBtn.disabled = false;
+      const celoPrice = Number(mintPriceWei) / 1e18;
+      mintBtn.innerText = mintPriceWei > 0n ? `MINT (${celoPrice.toFixed(4)} CELO)` : 'MINT';
+      mintBtn.title = '';
     }
 
     return total;
   } catch (e) {
-    supplyBox.textContent = "Total Minted: N/A";
     if (totalMintedStat) totalMintedStat.textContent = '--';
     if (remainingStat) remainingStat.textContent = '--';
     console.error('Error updating supply:', e);
@@ -270,13 +262,32 @@ async function updateSupply(initialLoad = false) {
 }
 
 function updateUserMintCount() {
-  const history = JSON.parse(sessionStorage.getItem('mintHistory') || '[]');
-  const userMints = history.filter(m => m.address === userAddress);
-  userMintCount = userMints.length;
-  
-  if (yourMintsStat) {
-    yourMintsStat.textContent = userMintCount;
+  if (!userAddress || !contractDetails) {
+    if (yourMintsStat) yourMintsStat.textContent = '--';
+    return;
   }
+  
+  // Get user's mint count from contract
+  readContract(wagmiConfig, {
+    address: contractDetails.address,
+    abi: contractDetails.abi,
+    functionName: 'balanceOf',
+    args: [userAddress]
+  }).then(balance => {
+    userMintCount = Number(balance);
+    if (yourMintsStat) {
+      yourMintsStat.textContent = userMintCount;
+    }
+  }).catch(err => {
+    console.error('Error fetching user balance:', err);
+    // Fallback to session storage
+    const history = JSON.parse(sessionStorage.getItem('mintHistory') || '[]');
+    const userMints = history.filter(m => m.address === userAddress);
+    userMintCount = userMints.length;
+    if (yourMintsStat) {
+      yourMintsStat.textContent = userMintCount;
+    }
+  });
 }
 
 function saveMintToHistory(tokenId, txHash) {
@@ -422,18 +433,25 @@ wagmiConfig = wagmiAdapter.wagmiConfig;
       previewBtn.classList.remove('hidden');
     }
 
-    // Check if running in Farcaster environment
-    try {
-      if (typeof sdk !== 'undefined' && sdk.context) {
-        isFarcasterEnvironment = true;
-        console.log('Running in Farcaster environment');
-      } else {
-        // Show Farcaster link banner when NOT in Farcaster
-        farcasterLinkBanner.classList.remove('hidden');
-      }
-    } catch (e) {
-      console.log('Not in Farcaster environment:', e);
-      // Show Farcaster link banner
+    // Improved Farcaster detection
+    isFarcasterEnvironment = isFarcasterEmbed();
+    
+    if (isFarcasterEnvironment) {
+      console.log('Running in Farcaster environment');
+      // Show external link banner IN Farcaster
+      farcasterLinkBanner.innerHTML = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+          <polyline points="15 3 21 3 21 9"></polyline>
+          <line x1="10" y1="14" x2="21" y2="3"></line>
+        </svg>
+        <span>Mint in browser:</span>
+        <a href="https://celo-nft-phi.vercel.app/" target="_blank" rel="noopener noreferrer">Open External Site</a>
+      `;
+      farcasterLinkBanner.classList.remove('hidden');
+    } else {
+      console.log('Not in Farcaster environment');
+      // Show Farcaster link banner OUTSIDE Farcaster
       farcasterLinkBanner.classList.remove('hidden');
     }
 
@@ -470,6 +488,12 @@ wagmiConfig = wagmiAdapter.wagmiConfig;
       adapters: [wagmiAdapter],
       networks: [celo],
       projectId: PROJECT_ID,
+      metadata: {
+        name: 'Celo NFT Mint',
+        description: 'Mint a free Celo NFT that shows the live CELO price!',
+        url: 'https://celo-nft-phi.vercel.app/',
+        icons: ['https://celo-nft-phi.vercel.app/icon.png']
+      },
       features: {
         analytics: true,
         email: false,
@@ -609,7 +633,6 @@ watchAccount(wagmiConfig, {
         
         previewBtn.classList.add('hidden');
         previewContainer.classList.add('hidden');
-        supplyBox.textContent = 'Connect wallet to see supply';
         if (totalMintedStat) totalMintedStat.textContent = '--';
         if (yourMintsStat) yourMintsStat.textContent = '--';
         if (remainingStat) remainingStat.textContent = '--';
