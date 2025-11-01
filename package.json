@@ -8,8 +8,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@farcaster/miniapp-sdk": "^0.2.2",
-    "@farcaster/miniapp-wagmi-connector": "^0.2.2",
+    "@farcaster/miniapp-sdk": "latest",
+    "@farcaster/miniapp-wagmi-connector": "latest",
     "@reown/appkit": "^1.8.2",
     "@reown/appkit-adapter-wagmi": "^1.8.2",
     "@wagmi/core": "^2.13.4",
