@@ -29,7 +29,12 @@ const previewContainer = document.getElementById('nft-preview-container');
 const externalBanner = document.getElementById('externalBanner');
 const externalBannerText = document.getElementById('externalBannerText');
 const txLinksContainer = document.getElementById('txLinksContainer');
+const celoscanLink = document.getElementById('celoscanLink');
 const shareBtn = document.getElementById('shareBtn');
+const nftActions = document.getElementById('nftActions');
+const downloadSVG = document.getElementById('downloadSVG');
+const downloadPNG = document.getElementById('downloadPNG');
+const downloadJSON = document.getElementById('downloadJSON');
 const totalMintedStat = document.getElementById('totalMintedStat');
 const yourMintsStat = document.getElementById('yourMintsStat');
 const remainingStat = document.getElementById('remainingStat');
@@ -340,7 +345,335 @@ async function shareNFT(tokenId, txHash) {
 }
 
 // Store last minted info for share button
-let lastMintedInfo = { tokenId: null, txHash: null };
+let lastMintedInfo = { tokenId: null, txHash: null, metadata: null, svg: null };
+
+// Tab Management
+function switchTab(tabName) {
+  // Hide all tabs
+  document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+  
+  // Show selected tab
+  const selectedTab = document.getElementById(`${tabName}Tab`);
+  const selectedBtn = document.querySelector(`[data-tab="${tabName}"]`);
+  
+  if (selectedTab) selectedTab.classList.add('active');
+  if (selectedBtn) selectedBtn.classList.add('active');
+  
+  // Load content for specific tabs
+  if (tabName === 'gallery') loadGallery();
+  if (tabName === 'leaderboard') loadLeaderboard();
+  if (tabName === 'activity') loadActivityFeed();
+  if (tabName === 'faq') updateFAQPrices();
+}
+
+// Gallery Functions
+async function loadGallery() {
+  const galleryGrid = document.getElementById('galleryGrid');
+  if (!userAddress || !contractDetails) {
+    galleryGrid.innerHTML = '<p class="empty-state">Connect your wallet to see your NFTs</p>';
+    return;
+  }
+  
+  galleryGrid.innerHTML = '<p class="loading-state">Loading your NFTs...</p>';
+  
+  try {
+    const balance = await readContract(wagmiConfig, {
+      address: contractDetails.address,
+      abi: contractDetails.abi,
+      functionName: 'balanceOf',
+      args: [userAddress]
+    });
+    
+    const count = Number(balance);
+    
+    if (count === 0) {
+      galleryGrid.innerHTML = '<p class="empty-state">You haven\'t minted any NFTs yet!<br>Go to the Mint tab to create your first one! 🎨</p>';
+      return;
+    }
+    
+    // Get all token IDs owned by user
+    const tokenIds = [];
+    for (let i = 0; i < count; i++) {
+      const tokenId = await readContract(wagmiConfig, {
+        address: contractDetails.address,
+        abi: contractDetails.abi,
+        functionName: 'tokenOfOwnerByIndex',
+        args: [userAddress, BigInt(i)]
+      });
+      tokenIds.push(Number(tokenId));
+    }
+    
+    // Fetch metadata for each
+    galleryGrid.innerHTML = '';
+    for (const tokenId of tokenIds) {
+      const item = await createGalleryItem(tokenId);
+      galleryGrid.appendChild(item);
+    }
+    
+  } catch (error) {
+    console.error('Gallery load error:', error);
+    galleryGrid.innerHTML = '<p class="empty-state">Error loading gallery. Make sure contract supports ERC721Enumerable.</p>';
+  }
+}
+
+async function createGalleryItem(tokenId) {
+  const item = document.createElement('div');
+  item.className = 'gallery-item';
+  
+  try {
+    const tokenURI = await readContract(wagmiConfig, {
+      address: contractAddress,
+      abi: contractDetails.abi,
+      functionName: 'tokenURI',
+      args: [BigInt(tokenId)]
+    });
+    
+    const base64Json = tokenURI.split(',')[1];
+    const metadata = JSON.parse(atob(decodeURIComponent(base64Json)));
+    
+    const rarityAttr = metadata.attributes?.find(attr => attr.trait_type === 'Rarity');
+    const priceAttr = metadata.attributes?.find(attr => attr.trait_type === 'CELO Price Snapshot');
+    
+    const rarity = rarityAttr?.value || 'Common';
+    const price = priceAttr?.value || 'N/A';
+    
+    // Create thumbnail (smaller version of SVG)
+    const base64Svg = metadata.image.split(',')[1];
+    const svgData = atob(decodeURIComponent(base64Svg));
+    
+    item.innerHTML = `
+      <div style="background:#000;border-radius:8px;padding:8px;">
+        ${svgData}
+      </div>
+      <div class="gallery-item-info">
+        <div>NFT #${tokenId}</div>
+        <div class="gallery-item-rarity ${rarity.toLowerCase()}">${rarity}</div>
+        <div style="font-size:0.8rem;margin-top:4px;">${price}</div>
+      </div>
+    `;
+    
+    item.onclick = () => viewNFTDetail(tokenId, metadata, svgData);
+    
+  } catch (error) {
+    item.innerHTML = `<p style="color:#f87171;">Error loading NFT #${tokenId}</p>`;
+  }
+  
+  return item;
+}
+
+function viewNFTDetail(tokenId, metadata, svg) {
+  switchTab('mint');
+  previewContainer.innerHTML = svg;
+  previewContainer.classList.remove('hidden');
+  adjustInjectedSvg(previewContainer);
+  
+  const rarityAttr = metadata.attributes?.find(attr => attr.trait_type === 'Rarity');
+  const rarity = rarityAttr?.value || 'Common';
+  previewContainer.classList.add('sparkles', rarity.toLowerCase());
+  
+  lastMintedInfo = { tokenId, metadata, svg };
+  nftActions.classList.remove('hidden');
+  previewBtn.classList.remove('hidden');
+  
+  const priceAttr = metadata.attributes?.find(attr => attr.trait_type === 'CELO Price Snapshot');
+  const price = priceAttr?.value || 'N/A';
+  previewBtn.textContent = `Preview NFT #${tokenId} (${rarity} / ${price})`;
+}
+
+// Leaderboard Functions
+async function loadLeaderboard() {
+  const leaderboardList = document.getElementById('leaderboardList');
+  leaderboardList.innerHTML = '<p class="loading-state">Loading leaderboard data...</p>';
+  
+  try {
+    // Get total supply
+    const total = await readContract(wagmiConfig, {
+      address: contractDetails.address,
+      abi: contractDetails.abi,
+      functionName: 'totalSupply'
+    });
+    
+    const totalNumber = Number(total);
+    
+    // Sample leaderboard (in production, you'd track this off-chain or in contract events)
+    const mockLeaderboard = [
+      { address: '0x1234...5678', mints: 15, legendaryCount: 3, avgPrice: 0.95 },
+      { address: '0x8765...4321', mints: 12, legendaryCount: 2, avgPrice: 0.87 },
+      { address: '0xabcd...ef01', mints: 10, legendaryCount: 1, avgPrice: 0.92 },
+      { address: '0x9876...5432', mints: 8, legendaryCount: 0, avgPrice: 0.78 },
+      { address: '0x4321...8765', mints: 7, legendaryCount: 1, avgPrice: 0.85 },
+    ];
+    
+    leaderboardList.innerHTML = '';
+    
+    mockLeaderboard.forEach((entry, index) => {
+      const item = document.createElement('div');
+      item.className = 'leaderboard-entry';
+      
+      let rankClass = '';
+      if (index === 0) rankClass = 'gold';
+      else if (index === 1) rankClass = 'silver';
+      else if (index === 2) rankClass = 'bronze';
+      
+      item.innerHTML = `
+        <div class="leaderboard-rank ${rankClass}">#${index + 1}</div>
+        <div class="leaderboard-info">
+          <div class="leaderboard-address">${entry.address}</div>
+          <div class="leaderboard-stats">
+            ${entry.mints} mints • ${entry.legendaryCount} legendary • Avg: ${entry.avgPrice}
+          </div>
+        </div>
+      `;
+      
+      leaderboardList.appendChild(item);
+    });
+    
+    leaderboardList.insertAdjacentHTML('beforeend', `
+      <p style="text-align:center;color:#9ca3af;margin-top:24px;font-size:0.9rem;">
+        📊 Showing top minters • Total minted: ${totalNumber}
+      </p>
+    `);
+    
+  } catch (error) {
+    console.error('Leaderboard error:', error);
+    leaderboardList.innerHTML = '<p class="empty-state">Error loading leaderboard</p>';
+  }
+}
+
+// Activity Feed Functions
+let feedPaused = false;
+let feedInterval = null;
+
+async function loadActivityFeed() {
+  const activityFeed = document.getElementById('activityFeed');
+  
+  if (!feedInterval) {
+    updateActivityFeed();
+    feedInterval = setInterval(() => {
+      if (!feedPaused) updateActivityFeed();
+    }, 10000); // Update every 10 seconds
+  }
+}
+
+async function updateActivityFeed() {
+  const activityFeed = document.getElementById('activityFeed');
+  
+  try {
+    const total = await readContract(wagmiConfig, {
+      address: contractDetails.address,
+      abi: contractDetails.abi,
+      functionName: 'totalSupply'
+    });
+    
+    const totalNumber = Number(total);
+    
+    // Sample recent mints (in production, get from contract events)
+    const recentMints = [
+      { address: '0x1234', tokenId: totalNumber, rarity: 'Legendary', price: '0.95', time: Date.now() - 30000 },
+      { address: '0x5678', tokenId: totalNumber - 1, rarity: 'Rare', price: '0.82', time: Date.now() - 120000 },
+      { address: '0xabcd', tokenId: totalNumber - 2, rarity: 'Common', price: '0.78', time: Date.now() - 300000 },
+      { address: '0xef01', tokenId: totalNumber - 3, rarity: 'Mythic', price: '1.23', time: Date.now() - 600000 },
+    ];
+    
+    activityFeed.innerHTML = '';
+    
+    recentMints.forEach(mint => {
+      const item = document.createElement('div');
+      item.className = `activity-item ${mint.rarity.toLowerCase()}`;
+      
+      const emoji = mint.rarity === 'Mythic' ? '🔥' : mint.rarity === 'Legendary' ? '⭐' : '✨';
+      const timeAgo = formatTimeAgo(mint.time);
+      
+      item.innerHTML = `
+        <div class="activity-text">
+          ${emoji} User ${mint.address}... minted ${mint.rarity} NFT #${mint.tokenId} at ${mint.price}!
+        </div>
+        <div class="activity-time">${timeAgo}</div>
+      `;
+      
+      activityFeed.appendChild(item);
+    });
+    
+  } catch (error) {
+    console.error('Activity feed error:', error);
+  }
+}
+
+function formatTimeAgo(timestamp) {
+  const seconds = Math.floor((Date.now() - timestamp) / 1000);
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours}h ago`;
+}
+
+function updateFAQPrices() {
+  const faqPrice = document.getElementById('faqMintPrice');
+  if (faqPrice && mintPriceWei > 0n) {
+    const celoPrice = Number(mintPriceWei) / 1e18;
+    faqPrice.textContent = `${celoPrice.toFixed(4)}`;
+  } else if (faqPrice) {
+    faqPrice.textContent = 'FREE';
+  }
+}
+
+// Download Functions
+function downloadSVGFile() {
+  if (!lastMintedInfo.svg) return;
+  
+  const blob = new Blob([lastMintedInfo.svg], { type: 'image/svg+xml' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `celo-nft-${lastMintedInfo.tokenId}.svg`;
+  a.click();
+  URL.revokeObjectURL(url);
+  setStatus('✅ SVG downloaded!', 'success');
+}
+
+function downloadPNGFile() {
+  if (!lastMintedInfo.svg) return;
+  
+  const canvas = document.createElement('canvas');
+  canvas.width = 500;
+  canvas.height = 500;
+  const ctx = canvas.getContext('2d');
+  
+  const img = new Image();
+  const svgBlob = new Blob([lastMintedInfo.svg], { type: 'image/svg+xml' });
+  const url = URL.createObjectURL(svgBlob);
+  
+  img.onload = () => {
+    ctx.drawImage(img, 0, 0);
+    canvas.toBlob(blob => {
+      const pngUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = pngUrl;
+      a.download = `celo-nft-${lastMintedInfo.tokenId}.png`;
+      a.click();
+      URL.revokeObjectURL(pngUrl);
+      URL.revokeObjectURL(url);
+      setStatus('✅ PNG downloaded!', 'success');
+    });
+  };
+  
+  img.src = url;
+}
+
+function downloadJSONFile() {
+  if (!lastMintedInfo.metadata) return;
+  
+  const blob = new Blob([JSON.stringify(lastMintedInfo.metadata, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `celo-nft-${lastMintedInfo.tokenId}-metadata.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  setStatus('✅ Metadata downloaded!', 'success');
+}
 
 async function previewNft(tokenId) {
   if (!contractDetails) return;
@@ -353,6 +686,7 @@ async function previewNft(tokenId) {
   previewContainer.classList.add('hidden');
   previewContainer.innerHTML = '';
   previewContainer.classList.remove("sparkles", ...ALL_RARITY_CLASSES);
+  nftActions.classList.add('hidden');
 
   try {
     const tokenURI = await readContract(wagmiConfig, {
@@ -393,8 +727,15 @@ async function previewNft(tokenId) {
     const rarityClassLower = rarityText.toLowerCase();
     previewContainer.classList.add(rarityClassLower);
 
-    const buttonLabel = `Preview NFT #${tokenId} (${rarityText} / $${priceText})`;
+    const buttonLabel = `Preview NFT #${tokenId} (${rarityText} / ${priceText})`;
     previewBtn.innerText = buttonLabel;
+    
+    // Store for downloads
+    lastMintedInfo.metadata = metadata;
+    lastMintedInfo.svg = safeSvg;
+    
+    // Show download buttons
+    nftActions.classList.remove('hidden');
 
   } catch (e) {
     setStatus("Failed to load NFT preview. Check console for details.", 'error'); 
@@ -716,22 +1057,18 @@ mintBtn.addEventListener('click', async () => {
     
     setStatus("🎉 Mint Successful!", "success");
     
-    // Store mint info for share button
-    lastMintedInfo = { tokenId: nextTokenId, txHash: hash };
+    // Store mint info for share button and downloads
+    lastMintedInfo.tokenId = nextTokenId;
+    lastMintedInfo.txHash = hash;
     
-    // Show transaction links in separate container (stays visible)
+    // Show transaction link and share button (side by side, persistent)
     if (contractAddress) {
       const celoscanTokenUrl = `https://celoscan.io/token/${contractAddress}?a=${nextTokenId}`;
-      const celoscanTxUrl = `https://celoscan.io/tx/${hash}`;
-
-      txLinksContainer.innerHTML = `
-        <a href="${celoscanTxUrl}" target="_blank" rel="noopener noreferrer">View Transaction</a>
-        <a href="${celoscanTokenUrl}" target="_blank" rel="noopener noreferrer">View on Celoscan</a>
-      `;
-      txLinksContainer.classList.remove('hidden');
       
-      // Show share button (persistent until next mint or refresh)
-      shareBtn.classList.remove('hidden');
+      celoscanLink.href = celoscanTokenUrl;
+      celoscanLink.style.display = 'block';
+      shareBtn.style.display = 'block';
+      txLinksContainer.classList.remove('hidden');
     }
 
     lastMintedTokenId = nextTokenId;
@@ -799,3 +1136,79 @@ shareBtn.addEventListener('click', async () => {
     setStatus('No NFT to share. Please mint first!', 'warning');
   }
 });
+
+// Tab Navigation
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const tabName = btn.getAttribute('data-tab');
+    switchTab(tabName);
+  });
+});
+
+// Leaderboard sub-tabs
+document.querySelectorAll('.lb-tab-btn').forEach(btn => {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.lb-tab-btn').forEach(b => b.classList.remove('active'));
+    this.classList.add('active');
+    loadLeaderboard();
+  });
+});
+
+document.querySelectorAll('.lb-cat-btn').forEach(btn => {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.lb-cat-btn').forEach(b => b.classList.remove('active'));
+    this.classList.add('active');
+    loadLeaderboard();
+  });
+});
+
+// Activity Feed Controls
+const pauseFeedBtn = document.getElementById('pauseFeed');
+const refreshFeedBtn = document.getElementById('refreshFeed');
+
+if (pauseFeedBtn) {
+  pauseFeedBtn.addEventListener('click', () => {
+    feedPaused = !feedPaused;
+    pauseFeedBtn.textContent = feedPaused ? '▶️ Resume' : '⏸️ Pause';
+  });
+}
+
+if (refreshFeedBtn) {
+  refreshFeedBtn.addEventListener('click', () => {
+    updateActivityFeed();
+  });
+}
+
+// Gallery Filters
+const rarityFilter = document.getElementById('rarityFilter');
+const sortBy = document.getElementById('sortBy');
+
+if (rarityFilter) {
+  rarityFilter.addEventListener('change', () => {
+    // Filter gallery items
+    const items = document.querySelectorAll('.gallery-item');
+    const selectedRarity = rarityFilter.value;
+    
+    items.forEach(item => {
+      if (selectedRarity === 'all') {
+        item.style.display = 'block';
+      } else {
+        const rarityEl = item.querySelector('.gallery-item-rarity');
+        const itemRarity = rarityEl?.textContent.toLowerCase();
+        item.style.display = itemRarity === selectedRarity ? 'block' : 'none';
+      }
+    });
+  });
+}
+
+if (sortBy) {
+  sortBy.addEventListener('change', () => {
+    // Re-sort gallery
+    loadGallery();
+  });
+}
+
+// Download Buttons
+downloadSVG.addEventListener('click', downloadSVGFile);
+downloadPNG.addEventListener('click', downloadPNGFile);
+downloadJSON.addEventListener('click', downloadJSONFile);
