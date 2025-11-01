@@ -349,16 +349,30 @@ let lastMintedInfo = { tokenId: null, txHash: null, metadata: null, svg: null };
 
 // Tab Management
 function switchTab(tabName) {
-  // Hide all tabs
-  document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
-  document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+  console.log('Switching to tab:', tabName);
+  
+  // Hide all tab contents
+  document.querySelectorAll('.tab-content').forEach(tab => {
+    tab.classList.remove('active');
+    tab.style.display = 'none';
+  });
+  
+  // Remove active from all buttons
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.classList.remove('active');
+  });
   
   // Show selected tab
   const selectedTab = document.getElementById(`${tabName}Tab`);
   const selectedBtn = document.querySelector(`[data-tab="${tabName}"]`);
   
-  if (selectedTab) selectedTab.classList.add('active');
-  if (selectedBtn) selectedBtn.classList.add('active');
+  if (selectedTab) {
+    selectedTab.classList.add('active');
+    selectedTab.style.display = 'block';
+  }
+  if (selectedBtn) {
+    selectedBtn.classList.add('active');
+  }
   
   // Load content for specific tabs
   if (tabName === 'gallery') loadGallery();
@@ -757,6 +771,26 @@ async function previewNft(tokenId) {
   }
 })();
 
+// Initialize Tab Navigation Immediately
+document.addEventListener('DOMContentLoaded', () => {
+  console.log('DOM loaded, initializing tabs');
+  
+  // Make sure mint tab is visible by default
+  const mintTab = document.getElementById('mintTab');
+  if (mintTab) {
+    mintTab.style.display = 'block';
+  }
+  
+  // Setup tab click handlers
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tabName = btn.getAttribute('data-tab');
+      console.log('Tab clicked:', tabName);
+      switchTab(tabName);
+    });
+  });
+});
+
 // Setup Wagmi Config with Reown AppKit
 const wagmiAdapter = new WagmiAdapter({
   networks: [celo],
@@ -1066,9 +1100,9 @@ mintBtn.addEventListener('click', async () => {
       const celoscanTokenUrl = `https://celoscan.io/token/${contractAddress}?a=${nextTokenId}`;
       
       celoscanLink.href = celoscanTokenUrl;
-      celoscanLink.style.display = 'block';
-      shareBtn.style.display = 'block';
       txLinksContainer.classList.remove('hidden');
+      
+      console.log('Showing tx links:', celoscanTokenUrl);
     }
 
     lastMintedTokenId = nextTokenId;
@@ -1144,6 +1178,18 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     switchTab(tabName);
   });
 });
+
+// Make sure this runs after DOM is ready
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const tabName = btn.getAttribute('data-tab');
+        switchTab(tabName);
+      });
+    });
+  });
+}
 
 // Leaderboard sub-tabs
 document.querySelectorAll('.lb-tab-btn').forEach(btn => {
