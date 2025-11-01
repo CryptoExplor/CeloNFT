@@ -236,29 +236,355 @@
       padding: 0 10px;
     }
     
-    .tx-links-container a {
+    .tx-link {
       color: #fff;
       background: linear-gradient(135deg, #1e40af, #3b82f6);
-      padding: 10px 20px;
+      padding: 12px 24px;
       border-radius: 8px;
       text-decoration: none;
-      font-size: 0.9rem;
+      font-size: 0.95rem;
       font-weight: 600;
       transition: transform 0.2s, box-shadow 0.2s;
       box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+      border: none;
+      cursor: pointer;
+      font-family: 'Orbitron', sans-serif;
+      flex: 1;
+      min-width: 150px;
+      text-align: center;
     }
     
-    .tx-links-container a:hover {
+    .tx-link:hover {
       transform: translateY(-2px);
       box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
     }
     
-    .share-button {
-      background: linear-gradient(90deg, #8b5cf6, #ec4899) !important;
-      padding: 0.75rem 1.5rem !important;
-      font-size: 1rem !important;
-      margin-top: 8px;
+    .share-link {
+      background: linear-gradient(135deg, #8b5cf6, #ec4899) !important;
+      box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);
+    }
+    
+    .share-link:hover {
+      box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4);
+    }
+    
+    .nft-actions {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      margin: 12px auto;
+      max-width: 390px;
+    }
+    
+    .action-btn-small {
+      background: #1a1d23;
+      border: 1px solid #49dfb5;
+      color: #49dfb5;
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: 'Orbitron', sans-serif;
+    }
+    
+    .action-btn-small:hover {
+      background: #49dfb5;
+      color: #0f0f0f;
+      transform: scale(1.05);
+    }
+    
+    /* Tabs */
+    .tabs-container {
+      display: flex;
+      gap: 8px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin: 24px auto 16px;
+      max-width: 90%;
+      padding: 0 10px;
+    }
+    
+    .tab-btn {
+      background: #1a1d23;
+      border: 2px solid #2a2d33;
+      color: #9ca3af;
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: 'Orbitron', sans-serif;
+      font-weight: 600;
+    }
+    
+    .tab-btn:hover {
+      border-color: #49dfb5;
+      color: #49dfb5;
+    }
+    
+    .tab-btn.active {
+      background: linear-gradient(135deg, #49dfb5, #7dd3fc);
+      color: #0f0f0f;
+      border-color: #49dfb5;
+    }
+    
+    .tab-contents {
+      width: 100%;
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 0 16px;
+    }
+    
+    .tab-content {
+      display: none;
+      animation: fadeIn 0.3s ease-in;
+    }
+    
+    .tab-content.active {
+      display: block;
+    }
+    
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    
+    /* Gallery */
+    .gallery-filters {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      margin: 20px 0;
+      flex-wrap: wrap;
+    }
+    
+    .filter-select {
+      background: #1a1d23;
+      color: white;
+      border: 1px solid #2a2d33;
+      padding: 10px 16px;
+      border-radius: 8px;
+      font-family: 'Orbitron', sans-serif;
+      cursor: pointer;
+      min-width: 150px;
+    }
+    
+    .gallery-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 16px;
+      margin-top: 24px;
+    }
+    
+    .gallery-item {
+      background: #1a1d23;
+      border: 2px solid #2a2d33;
+      border-radius: 12px;
+      padding: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    
+    .gallery-item:hover {
+      border-color: #49dfb5;
+      transform: translateY(-4px);
+      box-shadow: 0 8px 16px rgba(73, 223, 181, 0.2);
+    }
+    
+    .gallery-item img {
+      width: 100%;
+      border-radius: 8px;
+      margin-bottom: 8px;
+    }
+    
+    .gallery-item-info {
+      font-size: 0.85rem;
+      color: #c3cfe8;
+    }
+    
+    .gallery-item-rarity {
+      font-weight: bold;
+      margin-top: 4px;
+    }
+    
+    .gallery-item-rarity.common { color: #bbb; }
+    .gallery-item-rarity.rare { color: #2196f3; }
+    .gallery-item-rarity.legendary { color: gold; }
+    .gallery-item-rarity.mythic { color: crimson; }
+    
+    /* Leaderboard */
+    .leaderboard-tabs, .leaderboard-categories {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      margin: 16px 0;
+      flex-wrap: wrap;
+    }
+    
+    .lb-tab-btn, .lb-cat-btn {
+      background: #1a1d23;
+      border: 1px solid #2a2d33;
+      color: #9ca3af;
+      padding: 8px 20px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: 'Orbitron', sans-serif;
+    }
+    
+    .lb-tab-btn.active, .lb-cat-btn.active {
+      background: #49dfb5;
+      color: #0f0f0f;
+      border-color: #49dfb5;
+    }
+    
+    .leaderboard-list {
+      margin-top: 24px;
+    }
+    
+    .leaderboard-entry {
+      background: #1a1d23;
+      border: 1px solid #2a2d33;
+      border-radius: 8px;
+      padding: 16px;
       margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    
+    .leaderboard-rank {
+      font-size: 1.5rem;
+      font-weight: bold;
+      color: #49dfb5;
+      min-width: 40px;
+    }
+    
+    .leaderboard-rank.gold { color: gold; }
+    .leaderboard-rank.silver { color: silver; }
+    .leaderboard-rank.bronze { color: #cd7f32; }
+    
+    .leaderboard-info {
+      flex: 1;
+    }
+    
+    .leaderboard-address {
+      font-weight: bold;
+      color: #c3cfe8;
+    }
+    
+    .leaderboard-stats {
+      font-size: 0.9rem;
+      color: #9ca3af;
+      margin-top: 4px;
+    }
+    
+    /* Activity Feed */
+    .feed-controls {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      margin: 16px 0;
+    }
+    
+    .feed-btn {
+      background: #1a1d23;
+      border: 1px solid #2a2d33;
+      color: #49dfb5;
+      padding: 8px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: 'Orbitron', sans-serif;
+    }
+    
+    .feed-btn:hover {
+      background: #2a2d33;
+    }
+    
+    .activity-feed {
+      max-height: 500px;
+      overflow-y: auto;
+      margin-top: 16px;
+    }
+    
+    .activity-item {
+      background: #1a1d23;
+      border-left: 4px solid #49dfb5;
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin-bottom: 12px;
+      animation: slideInLeft 0.3s ease-out;
+    }
+    
+    @keyframes slideInLeft {
+      from { transform: translateX(-20px); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+    
+    .activity-item.legendary { border-left-color: gold; }
+    .activity-item.mythic { border-left-color: crimson; }
+    
+    .activity-text {
+      color: #c3cfe8;
+      margin-bottom: 4px;
+    }
+    
+    .activity-time {
+      font-size: 0.8rem;
+      color: #9ca3af;
+    }
+    
+    /* FAQ */
+    .faq-list {
+      margin-top: 20px;
+    }
+    
+    .faq-item {
+      background: #1a1d23;
+      border: 1px solid #2a2d33;
+      border-radius: 8px;
+      margin-bottom: 12px;
+      overflow: hidden;
+    }
+    
+    .faq-item summary {
+      padding: 16px;
+      cursor: pointer;
+      font-weight: 600;
+      color: #c3cfe8;
+      user-select: none;
+      transition: background 0.2s;
+    }
+    
+    .faq-item summary:hover {
+      background: #2a2d33;
+    }
+    
+    .faq-item p {
+      padding: 0 16px 16px 16px;
+      color: #9ca3af;
+      line-height: 1.6;
+    }
+    
+    .faq-item[open] summary {
+      background: #2a2d33;
+      border-bottom: 1px solid #3a3d43;
+    }
+    
+    .empty-state, .loading-state {
+      text-align: center;
+      color: #9ca3af;
+      padding: 40px 20px;
+      font-size: 1rem;
+    }
+    
+    .tab-content h2 {
+      text-align: center;
+      margin-bottom: 20px;
+      font-size: 1.8rem;
+      color: #49dfb5;
     }
     
     .stats-grid {
@@ -474,21 +800,161 @@
   <!-- Preview Button -->
   <button class="action-button preview-button hidden" id="previewBtn">Preview NFT</button>
 
+  <!-- Tabs Navigation -->
+  <div id="tabsContainer" class="tabs-container">
+    <button class="tab-btn active" data-tab="mint">🎨 Mint</button>
+    <button class="tab-btn" data-tab="gallery">🖼️ Gallery</button>
+    <button class="tab-btn" data-tab="leaderboard">🏆 Leaderboard</button>
+    <button class="tab-btn" data-tab="activity">📡 Live Feed</button>
+    <button class="tab-btn" data-tab="faq">❓ FAQ</button>
+  </div>
+
+  <!-- Tab Contents -->
+  <div id="tabContents" class="tab-contents">
+    
+    <!-- Mint Tab (Default - already above) -->
+    <div id="mintTab" class="tab-content active"></div>
+
+    <!-- Gallery Tab -->
+    <div id="galleryTab" class="tab-content hidden">
+      <h2>Your NFT Gallery</h2>
+      <div class="gallery-filters">
+        <select id="rarityFilter" class="filter-select">
+          <option value="all">All Rarities</option>
+          <option value="common">Common</option>
+          <option value="rare">Rare</option>
+          <option value="legendary">Legendary</option>
+          <option value="mythic">Mythic</option>
+        </select>
+        <select id="sortBy" class="filter-select">
+          <option value="newest">Newest First</option>
+          <option value="oldest">Oldest First</option>
+          <option value="price-high">Highest Price</option>
+          <option value="price-low">Lowest Price</option>
+        </select>
+      </div>
+      <div id="galleryGrid" class="gallery-grid">
+        <p class="empty-state">Connect your wallet to see your NFTs</p>
+      </div>
+    </div>
+
+    <!-- Leaderboard Tab -->
+    <div id="leaderboardTab" class="tab-content hidden">
+      <h2>🏆 Leaderboard</h2>
+      <div class="leaderboard-tabs">
+        <button class="lb-tab-btn active" data-period="all">All Time</button>
+        <button class="lb-tab-btn" data-period="week">This Week</button>
+      </div>
+      <div class="leaderboard-categories">
+        <button class="lb-cat-btn active" data-category="quantity">Most Mints</button>
+        <button class="lb-cat-btn" data-category="rarity">Rarest Collection</button>
+        <button class="lb-cat-btn" data-category="price">Best Prices</button>
+      </div>
+      <div id="leaderboardList" class="leaderboard-list">
+        <p class="loading-state">Loading leaderboard...</p>
+      </div>
+    </div>
+
+    <!-- Live Activity Feed Tab -->
+    <div id="activityTab" class="tab-content hidden">
+      <h2>📡 Live Mint Feed</h2>
+      <div class="feed-controls">
+        <button id="pauseFeed" class="feed-btn">⏸️ Pause</button>
+        <button id="refreshFeed" class="feed-btn">🔄 Refresh</button>
+      </div>
+      <div id="activityFeed" class="activity-feed">
+        <p class="loading-state">Loading recent mints...</p>
+      </div>
+    </div>
+
+    <!-- FAQ Tab -->
+    <div id="faqTab" class="tab-content hidden">
+      <h2>❓ Frequently Asked Questions</h2>
+      <div class="faq-list">
+        <details class="faq-item">
+          <summary>How much does it cost to mint?</summary>
+          <p>The current mint price is <span id="faqMintPrice">loading...</span> CELO plus gas fees (usually ~$0.01-0.02). The mint price is set by the contract owner.</p>
+        </details>
+        
+        <details class="faq-item">
+          <summary>What makes each NFT unique?</summary>
+          <p>Each NFT captures the live CELO price at the exact moment of minting! The rarity is determined by the price - rare prices get legendary or mythic ratings. Your NFT is a snapshot of crypto history!</p>
+        </details>
+        
+        <details class="faq-item">
+          <summary>How does rarity work?</summary>
+          <p>Rarity is based on the CELO price when you mint:<br>
+          • Common: Most frequent prices<br>
+          • Rare: Unusual price ranges<br>
+          • Legendary: Very rare prices<br>
+          • Mythic: Extremely rare, historic prices</p>
+        </details>
+        
+        <details class="faq-item">
+          <summary>Can I sell or transfer my NFT?</summary>
+          <p>Yes! Your NFT is a standard ERC-721 token on Celo blockchain. You can trade it on any NFT marketplace that supports Celo, transfer it to other wallets, or hold it as a collectible.</p>
+        </details>
+        
+        <details class="faq-item">
+          <summary>What network is this on?</summary>
+          <p>This NFT collection is on <strong>Celo Mainnet</strong>. Make sure your wallet is connected to Celo network. Gas fees are very low (usually under $0.02)!</p>
+        </details>
+        
+        <details class="faq-item">
+          <summary>How many can I mint?</summary>
+          <p>You can mint as many as you want! Each mint captures the current CELO price, so minting at different times gives you different NFTs. Watch the price chart and mint when you see an interesting price!</p>
+        </details>
+        
+        <details class="faq-item">
+          <summary>What wallets are supported?</summary>
+          <p>We support all major Web3 wallets including MetaMask, Valora (Celo's native wallet), Rainbow, Coinbase Wallet, WalletConnect, and more through Reown AppKit.</p>
+        </details>
+        
+        <details class="faq-item">
+          <summary>Is this on Farcaster?</summary>
+          <p>Yes! You can mint directly in the Farcaster miniapp or on our standalone website. Your NFTs are the same on both - they're all on Celo blockchain.</p>
+        </details>
+        
+        <details class="faq-item">
+          <summary>Can I download my NFT?</summary>
+          <p>Absolutely! After minting, use the download buttons to save your NFT as SVG (vector), PNG (image), or JSON (metadata). Your NFT is fully on-chain, so you truly own it!</p>
+        </details>
+        
+        <details class="faq-item">
+          <summary>What happens if minting fails?</summary>
+          <p>Common issues:<br>
+          • Not enough CELO: Add funds to your wallet<br>
+          • Wrong network: Switch to Celo Mainnet<br>
+          • Gas too low: Increase gas limit<br>
+          • Transaction stuck: Check your wallet for pending transactions</p>
+        </details>
+      </div>
+    </div>
+
+  </div>
+
   <!-- Status Box -->
   <div id="statusBox" class="status-box" aria-live="polite"></div>
 
-  <!-- Transaction Links Container -->
-  <div id="txLinksContainer" class="tx-links-container hidden"></div>
-
-  <!-- Share Button (Separate, Persistent) -->
-  <button class="action-button share-button hidden" id="shareBtn">🔗 Share My NFT</button>
+  <!-- Transaction Links Container (Side by Side) -->
+  <div id="txLinksContainer" class="tx-links-container hidden">
+    <a id="celoscanLink" href="#" target="_blank" rel="noopener noreferrer" class="tx-link">View on Celoscan</a>
+    <button id="shareBtn" class="tx-link share-link">🔗 Share My NFT</button>
+  </div>
 
   <!-- NFT SVG Preview -->
   <div id="nft-preview-container" class="hidden"></div>
 
+  <!-- Download & Actions -->
+  <div id="nftActions" class="nft-actions hidden">
+    <button id="downloadSVG" class="action-btn-small">📥 SVG</button>
+    <button id="downloadPNG" class="action-btn-small">📥 PNG</button>
+    <button id="downloadJSON" class="action-btn-small">📄 JSON</button>
+  </div>
+
   <!-- Footer -->
   <footer>
-    <a href="https://farcaster.com/dare1.eth" target="_blank" rel="noopener noreferrer" aria-label="Farcaster">
+    <a href="https://warpcast.com/dare1.eth" target="_blank" rel="noopener noreferrer" aria-label="Farcaster">
       <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 1000 1000" fill="none">
         <path d="M257.778 155.556H742.222V844.445H671.111V528.889H670.414C662.554 441.677 589.258 373.333 500 373.333C410.742 373.333 337.446 441.677 329.586 528.889H328.889V844.445H257.778V155.556Z" fill="white"/>
         <path d="M128.889 253.333L157.778 351.111H182.222V746.667C169.315 746.667 158.889 757.093 158.889 770V822.222H141.111V746.667H128.889V253.333Z" fill="white"/>
