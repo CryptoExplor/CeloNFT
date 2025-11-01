@@ -26,7 +26,10 @@ const previewBtn = document.getElementById('previewBtn');
 const connectBtn = document.getElementById('connectBtn');
 const userAddrBox = document.getElementById('userAddressBox');
 const previewContainer = document.getElementById('nft-preview-container');
-const farcasterLinkBanner = document.getElementById('farcasterLinkBanner');
+const externalBanner = document.getElementById('externalBanner');
+const externalBannerText = document.getElementById('externalBannerText');
+const txLinksContainer = document.getElementById('txLinksContainer');
+const shareBtn = document.getElementById('shareBtn');
 const totalMintedStat = document.getElementById('totalMintedStat');
 const yourMintsStat = document.getElementById('yourMintsStat');
 const remainingStat = document.getElementById('remainingStat');
@@ -332,13 +335,12 @@ async function shareNFT(tokenId, txHash) {
     await navigator.clipboard.writeText(`${text}\n${url}`);
     setStatus('✅ Link copied! Share it with your friends! 📋', 'success');
   } catch (e) {
-    // Final fallback: Show text to copy
-    const shareText = document.createElement('div');
-    shareText.style.cssText = 'margin-top: 12px; padding: 12px; background: #1a1d23; border-radius: 8px; font-size: 0.85rem; word-break: break-all;';
-    shareText.textContent = `${text}\n${url}`;
-    statusBox.appendChild(shareText);
+    setStatus('Link: ' + url, 'info');
   }
 }
+
+// Store last minted info for share button
+let lastMintedInfo = { tokenId: null, txHash: null };
 
 async function previewNft(tokenId) {
   if (!contractDetails) return;
@@ -438,21 +440,16 @@ wagmiConfig = wagmiAdapter.wagmiConfig;
     
     if (isFarcasterEnvironment) {
       console.log('Running in Farcaster environment');
-      // Show external link banner IN Farcaster
-      farcasterLinkBanner.innerHTML = `
-        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
-          <polyline points="15 3 21 3 21 9"></polyline>
-          <line x1="10" y1="14" x2="21" y2="3"></line>
-        </svg>
-        <span>Mint in browser:</span>
-        <a href="https://celo-nft-phi.vercel.app/" target="_blank" rel="noopener noreferrer">Open External Site</a>
-      `;
-      farcasterLinkBanner.classList.remove('hidden');
+      // Show "Mint in browser" banner IN Farcaster
+      externalBanner.href = 'https://celo-nft-phi.vercel.app/';
+      externalBannerText.textContent = 'Mint in browser';
+      externalBanner.classList.remove('hidden');
     } else {
       console.log('Not in Farcaster environment');
-      // Show Farcaster link banner OUTSIDE Farcaster
-      farcasterLinkBanner.classList.remove('hidden');
+      // Show "Mint in Farcaster" banner OUTSIDE Farcaster
+      externalBanner.href = 'https://farcaster.xyz/miniapps/Tip8ngTAKnHC/celo-nft';
+      externalBannerText.textContent = 'Mint in Farcaster';
+      externalBanner.classList.remove('hidden');
     }
 
     // Try Farcaster connection first
@@ -676,6 +673,9 @@ mintBtn.addEventListener('click', async () => {
     previewBtn.classList.add('hidden');
     previewContainer.classList.add('hidden');
     previewContainer.classList.remove('sparkles', ...ALL_RARITY_CLASSES);
+    txLinksContainer.classList.add('hidden');
+    txLinksContainer.innerHTML = '';
+    shareBtn.classList.add('hidden');
 
     mintBtn.disabled = true;
     mintBtn.innerHTML = '<span class="spinner"></span> Minting...';
@@ -714,39 +714,24 @@ mintBtn.addEventListener('click', async () => {
     // 🎉 CELEBRATE WITH CONFETTI!
     celebrateMint();
     
-    setStatus("Mint Successful! ", "success");
+    setStatus("🎉 Mint Successful!", "success");
     
+    // Store mint info for share button
+    lastMintedInfo = { tokenId: nextTokenId, txHash: hash };
+    
+    // Show transaction links in separate container (stays visible)
     if (contractAddress) {
       const celoscanTokenUrl = `https://celoscan.io/token/${contractAddress}?a=${nextTokenId}`;
       const celoscanTxUrl = `https://celoscan.io/tx/${hash}`;
 
-      const txLink = document.createElement('a');
-      txLink.href = celoscanTxUrl;
-      txLink.target = '_blank';
-      txLink.rel = 'noopener noreferrer';
-      txLink.textContent = 'View Tx';
-      txLink.style.cssText = 'color:#fff;text-decoration:underline;margin-left:8px;';
-
-      const tokenLink = document.createElement('a');
-      tokenLink.href = celoscanTokenUrl;
-      tokenLink.target = '_blank';
-      tokenLink.rel = 'noopener noreferrer';
-      tokenLink.textContent = 'View on Celoscan';
-      tokenLink.style.cssText = 'color:#fff;text-decoration:underline;margin-left:8px;';
-
-      statusBox.appendChild(txLink);
-      statusBox.insertAdjacentText('beforeend', ' | ');
-      statusBox.appendChild(tokenLink);
+      txLinksContainer.innerHTML = `
+        <a href="${celoscanTxUrl}" target="_blank" rel="noopener noreferrer">View Transaction</a>
+        <a href="${celoscanTokenUrl}" target="_blank" rel="noopener noreferrer">View on Celoscan</a>
+      `;
+      txLinksContainer.classList.remove('hidden');
       
-      // Add share button
-      const shareBtn = document.createElement('button');
-      shareBtn.className = 'action-button';
-      shareBtn.style.cssText = 'background: linear-gradient(90deg, #8b5cf6, #ec4899); padding: 0.6rem 1.2rem; font-size: 0.9rem; margin-top: 12px;';
-      shareBtn.innerHTML = '🔗 Share My NFT';
-      shareBtn.onclick = () => shareNFT(nextTokenId, hash);
-      
-      statusBox.appendChild(document.createElement('br'));
-      statusBox.appendChild(shareBtn);
+      // Show share button (persistent until next mint or refresh)
+      shareBtn.classList.remove('hidden');
     }
 
     lastMintedTokenId = nextTokenId;
@@ -779,6 +764,7 @@ mintBtn.addEventListener('click', async () => {
     previewContainer.classList.remove('sparkles', ...ALL_RARITY_CLASSES);
     sessionStorage.removeItem('lastMintedTokenId');
     lastMintedTokenId = null;
+    lastMintedInfo = { tokenId: null, txHash: null };
   } finally {
     if (mintBtn.innerText !== "SOLD OUT") {
       mintBtn.disabled = false;
@@ -799,5 +785,17 @@ previewBtn.addEventListener('click', async () => {
   } catch (error) {
     console.error('Preview error:', error);
     setStatus('Failed to load preview.', 'error');
+  }
+});
+
+// Share Button Handler (Persistent)
+shareBtn.addEventListener('click', async () => {
+  if (lastMintedInfo.tokenId && lastMintedInfo.txHash) {
+    await shareNFT(lastMintedInfo.tokenId, lastMintedInfo.txHash);
+  } else if (lastMintedTokenId) {
+    // Fallback to session stored token
+    await shareNFT(lastMintedTokenId, null);
+  } else {
+    setStatus('No NFT to share. Please mint first!', 'warning');
   }
 });
