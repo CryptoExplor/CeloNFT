@@ -878,60 +878,83 @@
       <div class="faq-list">
         <details class="faq-item">
           <summary>How much does it cost to mint?</summary>
-          <p>The current mint price is <span id="faqMintPrice">loading...</span> CELO plus gas fees (usually ~$0.01-0.02). The mint price is set by the contract owner.</p>
+          <p>The current mint price is <span id="faqMintPrice">loading...</span> CELO plus gas fees (usually ~$0.01-0.02). The mint price is set by the contract owner and can be updated.</p>
         </details>
         
         <details class="faq-item">
           <summary>What makes each NFT unique?</summary>
-          <p>Each NFT captures the live CELO price at the exact moment of minting! The rarity is determined by the price - rare prices get legendary or mythic ratings. Your NFT is a snapshot of crypto history!</p>
+          <p>Each NFT captures the live CELO price at the exact moment of minting! The price snapshot comes from CoinGecko API and is passed to the contract during minting. The rarity is calculated fully on-chain using block.prevrandao and other block data.</p>
         </details>
         
         <details class="faq-item">
           <summary>How does rarity work?</summary>
-          <p>Rarity is based on the CELO price when you mint:<br>
-          • Common: Most frequent prices<br>
-          • Rare: Unusual price ranges<br>
-          • Legendary: Very rare prices<br>
-          • Mythic: Extremely rare, historic prices</p>
+          <p>Rarity is determined 100% on-chain during minting using blockchain randomness:<br><br>
+          • <strong>Mythic</strong>: 2% chance (super rare!) 🔥<br>
+          • <strong>Legendary</strong>: 8% chance ⭐<br>
+          • <strong>Rare</strong>: 30% chance 💎<br>
+          • <strong>Common</strong>: 60% chance ✨<br><br>
+          The rarity is permanently stored on-chain in your NFT's tokenTraits.</p>
+        </details>
+        
+        <details class="faq-item">
+          <summary>Is there a maximum supply?</summary>
+          <p><strong>No!</strong> This contract has unlimited supply. There is no maxSupply cap, so you can mint as many NFTs as you want! Each mint captures a unique moment in CELO's price history.</p>
+        </details>
+        
+        <details class="faq-item">
+          <summary>Is there a per-wallet limit?</summary>
+          <p><strong>No!</strong> This contract has no per-wallet mint limits. You can mint unlimited NFTs from a single wallet. Collect as many price snapshots as you want!</p>
         </details>
         
         <details class="faq-item">
           <summary>Can I sell or transfer my NFT?</summary>
-          <p>Yes! Your NFT is a standard ERC-721 token on Celo blockchain. You can trade it on any NFT marketplace that supports Celo, transfer it to other wallets, or hold it as a collectible.</p>
+          <p>Yes! Your NFT is a standard ERC-721 token on Celo blockchain. You can trade it on any NFT marketplace that supports Celo, transfer it to other wallets, or hold it as a collectible. The metadata and SVG are fully on-chain!</p>
         </details>
         
         <details class="faq-item">
           <summary>What network is this on?</summary>
-          <p>This NFT collection is on <strong>Celo Mainnet</strong>. Make sure your wallet is connected to Celo network. Gas fees are very low (usually under $0.02)!</p>
-        </details>
-        
-        <details class="faq-item">
-          <summary>How many can I mint?</summary>
-          <p>You can mint as many as you want! Each mint captures the current CELO price, so minting at different times gives you different NFTs. Watch the price chart and mint when you see an interesting price!</p>
+          <p>This NFT collection is on <strong>Celo Mainnet</strong>. Make sure your wallet is connected to Celo network. Gas fees are very low (usually under $0.02)! Celo is an EVM-compatible blockchain focused on mobile-first DeFi.</p>
         </details>
         
         <details class="faq-item">
           <summary>What wallets are supported?</summary>
-          <p>We support all major Web3 wallets including MetaMask, Valora (Celo's native wallet), Rainbow, Coinbase Wallet, WalletConnect, and more through Reown AppKit.</p>
+          <p>We support all major Web3 wallets including MetaMask, Valora (Celo's native wallet), Rainbow, Coinbase Wallet, WalletConnect, and more through Reown AppKit. For the best Celo experience, we recommend Valora!</p>
         </details>
         
         <details class="faq-item">
           <summary>Is this on Farcaster?</summary>
-          <p>Yes! You can mint directly in the Farcaster miniapp or on our standalone website. Your NFTs are the same on both - they're all on Celo blockchain.</p>
+          <p>Yes! You can mint directly in the Farcaster miniapp or on our standalone website. Your NFTs are the same on both - they're all on Celo blockchain. The miniapp uses Farcaster's wallet integration for seamless minting.</p>
         </details>
         
         <details class="faq-item">
           <summary>Can I download my NFT?</summary>
-          <p>Absolutely! After minting, use the download buttons to save your NFT as SVG (vector), PNG (image), or JSON (metadata). Your NFT is fully on-chain, so you truly own it!</p>
+          <p>Absolutely! After minting, use the download buttons to save your NFT as SVG (vector), PNG (image), or JSON (metadata). Your NFT is fully on-chain with base64-encoded SVG, so you truly own it forever!</p>
         </details>
         
         <details class="faq-item">
           <summary>What happens if minting fails?</summary>
           <p>Common issues:<br>
-          • Not enough CELO: Add funds to your wallet<br>
-          • Wrong network: Switch to Celo Mainnet<br>
-          • Gas too low: Increase gas limit<br>
-          • Transaction stuck: Check your wallet for pending transactions</p>
+          • <strong>Not enough CELO</strong>: Add funds to your wallet<br>
+          • <strong>Wrong network</strong>: Switch to Celo Mainnet<br>
+          • <strong>Sale not active</strong>: Owner hasn't enabled minting yet<br>
+          • <strong>Gas too low</strong>: Increase gas limit in wallet<br>
+          • <strong>Transaction stuck</strong>: Check wallet for pending transactions<br><br>
+          If you overpay, the contract automatically refunds the excess CELO!</p>
+        </details>
+        
+        <details class="faq-item">
+          <summary>Where is the NFT data stored?</summary>
+          <p>Your NFT is <strong>100% on-chain</strong>! The SVG image and all metadata are stored directly in the contract using base64 encoding. No IPFS, no external servers. As long as Celo blockchain exists, your NFT exists. The tokenURI function generates everything on-demand.</p>
+        </details>
+        
+        <details class="faq-item">
+          <summary>How does the price snapshot work?</summary>
+          <p>When you click mint, the frontend fetches the current CELO/USD price from CoinGecko API (scaled by 10,000 for precision). This price is passed to the mint() function and stored permanently in your NFT's tokenTraits struct. The SVG dynamically displays this price forever!</p>
+        </details>
+        
+        <details class="faq-item">
+          <summary>Can the owner change my NFT?</summary>
+          <p><strong>No!</strong> Once minted, your NFT data (price snapshot, rarity, mint timestamp) is permanently stored on-chain and cannot be changed by anyone, including the contract owner. The owner can only: toggle sale on/off, change mint price for future mints, and withdraw contract balance.</p>
         </details>
       </div>
     </div>
