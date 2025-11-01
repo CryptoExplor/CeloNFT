@@ -236,6 +236,10 @@
       padding: 0 10px;
     }
     
+    .tx-links-container.hidden {
+      display: none;
+    }
+    
     .tx-link {
       color: #fff;
       background: linear-gradient(135deg, #1e40af, #3b82f6);
@@ -252,6 +256,7 @@
       flex: 1;
       min-width: 150px;
       text-align: center;
+      display: block;
     }
     
     .tx-link:hover {
@@ -342,7 +347,7 @@
     }
     
     .tab-content.active {
-      display: block;
+      display: block !important;
     }
     
     @keyframes fadeIn {
