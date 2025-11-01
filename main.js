@@ -26,6 +26,7 @@ const previewBtn = document.getElementById('previewBtn');
 const connectBtn = document.getElementById('connectBtn');
 const userAddrBox = document.getElementById('userAddressBox');
 const previewContainer = document.getElementById('nft-preview-container');
+const externalLinkBanner = document.getElementById('externalLinkBanner');
 const ALL_RARITY_CLASSES = ["common", "rare", "legendary", "mythic"];
 
 let MAX_SUPPLY = 0;
@@ -276,6 +277,8 @@ wagmiConfig = wagmiAdapter.wagmiConfig;
       if (typeof sdk !== 'undefined' && sdk.context) {
         isFarcasterEnvironment = true;
         console.log('Running in Farcaster environment');
+        // Show external link banner in Farcaster
+        externalLinkBanner.classList.remove('hidden');
       }
     } catch (e) {
       console.log('Not in Farcaster environment:', e);
