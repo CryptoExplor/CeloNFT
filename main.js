@@ -13,6 +13,7 @@ import { celo } from '@wagmi/core/chains';
 import { farcasterMiniApp } from '@farcaster/miniapp-wagmi-connector';
 import { createAppKit } from '@reown/appkit';
 import { WagmiAdapter } from '@reown/appkit-adapter-wagmi';
+import confetti from 'canvas-confetti';
 
 // Configuration
 const MAX_SUPPLY_FUNCTION_NAME = 'maxSupply';
@@ -26,7 +27,10 @@ const previewBtn = document.getElementById('previewBtn');
 const connectBtn = document.getElementById('connectBtn');
 const userAddrBox = document.getElementById('userAddressBox');
 const previewContainer = document.getElementById('nft-preview-container');
-const externalLinkBanner = document.getElementById('externalLinkBanner');
+const farcasterLinkBanner = document.getElementById('farcasterLinkBanner');
+const totalMintedStat = document.getElementById('totalMintedStat');
+const yourMintsStat = document.getElementById('yourMintsStat');
+const remainingStat = document.getElementById('remainingStat');
 const ALL_RARITY_CLASSES = ["common", "rare", "legendary", "mythic"];
 
 let MAX_SUPPLY = 0;
@@ -38,8 +42,53 @@ let contractDetails = null;
 let modal = null;
 let isFarcasterEnvironment = false;
 let wagmiConfig = null;
+let userMintCount = 0;
 
 // Helper Functions
+function celebrateMint() {
+  // Fire confetti from the center
+  confetti({
+    particleCount: 100,
+    spread: 70,
+    origin: { y: 0.6 },
+    colors: ['#49dfb5', '#7dd3fc', '#fcd34d']
+  });
+  
+  // Second burst after 200ms
+  setTimeout(() => {
+    confetti({
+      particleCount: 50,
+      angle: 60,
+      spread: 55,
+      origin: { x: 0 },
+      colors: ['#49dfb5', '#7dd3fc']
+    });
+    confetti({
+      particleCount: 50,
+      angle: 120,
+      spread: 55,
+      origin: { x: 1 },
+      colors: ['#fcd34d', '#f97316']
+    });
+  }, 200);
+}
+
+function animateCounter(element, start, end, duration = 1000) {
+  if (!element) return;
+  const range = end - start;
+  const increment = range / (duration / 16);
+  let current = start;
+  
+  const timer = setInterval(() => {
+    current += increment;
+    if ((increment > 0 && current >= end) || (increment < 0 && current <= end)) {
+      element.textContent = end;
+      clearInterval(timer);
+    } else {
+      element.textContent = Math.floor(current);
+    }
+  }, 16);
+}
 function setStatus(msg, type = 'info') {
   statusBox.innerHTML = '';
   let icon = '';
@@ -50,6 +99,30 @@ function setStatus(msg, type = 'info') {
   
   statusBox.className = `status-box status-${type}`;
   statusBox.insertAdjacentText('afterbegin', icon + msg);
+}
+
+function getImprovedErrorMessage(error) {
+  const msg = error.message || error.shortMessage || '';
+  
+  if (msg.includes('insufficient funds') || msg.includes('insufficient balance')) {
+    return 'Not enough CELO in your wallet. Please add funds and try again.';
+  } else if (msg.includes('gas')) {
+    return 'Transaction failed due to gas issues. Try increasing your gas limit.';
+  } else if (msg.includes('User rejected') || msg.includes('user rejected')) {
+    return 'Transaction was rejected in your wallet.';
+  } else if (msg.includes('network') || msg.includes('Network')) {
+    return 'Network connection issue. Please check your connection and try again.';
+  } else if (msg.includes('nonce')) {
+    return 'Transaction ordering issue. Please try again in a moment.';
+  } else if (msg.includes('already minted') || msg.includes('already claimed')) {
+    return 'You have already minted this NFT.';
+  } else if (msg.includes('Invalid parameters') || msg.includes('RPC')) {
+    return 'Connection error. Please reload/refresh and try again.';
+  } else if (error.shortMessage) {
+    return error.shortMessage;
+  }
+  
+  return 'Mint failed. Please try again or contact support if the issue persists.';
 }
 
 function showAddress(addr) {
@@ -141,6 +214,21 @@ async function updateSupply(initialLoad = false) {
 
     const totalNumber = Number(total);
 
+    // Update stats
+    if (totalMintedStat) {
+      const current = parseInt(totalMintedStat.textContent) || 0;
+      if (current !== totalNumber) {
+        animateCounter(totalMintedStat, current, totalNumber, 800);
+      }
+    }
+    
+    if (remainingStat && MAX_SUPPLY > 0) {
+      const remaining = MAX_SUPPLY - totalNumber;
+      remainingStat.textContent = remaining > 0 ? remaining : '0';
+    } else if (remainingStat) {
+      remainingStat.textContent = '∞';
+    }
+
     if (MAX_SUPPLY > 0) {
       supplyBox.textContent = `Minted: ${totalNumber}/${MAX_SUPPLY}`;
 
@@ -174,8 +262,70 @@ async function updateSupply(initialLoad = false) {
     return total;
   } catch (e) {
     supplyBox.textContent = "Total Minted: N/A";
+    if (totalMintedStat) totalMintedStat.textContent = '--';
+    if (remainingStat) remainingStat.textContent = '--';
     console.error('Error updating supply:', e);
     return 0;
+  }
+}
+
+function updateUserMintCount() {
+  const history = JSON.parse(sessionStorage.getItem('mintHistory') || '[]');
+  const userMints = history.filter(m => m.address === userAddress);
+  userMintCount = userMints.length;
+  
+  if (yourMintsStat) {
+    yourMintsStat.textContent = userMintCount;
+  }
+}
+
+function saveMintToHistory(tokenId, txHash) {
+  const history = JSON.parse(sessionStorage.getItem('mintHistory') || '[]');
+  history.unshift({ 
+    tokenId, 
+    txHash, 
+    timestamp: Date.now(), 
+    address: userAddress 
+  });
+  
+  // Keep only last 20 mints
+  if (history.length > 20) history.pop();
+  
+  sessionStorage.setItem('mintHistory', JSON.stringify(history));
+  updateUserMintCount();
+}
+
+async function shareNFT(tokenId, txHash) {
+  const url = `https://celo-nft-phi.vercel.app/?nft=${tokenId}`;
+  const text = `I just minted CELO NFT #${tokenId} with live price snapshot! 🎨✨`;
+  
+  // Try native share API first (mobile)
+  if (navigator.share) {
+    try {
+      await navigator.share({
+        title: 'My CELO Price NFT',
+        text: text,
+        url: url
+      });
+      setStatus('Thanks for sharing! 🙏', 'success');
+      return;
+    } catch (e) {
+      if (e.name !== 'AbortError') {
+        console.log('Share cancelled or failed:', e);
+      }
+    }
+  }
+  
+  // Fallback: Copy to clipboard
+  try {
+    await navigator.clipboard.writeText(`${text}\n${url}`);
+    setStatus('✅ Link copied! Share it with your friends! 📋', 'success');
+  } catch (e) {
+    // Final fallback: Show text to copy
+    const shareText = document.createElement('div');
+    shareText.style.cssText = 'margin-top: 12px; padding: 12px; background: #1a1d23; border-radius: 8px; font-size: 0.85rem; word-break: break-all;';
+    shareText.textContent = `${text}\n${url}`;
+    statusBox.appendChild(shareText);
   }
 }
 
@@ -277,11 +427,14 @@ wagmiConfig = wagmiAdapter.wagmiConfig;
       if (typeof sdk !== 'undefined' && sdk.context) {
         isFarcasterEnvironment = true;
         console.log('Running in Farcaster environment');
-        // Show external link banner in Farcaster
-        externalLinkBanner.classList.remove('hidden');
+      } else {
+        // Show Farcaster link banner when NOT in Farcaster
+        farcasterLinkBanner.classList.remove('hidden');
       }
     } catch (e) {
       console.log('Not in Farcaster environment:', e);
+      // Show Farcaster link banner
+      farcasterLinkBanner.classList.remove('hidden');
     }
 
     // Try Farcaster connection first
@@ -420,6 +573,7 @@ wagmiConfig = wagmiAdapter.wagmiConfig;
     // Fetch total supply
     if (connected) {
       await updateSupply(true);
+      updateUserMintCount();
     }
   } catch (error) {
     console.error('Initialization error:', error);
@@ -439,6 +593,7 @@ watchAccount(wagmiConfig, {
         mintBtn.disabled = false;
         
         updateSupply(true);
+        updateUserMintCount();
         previewBtn.classList.add('hidden');
         previewContainer.classList.add('hidden');
         sessionStorage.removeItem('lastMintedTokenId');
@@ -455,6 +610,9 @@ watchAccount(wagmiConfig, {
         previewBtn.classList.add('hidden');
         previewContainer.classList.add('hidden');
         supplyBox.textContent = 'Connect wallet to see supply';
+        if (totalMintedStat) totalMintedStat.textContent = '--';
+        if (yourMintsStat) yourMintsStat.textContent = '--';
+        if (remainingStat) remainingStat.textContent = '--';
         sessionStorage.removeItem('lastMintedTokenId');
         lastMintedTokenId = null;
       }
@@ -529,6 +687,10 @@ mintBtn.addEventListener('click', async () => {
     }
 
     sessionStorage.setItem('lastMintedTokenId', nextTokenId.toString());
+    
+    // 🎉 CELEBRATE WITH CONFETTI!
+    celebrateMint();
+    
     setStatus("Mint Successful! ", "success");
     
     if (contractAddress) {
@@ -552,9 +714,20 @@ mintBtn.addEventListener('click', async () => {
       statusBox.appendChild(txLink);
       statusBox.insertAdjacentText('beforeend', ' | ');
       statusBox.appendChild(tokenLink);
+      
+      // Add share button
+      const shareBtn = document.createElement('button');
+      shareBtn.className = 'action-button';
+      shareBtn.style.cssText = 'background: linear-gradient(90deg, #8b5cf6, #ec4899); padding: 0.6rem 1.2rem; font-size: 0.9rem; margin-top: 12px;';
+      shareBtn.innerHTML = '🔗 Share My NFT';
+      shareBtn.onclick = () => shareNFT(nextTokenId, hash);
+      
+      statusBox.appendChild(document.createElement('br'));
+      statusBox.appendChild(shareBtn);
     }
 
     lastMintedTokenId = nextTokenId;
+    saveMintToHistory(nextTokenId, hash);
 
     await updateSupply();
     previewBtn.classList.remove('hidden');
@@ -562,18 +735,21 @@ mintBtn.addEventListener('click', async () => {
     await previewNft(lastMintedTokenId);
 
   } catch (e) {
-    let errorMsg = e.shortMessage || "Mint failed.";
-    
-    if (e.message && (e.message.includes("Invalid parameters were provided to the RPC method") || e.message.includes("RPC"))) {
-      errorMsg = "Mint failed due to a connection error. Please reload/refresh the miniapp and try again.";
-    } else if (e.message && e.message.includes("User rejected")) {
-      errorMsg = "Transaction was rejected.";
-    } else if (!e.shortMessage) {
-      errorMsg = "Mint failed. This may be caused by a stale connection. Please reload/refresh the miniapp and try again.";
-    }
-    
+    const errorMsg = getImprovedErrorMessage(e);
     setStatus(errorMsg, "error");
     console.error('Mint Error:', e);
+    
+    // Add retry button for certain errors
+    if (!errorMsg.includes('rejected') && !errorMsg.includes('already minted')) {
+      const retryBtn = document.createElement('button');
+      retryBtn.className = 'action-button';
+      retryBtn.style.cssText = 'background: linear-gradient(90deg, #f59e0b, #f97316); padding: 0.6rem 1.2rem; font-size: 0.9rem; margin-top: 12px;';
+      retryBtn.innerHTML = '🔄 Retry Mint';
+      retryBtn.onclick = () => mintBtn.click();
+      
+      statusBox.appendChild(document.createElement('br'));
+      statusBox.appendChild(retryBtn);
+    }
     
     previewBtn.classList.add('hidden');
     previewContainer.classList.add('hidden');
