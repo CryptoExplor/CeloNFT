@@ -309,7 +309,7 @@ function updateUserMintCount() {
     }
   }).catch(err => {
     console.error('Error fetching user balance:', err);
-    const history = JSON.parse(sessionStorage.getItem('mintHistory') || '[]');
+    const history = JSON.parse(localStorage.getItem('mintHistory') || '[]');
     const userMints = history.filter(m => m.address === userAddress);
     userMintCount = userMints.length;
     if (yourMintsStat) {
@@ -364,7 +364,7 @@ async function loadLastMintedNFT() {
     
     if (foundTokenId) {
       lastMintedTokenId = foundTokenId;
-      sessionStorage.setItem('lastMintedTokenId', foundTokenId.toString());
+      localStorage.setItem('lastMintedTokenId', foundTokenId.toString());
       
       previewBtn.innerText = `Preview NFT #${foundTokenId}`;
       previewBtn.classList.remove('hidden');
@@ -385,7 +385,7 @@ async function loadLastMintedNFT() {
 }
 
 function saveMintToHistory(tokenId, txHash) {
-  const history = JSON.parse(sessionStorage.getItem('mintHistory') || '[]');
+  const history = JSON.parse(localStorage.getItem('mintHistory') || '[]');
   history.unshift({ 
     tokenId, 
     txHash, 
@@ -395,7 +395,7 @@ function saveMintToHistory(tokenId, txHash) {
   
   if (history.length > 20) history.pop();
   
-  sessionStorage.setItem('mintHistory', JSON.stringify(history));
+  localStorage.setItem('mintHistory', JSON.stringify(history));
   updateUserMintCount();
 }
 
@@ -705,7 +705,7 @@ async function giftNFT(tokenId, recipient, message) {
     
     setStatus(`✅ NFT #${tokenId} gifted successfully!`, 'success');
     
-    const gifts = JSON.parse(sessionStorage.getItem('giftHistory') || '[]');
+    const gifts = JSON.parse(localStorage.getItem('giftHistory') || '[]');
     gifts.unshift({
       tokenId,
       recipient,
@@ -713,7 +713,7 @@ async function giftNFT(tokenId, recipient, message) {
       timestamp: Date.now(),
       txHash: hash
     });
-    sessionStorage.setItem('giftHistory', JSON.stringify(gifts));
+    localStorage.setItem('giftHistory', JSON.stringify(gifts));
     
     const celoscanUrl = `https://celoscan.io/tx/${hash}`;
     setTimeout(() => {
@@ -859,7 +859,7 @@ wagmiConfig = wagmiAdapter.wagmiConfig;
 // Initialize App
 (async () => {
   try {
-    lastMintedTokenId = sessionStorage.getItem("lastMintedTokenId");
+    lastMintedTokenId = localStorage.getItem("lastMintedTokenId");
     if (lastMintedTokenId) {
       previewBtn.innerText = `Preview NFT #${lastMintedTokenId}`;
       previewBtn.classList.remove('hidden');
@@ -899,11 +899,11 @@ wagmiConfig = wagmiAdapter.wagmiConfig;
           connected = true;
           console.log('Connected via Farcaster:', userAddress);
           
-          const hasPromptedAddApp = sessionStorage.getItem('hasPromptedAddApp');
+          const hasPromptedAddApp = localStorage.getItem('hasPromptedAddApp');
           if (!hasPromptedAddApp && sdk?.actions?.addMiniApp) {
             try {
               await sdk.actions.addMiniApp();
-              sessionStorage.setItem('hasPromptedAddApp', 'true');
+              localStorage.setItem('hasPromptedAddApp', 'true');
             } catch(e) {
               console.log('Add mini app prompt declined or failed:', e);
             }
@@ -966,8 +966,18 @@ wagmiConfig = wagmiAdapter.wagmiConfig;
       contractAddress = contractDetails.address;
       console.log('Contract loaded:', contractAddress);
     } catch (e) { 
-      setStatus("Missing contract details. Ensure 'contract.json' is in the public folder.", 'error'); 
-      console.error('Contract load error:', e); 
+      setStatus("Missing contract details.", 'error'); 
+      console.error('Contract load error:', e);
+      
+      const retryBtn = document.createElement('button');
+      retryBtn.className = 'action-button';
+      retryBtn.style.cssText = 'background: linear-gradient(90deg, #f59e0b, #f97316); padding: 0.8rem 1.5rem; font-size: 1rem; margin-top: 12px;';
+      retryBtn.innerText = '🔄 Retry Load';
+      retryBtn.onclick = () => window.location.reload();
+      
+      statusBox.appendChild(document.createElement('br'));
+      statusBox.appendChild(retryBtn);
+      
       mintBtn.disabled = true; 
       return;
     }
@@ -1136,7 +1146,7 @@ mintBtn.addEventListener('click', async () => {
       throw new Error('Transaction was reverted.');
     }
 
-    sessionStorage.setItem('lastMintedTokenId', nextTokenId.toString());
+    localStorage.setItem('lastMintedTokenId', nextTokenId.toString());
     
     celebrateMint();
     
