@@ -319,24 +319,36 @@ function saveMintToHistory(tokenId, txHash) {
   updateUserMintCount();
 }
 
-// NEW: Cast to Farcaster
+// NEW: Cast to Farcaster using SDK composeCast
 async function castToFarcaster(tokenId, rarity, price) {
-  const text = `I just minted CELO NFT #${tokenId} (${rarity}) at $${price}! 🎨✨\n\nTry it yourself:`;
+  const text = `I just minted CELO NFT #${tokenId} (${rarity}) at ${price}! 🎨✨\n\nMint yours now:`;
   const embedUrl = MINIAPP_URL;
   
-  if (isFarcasterEnvironment && sdk?.actions?.cast) {
+  // Always try SDK first if available
+  if (sdk?.actions?.composeCast) {
     try {
-      await sdk.actions.cast({
+      setStatus('Opening cast composer... 📝', 'info');
+      
+      const result = await sdk.actions.composeCast({
         text: text,
         embeds: [embedUrl]
       });
-      setStatus('Cast created successfully! 📣', 'success');
+      
+      if (result?.cast) {
+        setStatus(`✅ Cast posted! Hash: ${result.cast.hash.slice(0, 10)}...`, 'success');
+        console.log('Cast hash:', result.cast.hash);
+        if (result.cast.channelKey) {
+          console.log('Posted to channel:', result.cast.channelKey);
+        }
+      } else {
+        setStatus('Cast cancelled', 'info');
+      }
     } catch (e) {
       console.error('Cast failed:', e);
-      setStatus('Failed to create cast. Please try manually.', 'error');
+      setStatus('Failed to create cast. Please try again.', 'error');
     }
   } else {
-    // Fallback: Open Warpcast composer
+    // Fallback: Open Warpcast composer in new tab (only if SDK not available)
     const warpcastUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(text)}&embeds[]=${encodeURIComponent(embedUrl)}`;
     window.open(warpcastUrl, '_blank');
     setStatus('Opening Warpcast composer...', 'info');
@@ -350,17 +362,24 @@ function downloadSVGFile() {
     return;
   }
   
-  const blob = new Blob([currentNFTData.svg], { type: 'image/svg+xml' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `celo-nft-${lastMintedTokenId}.svg`;
-  a.click();
-  URL.revokeObjectURL(url);
-  setStatus('SVG downloaded! 📥', 'success');
+  try {
+    const blob = new Blob([currentNFTData.svg], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `celo-nft-${lastMintedTokenId}.svg`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    setStatus('✅ SVG downloaded!', 'success');
+  } catch (e) {
+    console.error('SVG download failed:', e);
+    setStatus('Failed to download SVG', 'error');
+  }
 }
 
-// NEW: Convert SVG to GIF and download
+// NEW: Convert SVG to PNG and download
 async function downloadGIFFile() {
   if (!currentNFTData || !currentNFTData.svg) {
     setStatus('No NFT data available for download', 'error');
@@ -368,7 +387,7 @@ async function downloadGIFFile() {
   }
   
   try {
-    setStatus('Generating GIF... ⏳', 'info');
+    setStatus('Generating PNG... ⏳', 'info');
     
     // Create canvas and draw SVG
     const canvas = document.createElement('canvas');
@@ -376,30 +395,49 @@ async function downloadGIFFile() {
     canvas.height = 400;
     const ctx = canvas.getContext('2d');
     
+    // Create image from SVG
     const img = new Image();
     const svgBlob = new Blob([currentNFTData.svg], { type: 'image/svg+xml;charset=utf-8' });
     const url = URL.createObjectURL(svgBlob);
     
     img.onload = () => {
-      ctx.drawImage(img, 0, 0);
+      // Draw white background first
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(0, 0, 400, 400);
+      
+      // Draw SVG on canvas
+      ctx.drawImage(img, 0, 0, 400, 400);
       URL.revokeObjectURL(url);
       
-      // Convert to PNG (GIF conversion requires additional library, using PNG for now)
+      // Convert to PNG blob
       canvas.toBlob((blob) => {
+        if (!blob) {
+          setStatus('Failed to generate PNG', 'error');
+          return;
+        }
+        
         const downloadUrl = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = downloadUrl;
         a.download = `celo-nft-${lastMintedTokenId}.png`;
+        document.body.appendChild(a);
         a.click();
+        document.body.removeChild(a);
         URL.revokeObjectURL(downloadUrl);
-        setStatus('Image downloaded! 📥', 'success');
-      }, 'image/png');
+        setStatus('✅ PNG downloaded!', 'success');
+      }, 'image/png', 1.0);
+    };
+    
+    img.onerror = (e) => {
+      console.error('Image load failed:', e);
+      URL.revokeObjectURL(url);
+      setStatus('Failed to generate PNG', 'error');
     };
     
     img.src = url;
   } catch (e) {
-    console.error('Download failed:', e);
-    setStatus('Failed to generate image', 'error');
+    console.error('PNG download failed:', e);
+    setStatus('Failed to generate PNG', 'error');
   }
 }
 
