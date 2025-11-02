@@ -290,6 +290,11 @@ function updateUserMintCount() {
     if (yourMintsStat) {
       yourMintsStat.textContent = userMintCount;
     }
+    
+    // Auto-load last minted NFT if user has any
+    if (userMintCount > 0 && !lastMintedTokenId) {
+      loadLastMintedNFT();
+    }
   }).catch(err => {
     console.error('Error fetching user balance:', err);
     const history = JSON.parse(sessionStorage.getItem('mintHistory') || '[]');
@@ -299,6 +304,72 @@ function updateUserMintCount() {
       yourMintsStat.textContent = userMintCount;
     }
   });
+}
+
+// NEW: Load last minted NFT for connected wallet
+async function loadLastMintedNFT() {
+  if (!userAddress || !contractDetails) return;
+  
+  try {
+    setStatus('Loading your NFTs... 🔍', 'info');
+    
+    // Get total supply first
+    const totalSupply = await readContract(wagmiConfig, {
+      address: contractDetails.address,
+      abi: contractDetails.abi,
+      functionName: 'totalSupply'
+    });
+    
+    const total = Number(totalSupply);
+    if (total === 0) {
+      setStatus('No NFTs minted yet', 'info');
+      return;
+    }
+    
+    // Search backwards from most recent tokens to find user's last mint
+    // Check last 50 tokens for performance
+    const searchLimit = Math.min(50, total);
+    let foundTokenId = null;
+    
+    for (let i = total; i > total - searchLimit && i > 0; i--) {
+      try {
+        const owner = await readContract(wagmiConfig, {
+          address: contractDetails.address,
+          abi: contractDetails.abi,
+          functionName: 'ownerOf',
+          args: [BigInt(i)]
+        });
+        
+        if (owner.toLowerCase() === userAddress.toLowerCase()) {
+          foundTokenId = i;
+          break;
+        }
+      } catch (e) {
+        // Token might not exist or error, continue
+        console.log(`Token ${i} check failed:`, e.message);
+      }
+    }
+    
+    if (foundTokenId) {
+      lastMintedTokenId = foundTokenId;
+      sessionStorage.setItem('lastMintedTokenId', foundTokenId.toString());
+      
+      previewBtn.innerText = `Preview NFT #${foundTokenId}`;
+      previewBtn.classList.remove('hidden');
+      
+      setStatus(`Found your NFT #${foundTokenId}! 🎉`, 'success');
+      
+      // Auto-preview after a short delay
+      setTimeout(() => {
+        previewNft(foundTokenId);
+      }, 500);
+    } else {
+      setStatus('No recent NFTs found for your wallet', 'info');
+    }
+  } catch (e) {
+    console.error('Error loading last minted NFT:', e);
+    setStatus('Could not load your NFTs', 'warning');
+  }
 }
 
 function saveMintToHistory(tokenId, txHash) {
@@ -914,11 +985,16 @@ watchAccount(wagmiConfig, {
         
         updateSupply(true);
         updateUserMintCount();
+        
+        // Clear previous NFT preview when switching wallets
         previewBtn.classList.add('hidden');
         previewContainer.classList.add('hidden');
         nftActions.classList.add('hidden');
-        sessionStorage.removeItem('lastMintedTokenId');
+        const nftActionsRow2 = document.getElementById('nftActionsRow2');
+        if (nftActionsRow2) nftActionsRow2.classList.add('hidden');
+        
         lastMintedTokenId = null;
+        sessionStorage.removeItem('lastMintedTokenId');
 
       } else if (!account.isConnected && userAddress) {
         console.log('Wallet disconnected');
@@ -931,6 +1007,8 @@ watchAccount(wagmiConfig, {
         previewBtn.classList.add('hidden');
         previewContainer.classList.add('hidden');
         nftActions.classList.add('hidden');
+        const nftActionsRow2 = document.getElementById('nftActionsRow2');
+        if (nftActionsRow2) nftActionsRow2.classList.add('hidden');
         if (totalMintedStat) totalMintedStat.textContent = '--';
         if (yourMintsStat) yourMintsStat.textContent = '--';
         if (remainingStat) remainingStat.textContent = '--';
