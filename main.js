@@ -275,14 +275,27 @@ function updateUserMintCount() {
     return;
   }
   
-  // Use session storage count since contract doesn't have enumerable
-  const history = JSON.parse(sessionStorage.getItem('mintHistory') || '[]');
-  const userMints = history.filter(m => m.address?.toLowerCase() === userAddress.toLowerCase());
-  userMintCount = userMints.length;
-  
-  if (yourMintsStat) {
-    yourMintsStat.textContent = userMintCount;
-  }
+  // Get user's mint count from contract
+  readContract(wagmiConfig, {
+    address: contractDetails.address,
+    abi: contractDetails.abi,
+    functionName: 'balanceOf',
+    args: [userAddress]
+  }).then(balance => {
+    userMintCount = Number(balance);
+    if (yourMintsStat) {
+      yourMintsStat.textContent = userMintCount;
+    }
+  }).catch(err => {
+    console.error('Error fetching user balance:', err);
+    // Fallback to session storage
+    const history = JSON.parse(sessionStorage.getItem('mintHistory') || '[]');
+    const userMints = history.filter(m => m.address === userAddress);
+    userMintCount = userMints.length;
+    if (yourMintsStat) {
+      yourMintsStat.textContent = userMintCount;
+    }
+  });
 }
 
 function saveMintToHistory(tokenId, txHash) {
