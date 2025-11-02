@@ -730,7 +730,7 @@ async function giftNFT(tokenId, recipient, message) {
 
 let lastMintedInfo = { tokenId: null, txHash: null, rarity: null, price: null };
 
-async function previewNft(tokenId) {
+async function previewNft(tokenId, isNewMint = false) {
   if (!contractDetails) return;
 
   statusBox.innerHTML = '';
@@ -742,7 +742,11 @@ async function previewNft(tokenId) {
   previewContainer.innerHTML = '';
   previewContainer.classList.remove("sparkles", ...ALL_RARITY_CLASSES);
   nftActions.classList.add('hidden');
-  txLinksContainer.classList.add('hidden');
+  
+  // Don't hide transaction links for new mints
+  if (!isNewMint) {
+    txLinksContainer.classList.add('hidden');
+  }
   
   const nftActionsRow2 = document.getElementById('nftActionsRow2');
   if (nftActionsRow2) nftActionsRow2.classList.add('hidden');
@@ -799,8 +803,8 @@ async function previewNft(tokenId) {
     nftActions.classList.remove('hidden');
     if (nftActionsRow2) nftActionsRow2.classList.remove('hidden');
     
-    // Show Cast button for previously minted NFT
-    if (contractAddress) {
+    // Only show Cast button for previously loaded NFTs (not newly minted)
+    if (!isNewMint && contractAddress) {
       const celoscanTokenUrl = `https://celoscan.io/token/${contractAddress}?a=${tokenId}`;
 
       txLinksContainer.innerHTML = `
@@ -818,6 +822,7 @@ async function previewNft(tokenId) {
       
       txLinksContainer.classList.remove('hidden');
     }
+    // For new mints, the Cast button is already created by the mint handler
 
   } catch (e) {
     setStatus("Failed to load NFT preview. Check console for details.", 'error'); 
@@ -1140,6 +1145,7 @@ mintBtn.addEventListener('click', async () => {
     const priceText = (price).toFixed(4);
     lastMintedInfo = { tokenId: nextTokenId, txHash: hash, price: priceText, rarity: null };
     
+    // Show transaction links for newly minted NFT
     if (contractAddress) {
       const celoscanTokenUrl = `https://celoscan.io/token/${contractAddress}?a=${nextTokenId}`;
 
@@ -1171,7 +1177,7 @@ mintBtn.addEventListener('click', async () => {
     await updateSupply();
     previewBtn.classList.remove('hidden');
     previewBtn.innerText = `Preview NFT #${nextTokenId}`;
-    await previewNft(lastMintedTokenId);
+    await previewNft(lastMintedTokenId, true); // Pass true for isNewMint
     
     if (currentNFTData && currentNFTData.metadata) {
       const rarityAttr = currentNFTData.metadata.attributes?.find(attr => attr.trait_type === 'Rarity');
