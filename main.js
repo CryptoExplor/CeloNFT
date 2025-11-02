@@ -18,6 +18,7 @@ import confetti from 'canvas-confetti';
 // Configuration
 const MAX_SUPPLY_FUNCTION_NAME = 'maxSupply';
 const PROJECT_ID = 'e0dd881bad824ac3418617434a79f917';
+const MINIAPP_URL = 'https://farcaster.xyz/miniapps/Tip8ngTAKnHC/celo-nft';
 
 // DOM Elements
 const statusBox = document.getElementById('statusBox');
@@ -29,7 +30,10 @@ const previewContainer = document.getElementById('nft-preview-container');
 const externalBanner = document.getElementById('externalBanner');
 const externalBannerText = document.getElementById('externalBannerText');
 const txLinksContainer = document.getElementById('txLinksContainer');
-const shareBtn = document.getElementById('shareBtn');
+const nftActions = document.getElementById('nftActions');
+const downloadSVG = document.getElementById('downloadSVG');
+const downloadGIF = document.getElementById('downloadGIF');
+const giftBtn = document.getElementById('giftBtn');
 const totalMintedStat = document.getElementById('totalMintedStat');
 const yourMintsStat = document.getElementById('yourMintsStat');
 const remainingStat = document.getElementById('remainingStat');
@@ -45,32 +49,36 @@ let modal = null;
 let isFarcasterEnvironment = false;
 let wagmiConfig = null;
 let userMintCount = 0;
+let currentNFTData = null; // Store current NFT data for downloads
 
-// Improved Farcaster Detection
+// FIXED: More aggressive Farcaster detection
 function isFarcasterEmbed() {
-  // Method 1: Check if in iframe
-  const isIframe = window.self !== window.top;
+  // Check multiple indicators
+  const checks = {
+    isIframe: window.self !== window.top,
+    hasSDK: typeof sdk !== 'undefined',
+    hasContext: typeof sdk !== 'undefined' && sdk.context,
+    userAgent: /farcaster|warpcast/i.test(navigator.userAgent),
+    referrer: /farcaster|warpcast/i.test(document.referrer),
+    urlParam: new URLSearchParams(window.location.search).has('fc') || 
+              new URLSearchParams(window.location.search).has('farcaster'),
+    parentCheck: (() => {
+      try {
+        return window.parent !== window && window.parent.location.href.includes('farcaster');
+      } catch (e) {
+        return window.parent !== window; // Cross-origin = likely iframe
+      }
+    })()
+  };
+
+  console.log('Farcaster Detection Checks:', checks);
   
-  // Method 2: Check for Farcaster-specific properties
-  const hasFarcasterContext = typeof sdk !== 'undefined' && sdk.context;
-  
-  // Method 3: Check user agent (some Farcaster clients)
-  const isFarcasterUA = /farcaster/i.test(navigator.userAgent);
-  
-  // Method 4: Check for Farcaster-specific URL parameters
-  const urlParams = new URLSearchParams(window.location.search);
-  const hasFarcasterParam = urlParams.has('fc') || urlParams.has('farcaster');
-  
-  // Method 5: Check referrer
-  const isFarcasterReferrer = document.referrer.includes('farcaster') || 
-                              document.referrer.includes('warpcast');
-  
-  return isIframe || hasFarcasterContext || isFarcasterUA || hasFarcasterParam || isFarcasterReferrer;
+  // Return true if ANY indicator suggests Farcaster
+  return Object.values(checks).some(v => v === true);
 }
 
 // Helper Functions
 function celebrateMint() {
-  // Fire confetti from the center
   confetti({
     particleCount: 100,
     spread: 70,
@@ -78,7 +86,6 @@ function celebrateMint() {
     colors: ['#49dfb5', '#7dd3fc', '#fcd34d']
   });
   
-  // Second burst after 200ms
   setTimeout(() => {
     confetti({
       particleCount: 50,
@@ -157,7 +164,6 @@ function showAddress(addr) {
   connectBtn.classList.add('hidden');
   mintBtn.classList.remove('hidden');
   
-  // Make address clickable to open wallet modal
   userAddrBox.onclick = () => {
     if (modal) {
       modal.open();
@@ -233,7 +239,6 @@ async function updateSupply(initialLoad = false) {
 
     const totalNumber = Number(total);
 
-    // Update stats counter
     if (totalMintedStat) {
       const current = parseInt(totalMintedStat.textContent) || 0;
       if (current !== totalNumber) {
@@ -248,7 +253,6 @@ async function updateSupply(initialLoad = false) {
       remainingStat.textContent = '∞';
     }
 
-    // Check if sold out
     if (MAX_SUPPLY > 0 && totalNumber >= MAX_SUPPLY) {
       mintBtn.disabled = true;
       mintBtn.innerText = "SOLD OUT";
@@ -279,7 +283,6 @@ function updateUserMintCount() {
     return;
   }
   
-  // Get user's mint count from contract
   readContract(wagmiConfig, {
     address: contractDetails.address,
     abi: contractDetails.abi,
@@ -292,7 +295,6 @@ function updateUserMintCount() {
     }
   }).catch(err => {
     console.error('Error fetching user balance:', err);
-    // Fallback to session storage
     const history = JSON.parse(sessionStorage.getItem('mintHistory') || '[]');
     const userMints = history.filter(m => m.address === userAddress);
     userMintCount = userMints.length;
@@ -311,45 +313,179 @@ function saveMintToHistory(tokenId, txHash) {
     address: userAddress 
   });
   
-  // Keep only last 20 mints
   if (history.length > 20) history.pop();
   
   sessionStorage.setItem('mintHistory', JSON.stringify(history));
   updateUserMintCount();
 }
 
-async function shareNFT(tokenId, txHash) {
-  const url = `https://celo-nft-phi.vercel.app/?nft=${tokenId}`;
-  const text = `I just minted CELO NFT #${tokenId} with live price snapshot! 🎨✨`;
+// NEW: Cast to Farcaster
+async function castToFarcaster(tokenId, rarity, price) {
+  const text = `I just minted CELO NFT #${tokenId} (${rarity}) at $${price}! 🎨✨\n\nTry it yourself:`;
+  const embedUrl = MINIAPP_URL;
   
-  // Try native share API first (mobile)
-  if (navigator.share) {
+  if (isFarcasterEnvironment && sdk?.actions?.cast) {
     try {
-      await navigator.share({
-        title: 'My CELO Price NFT',
+      await sdk.actions.cast({
         text: text,
-        url: url
+        embeds: [embedUrl]
       });
-      setStatus('Thanks for sharing! 🙏', 'success');
-      return;
+      setStatus('Cast created successfully! 📣', 'success');
     } catch (e) {
-      if (e.name !== 'AbortError') {
-        console.log('Share cancelled or failed:', e);
-      }
+      console.error('Cast failed:', e);
+      setStatus('Failed to create cast. Please try manually.', 'error');
     }
-  }
-  
-  // Fallback: Copy to clipboard
-  try {
-    await navigator.clipboard.writeText(`${text}\n${url}`);
-    setStatus('✅ Link copied! Share it with your friends! 📋', 'success');
-  } catch (e) {
-    setStatus('Link: ' + url, 'info');
+  } else {
+    // Fallback: Open Warpcast composer
+    const warpcastUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(text)}&embeds[]=${encodeURIComponent(embedUrl)}`;
+    window.open(warpcastUrl, '_blank');
+    setStatus('Opening Warpcast composer...', 'info');
   }
 }
 
-// Store last minted info for share button
-let lastMintedInfo = { tokenId: null, txHash: null };
+// NEW: Download SVG
+function downloadSVGFile() {
+  if (!currentNFTData || !currentNFTData.svg) {
+    setStatus('No NFT data available for download', 'error');
+    return;
+  }
+  
+  const blob = new Blob([currentNFTData.svg], { type: 'image/svg+xml' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `celo-nft-${lastMintedTokenId}.svg`;
+  a.click();
+  URL.revokeObjectURL(url);
+  setStatus('SVG downloaded! 📥', 'success');
+}
+
+// NEW: Convert SVG to GIF and download
+async function downloadGIFFile() {
+  if (!currentNFTData || !currentNFTData.svg) {
+    setStatus('No NFT data available for download', 'error');
+    return;
+  }
+  
+  try {
+    setStatus('Generating GIF... ⏳', 'info');
+    
+    // Create canvas and draw SVG
+    const canvas = document.createElement('canvas');
+    canvas.width = 400;
+    canvas.height = 400;
+    const ctx = canvas.getContext('2d');
+    
+    const img = new Image();
+    const svgBlob = new Blob([currentNFTData.svg], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(svgBlob);
+    
+    img.onload = () => {
+      ctx.drawImage(img, 0, 0);
+      URL.revokeObjectURL(url);
+      
+      // Convert to PNG (GIF conversion requires additional library, using PNG for now)
+      canvas.toBlob((blob) => {
+        const downloadUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = `celo-nft-${lastMintedTokenId}.png`;
+        a.click();
+        URL.revokeObjectURL(downloadUrl);
+        setStatus('Image downloaded! 📥', 'success');
+      }, 'image/png');
+    };
+    
+    img.src = url;
+  } catch (e) {
+    console.error('Download failed:', e);
+    setStatus('Failed to generate image', 'error');
+  }
+}
+
+// NEW: Gift NFT Modal
+function showGiftModal() {
+  if (!lastMintedTokenId) {
+    setStatus('No NFT to gift. Please mint first!', 'warning');
+    return;
+  }
+  
+  const modal = document.createElement('div');
+  modal.className = 'gift-modal';
+  modal.innerHTML = `
+    <div class="gift-modal-content">
+      <button class="close-modal" onclick="this.parentElement.parentElement.remove()">✕</button>
+      <h2>🎁 Gift NFT #${lastMintedTokenId}</h2>
+      <p style="color: #9ca3af; margin-bottom: 20px;">Send this NFT to another address</p>
+      <input type="text" id="recipientAddress" placeholder="Recipient address (0x...)" />
+      <textarea id="giftMessage" placeholder="Optional message (for display only)" rows="3"></textarea>
+      <button id="sendGiftBtn" class="action-button" style="width: 100%; margin-top: 16px;">Send Gift</button>
+    </div>
+  `;
+  
+  document.body.appendChild(modal);
+  
+  document.getElementById('sendGiftBtn').onclick = async () => {
+    const recipient = document.getElementById('recipientAddress').value.trim();
+    const message = document.getElementById('giftMessage').value.trim();
+    
+    if (!recipient || !recipient.startsWith('0x') || recipient.length !== 42) {
+      setStatus('Please enter a valid Celo address', 'error');
+      return;
+    }
+    
+    await giftNFT(lastMintedTokenId, recipient, message);
+    modal.remove();
+  };
+}
+
+// NEW: Gift NFT Function
+async function giftNFT(tokenId, recipient, message) {
+  try {
+    setStatus('Sending gift... 🎁', 'info');
+    
+    const hash = await writeContract(wagmiConfig, {
+      address: contractDetails.address,
+      abi: contractDetails.abi,
+      functionName: 'transferFrom',
+      args: [userAddress, recipient, BigInt(tokenId)]
+    });
+    
+    setStatus('Confirming transfer...', 'info');
+    const receipt = await waitForTransactionReceipt(wagmiConfig, { hash });
+    
+    if (receipt.status === 'reverted') {
+      throw new Error('Transfer was reverted.');
+    }
+    
+    setStatus(`✅ NFT #${tokenId} gifted successfully!`, 'success');
+    
+    // Store gift info
+    const gifts = JSON.parse(sessionStorage.getItem('giftHistory') || '[]');
+    gifts.unshift({
+      tokenId,
+      recipient,
+      message,
+      timestamp: Date.now(),
+      txHash: hash
+    });
+    sessionStorage.setItem('giftHistory', JSON.stringify(gifts));
+    
+    // Show transaction link
+    const celoscanUrl = `https://celoscan.io/tx/${hash}`;
+    setTimeout(() => {
+      setStatus(`Gift sent! View transaction: ${celoscanUrl}`, 'success');
+    }, 2000);
+    
+    updateUserMintCount();
+  } catch (e) {
+    const errorMsg = getImprovedErrorMessage(e);
+    setStatus(errorMsg, 'error');
+    console.error('Gift Error:', e);
+  }
+}
+
+let lastMintedInfo = { tokenId: null, txHash: null, rarity: null, price: null };
 
 async function previewNft(tokenId) {
   if (!contractDetails) return;
@@ -362,6 +498,7 @@ async function previewNft(tokenId) {
   previewContainer.classList.add('hidden');
   previewContainer.innerHTML = '';
   previewContainer.classList.remove("sparkles", ...ALL_RARITY_CLASSES);
+  nftActions.classList.add('hidden');
 
   try {
     const tokenURI = await readContract(wagmiConfig, {
@@ -383,6 +520,13 @@ async function previewNft(tokenId) {
     let svgString = atob(decodeURIComponent(base64Svg));
     const safeSvg = svgString.replace(/<script.*?>.*?<\/script>/g, '');
 
+    // Store NFT data for downloads
+    currentNFTData = {
+      svg: safeSvg,
+      metadata: metadata,
+      tokenId: tokenId
+    };
+
     previewContainer.innerHTML = safeSvg;
     previewContainer.classList.remove('hidden');
     adjustInjectedSvg(previewContainer);
@@ -402,15 +546,18 @@ async function previewNft(tokenId) {
     const rarityClassLower = rarityText.toLowerCase();
     previewContainer.classList.add(rarityClassLower);
 
-    // FIXED: Remove duplicate $ sign
     const buttonLabel = `Preview NFT #${tokenId} (${rarityText} / ${priceText})`;
     previewBtn.innerText = buttonLabel;
+    
+    // Show download buttons
+    nftActions.classList.remove('hidden');
 
   } catch (e) {
     setStatus("Failed to load NFT preview. Check console for details.", 'error'); 
     previewBtn.innerText = 'Preview NFT Error';
     console.error(`NFT Preview Error for token ID ${tokenId}:`, e);
     previewContainer.classList.add('hidden');
+    nftActions.classList.add('hidden');
   } finally {
     previewBtn.disabled = false;
   }
@@ -420,13 +567,13 @@ async function previewNft(tokenId) {
 (async () => {
   try {
     await sdk.actions.ready({ disableNativeGestures: true });
-    console.log('Farcaster SDK initialized');
+    console.log('Farcaster SDK initialized successfully');
   } catch (e) {
-    console.log('Farcaster SDK not available:', e);
+    console.log('Farcaster SDK not available or failed to initialize:', e);
   }
 })();
 
-// Setup Wagmi Config with Reown AppKit
+// Setup Wagmi Config
 const wagmiAdapter = new WagmiAdapter({
   networks: [celo],
   projectId: PROJECT_ID,
@@ -438,37 +585,34 @@ wagmiConfig = wagmiAdapter.wagmiConfig;
 // Initialize App
 (async () => {
   try {
-    // Load last minted token from sessionStorage
     lastMintedTokenId = sessionStorage.getItem("lastMintedTokenId");
     if (lastMintedTokenId) {
       previewBtn.innerText = `Preview NFT #${lastMintedTokenId}`;
       previewBtn.classList.remove('hidden');
     }
 
-    // FIXED: Improved Farcaster detection
+    // FIXED: Better detection
     isFarcasterEnvironment = isFarcasterEmbed();
     
-    console.log('Farcaster environment detected:', isFarcasterEnvironment);
+    console.log('=== ENVIRONMENT DETECTION ===');
+    console.log('Detected as Farcaster:', isFarcasterEnvironment);
+    console.log('Window location:', window.location.href);
     console.log('Is iframe:', window.self !== window.top);
-    console.log('Has SDK context:', typeof sdk !== 'undefined' && sdk.context);
-    console.log('User agent:', navigator.userAgent);
+    console.log('Has SDK:', typeof sdk !== 'undefined');
+    console.log('User Agent:', navigator.userAgent);
     console.log('Referrer:', document.referrer);
+    console.log('============================');
     
     if (isFarcasterEnvironment) {
-      console.log('Running in Farcaster environment');
-      // Show "Mint in browser" banner IN Farcaster
       externalBanner.href = 'https://celo-nft-phi.vercel.app/';
-      externalBannerText.textContent = 'Mint in browser';
+      externalBannerText.textContent = 'Open in Browser';
       externalBanner.classList.remove('hidden');
     } else {
-      console.log('Running outside Farcaster - showing "Mint in Farcaster" banner');
-      // Show "Mint in Farcaster" banner OUTSIDE Farcaster
-      externalBanner.href = 'https://farcaster.xyz/miniapps/Tip8ngTAKnHC/celo-nft';
-      externalBannerText.textContent = 'Mint in Farcaster';
+      externalBanner.href = MINIAPP_URL;
+      externalBannerText.textContent = 'Open in Farcaster';
       externalBanner.classList.remove('hidden');
     }
 
-    // Try Farcaster connection first
     let connected = false;
     if (isFarcasterEnvironment) {
       try {
@@ -480,7 +624,6 @@ wagmiConfig = wagmiAdapter.wagmiConfig;
           connected = true;
           console.log('Connected via Farcaster:', userAddress);
           
-          // Prompt to add mini app
           const hasPromptedAddApp = sessionStorage.getItem('hasPromptedAddApp');
           if (!hasPromptedAddApp && sdk?.actions?.addMiniApp) {
             try {
@@ -496,7 +639,6 @@ wagmiConfig = wagmiAdapter.wagmiConfig;
       }
     }
 
-    // Setup Reown AppKit for wallet connections
     modal = createAppKit({
       adapters: [wagmiAdapter],
       networks: [celo],
@@ -520,7 +662,6 @@ wagmiConfig = wagmiAdapter.wagmiConfig;
       }
     });
 
-    // Check if already connected
     if (!connected) {
       const currentAccount = getAccount(wagmiConfig);
       if (currentAccount.isConnected && currentAccount.address) {
@@ -534,7 +675,6 @@ wagmiConfig = wagmiAdapter.wagmiConfig;
       }
     }
 
-    // Load contract details - try multiple paths
     try {
       let response;
       try {
@@ -562,11 +702,9 @@ wagmiConfig = wagmiAdapter.wagmiConfig;
       return;
     }
 
-    // Get chain ID
     const currentAccount = getAccount(wagmiConfig);
     const chainId = currentAccount.chainId;
 
-    // Network guard
     if (chainId && chainId !== celo.id) {
       setStatus("Please switch to Celo Mainnet.", 'warning');
       mintBtn.disabled = true;
@@ -576,21 +714,13 @@ wagmiConfig = wagmiAdapter.wagmiConfig;
       mintBtn.title = ""; 
     }
     
-    // Fetch contract settings
     try {
-      const [max, price] = await Promise.all([
-        readContract(wagmiConfig, {
-          address: contractDetails.address,
-          abi: contractDetails.abi,
-          functionName: MAX_SUPPLY_FUNCTION_NAME
-        }),
-        readContract(wagmiConfig, {
-          address: contractDetails.address,
-          abi: contractDetails.abi,
-          functionName: 'mintPrice'
-        })
-      ]);
-      MAX_SUPPLY = Number(max);
+      const price = await readContract(wagmiConfig, {
+        address: contractDetails.address,
+        abi: contractDetails.abi,
+        functionName: 'mintPrice'
+      });
+      
       mintPriceWei = BigInt(price);
       
       if (mintPriceWei > 0n) {
@@ -598,16 +728,14 @@ wagmiConfig = wagmiAdapter.wagmiConfig;
         mintBtn.innerText = `MINT (${celoPrice.toFixed(4)} CELO)`;
       }
 
-      console.log('Contract settings:', { MAX_SUPPLY, mintPriceWei: mintPriceWei.toString() });
+      console.log('Contract settings:', { mintPriceWei: mintPriceWei.toString() });
 
     } catch (e) {
-      setStatus(`Could not read contract settings. Assuming unlimited/free.`, 'warning');
-      MAX_SUPPLY = 0;
+      setStatus(`Could not read contract settings. Assuming free mint.`, 'warning');
       mintPriceWei = 0n;
       console.warn(`Failed to read contract settings.`, e);
     }
 
-    // Fetch total supply
     if (connected) {
       await updateSupply(true);
       updateUserMintCount();
@@ -633,6 +761,7 @@ watchAccount(wagmiConfig, {
         updateUserMintCount();
         previewBtn.classList.add('hidden');
         previewContainer.classList.add('hidden');
+        nftActions.classList.add('hidden');
         sessionStorage.removeItem('lastMintedTokenId');
         lastMintedTokenId = null;
 
@@ -646,6 +775,7 @@ watchAccount(wagmiConfig, {
         
         previewBtn.classList.add('hidden');
         previewContainer.classList.add('hidden');
+        nftActions.classList.add('hidden');
         if (totalMintedStat) totalMintedStat.textContent = '--';
         if (yourMintsStat) yourMintsStat.textContent = '--';
         if (remainingStat) remainingStat.textContent = '--';
@@ -690,6 +820,7 @@ mintBtn.addEventListener('click', async () => {
     previewContainer.classList.add('hidden');
     previewContainer.classList.remove('sparkles', ...ALL_RARITY_CLASSES);
     txLinksContainer.classList.add('hidden');
+    nftActions.classList.add('hidden');
 
     mintBtn.disabled = true;
     mintBtn.innerHTML = '<span class="spinner"></span> Minting...';
@@ -725,34 +856,41 @@ mintBtn.addEventListener('click', async () => {
 
     sessionStorage.setItem('lastMintedTokenId', nextTokenId.toString());
     
-    // 🎉 CELEBRATE WITH CONFETTI!
     celebrateMint();
     
     setStatus("🎉 Mint Successful!", "success");
     
-    // Store mint info for share button
-    lastMintedInfo = { tokenId: nextTokenId, txHash: hash };
+    // Get rarity and price for cast
+    const priceText = (price).toFixed(4);
     
-    // FIXED: Show only Celoscan link (removed View Transaction)
+    // Store mint info
+    lastMintedInfo = { tokenId: nextTokenId, txHash: hash, price: priceText, rarity: null };
+    
+    // Show Celoscan and Cast buttons
     if (contractAddress) {
       const celoscanTokenUrl = `https://celoscan.io/token/${contractAddress}?a=${nextTokenId}`;
 
       txLinksContainer.innerHTML = `
         <a href="${celoscanTokenUrl}" target="_blank" rel="noopener noreferrer">View on Celoscan</a>
       `;
-      txLinksContainer.classList.remove('hidden');
       
-      // FIXED: Add share button after the link
-      const shareBtnElement = document.createElement('button');
-      shareBtnElement.id = 'shareBtn';
-      shareBtnElement.className = 'tx-link share-link';
-      shareBtnElement.innerHTML = '🔗 Share My NFT';
-      shareBtnElement.onclick = async () => {
-        if (lastMintedInfo.tokenId && lastMintedInfo.txHash) {
-          await shareNFT(lastMintedInfo.tokenId, lastMintedInfo.txHash);
+      // Add Cast button (will be populated with rarity after preview loads)
+      const castBtnElement = document.createElement('button');
+      castBtnElement.id = 'castBtn';
+      castBtnElement.className = 'tx-link cast-link';
+      castBtnElement.innerHTML = '📣 Cast';
+      castBtnElement.onclick = async () => {
+        if (lastMintedInfo.tokenId) {
+          await castToFarcaster(
+            lastMintedInfo.tokenId, 
+            lastMintedInfo.rarity || 'Common', 
+            lastMintedInfo.price
+          );
         }
       };
-      txLinksContainer.appendChild(shareBtnElement);
+      txLinksContainer.appendChild(castBtnElement);
+      
+      txLinksContainer.classList.remove('hidden');
     }
 
     lastMintedTokenId = nextTokenId;
@@ -762,13 +900,20 @@ mintBtn.addEventListener('click', async () => {
     previewBtn.classList.remove('hidden');
     previewBtn.innerText = `Preview NFT #${nextTokenId}`;
     await previewNft(lastMintedTokenId);
+    
+    // Update rarity info after preview
+    if (currentNFTData && currentNFTData.metadata) {
+      const rarityAttr = currentNFTData.metadata.attributes?.find(attr => attr.trait_type === 'Rarity');
+      if (rarityAttr) {
+        lastMintedInfo.rarity = rarityAttr.value;
+      }
+    }
 
   } catch (e) {
     const errorMsg = getImprovedErrorMessage(e);
     setStatus(errorMsg, "error");
     console.error('Mint Error:', e);
     
-    // Add retry button for certain errors
     if (!errorMsg.includes('rejected') && !errorMsg.includes('already minted')) {
       const retryBtn = document.createElement('button');
       retryBtn.className = 'action-button';
@@ -783,9 +928,10 @@ mintBtn.addEventListener('click', async () => {
     previewBtn.classList.add('hidden');
     previewContainer.classList.add('hidden');
     previewContainer.classList.remove('sparkles', ...ALL_RARITY_CLASSES);
+    nftActions.classList.add('hidden');
     sessionStorage.removeItem('lastMintedTokenId');
     lastMintedTokenId = null;
-    lastMintedInfo = { tokenId: null, txHash: null };
+    lastMintedInfo = { tokenId: null, txHash: null, rarity: null, price: null };
   } finally {
     if (mintBtn.innerText !== "SOLD OUT") {
       mintBtn.disabled = false;
@@ -808,3 +954,12 @@ previewBtn.addEventListener('click', async () => {
     setStatus('Failed to load preview.', 'error');
   }
 });
+
+// Download SVG Handler
+downloadSVG.addEventListener('click', downloadSVGFile);
+
+// Download GIF Handler
+downloadGIF.addEventListener('click', downloadGIFFile);
+
+// Gift Button Handler
+giftBtn.addEventListener('click', showGiftModal);
