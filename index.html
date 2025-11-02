@@ -224,12 +224,12 @@
       box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
     }
     
-    .share-link {
+    .cast-link {
       background: linear-gradient(135deg, #8b5cf6, #ec4899) !important;
       box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3) !important;
     }
     
-    .share-link:hover {
+    .cast-link:hover {
       box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4) !important;
     }
     
@@ -380,6 +380,128 @@
     @keyframes spin { 
       100% { transform: rotate(360deg); } 
     }
+    
+    /* Download Actions */
+    .nft-actions {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      margin: 12px 0;
+    }
+    
+    .action-btn-small {
+      background: linear-gradient(135deg, #059669, #10b981);
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+      box-shadow: 0 2px 6px rgba(16, 185, 129, 0.3);
+      font-family: 'Orbitron', sans-serif;
+    }
+    
+    .action-btn-small:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 10px rgba(16, 185, 129, 0.4);
+    }
+    
+    .action-btn-small:active {
+      transform: translateY(0);
+    }
+    
+    /* Gift Modal */
+    .gift-modal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.8);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+      animation: fadeIn 0.3s;
+    }
+    
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    
+    .gift-modal-content {
+      background: #1a1d23;
+      padding: 30px;
+      border-radius: 12px;
+      width: 90%;
+      max-width: 400px;
+      position: relative;
+      animation: slideUp 0.3s;
+      border: 2px solid #49dfb5;
+    }
+    
+    @keyframes slideUp {
+      from { transform: translateY(20px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+    
+    .close-modal {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: none;
+      border: none;
+      color: #fff;
+      font-size: 24px;
+      cursor: pointer;
+      transition: color 0.2s;
+    }
+    
+    .close-modal:hover {
+      color: #f87171;
+    }
+    
+    .gift-modal-content h2 {
+      margin: 0 0 10px 0;
+      color: #49dfb5;
+    }
+    
+    .gift-modal-content input,
+    .gift-modal-content textarea {
+      width: 100%;
+      padding: 12px;
+      margin: 10px 0;
+      background: #0f1114;
+      border: 1px solid #333;
+      border-radius: 6px;
+      color: white;
+      font-family: 'Roboto Mono', monospace;
+      font-size: 0.9rem;
+    }
+    
+    .gift-modal-content input:focus,
+    .gift-modal-content textarea:focus {
+      outline: none;
+      border-color: #49dfb5;
+    }
+    
+    .gift-modal-content textarea {
+      resize: vertical;
+      min-height: 80px;
+    }
+    
+    /* Gift Button */
+    .gift-button {
+      background: linear-gradient(135deg, #f59e0b, #f97316);
+      margin-top: 12px;
+    }
+    
+    .gift-button:hover {
+      opacity: 0.9;
+    }
   </style>
 </head>
 <body>
@@ -449,11 +571,18 @@
   <!-- Status Box -->
   <div id="statusBox" class="status-box" aria-live="polite"></div>
 
-  <!-- Transaction Links Container (dynamically populated with share button) -->
+  <!-- Transaction Links Container (View on Celoscan + Cast) -->
   <div id="txLinksContainer" class="tx-links-container hidden"></div>
   
   <!-- NFT SVG Preview -->
   <div id="nft-preview-container" class="hidden"></div>
+
+  <!-- Download & Gift Actions -->
+  <div id="nftActions" class="nft-actions hidden">
+    <button id="downloadSVG" class="action-btn-small">📥 Download SVG</button>
+    <button id="downloadGIF" class="action-btn-small">📥 Download Image</button>
+    <button id="giftBtn" class="action-btn-small gift-button">🎁 Gift NFT</button>
+  </div>
 
   <!-- Footer -->
   <footer>
