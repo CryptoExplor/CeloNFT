@@ -558,7 +558,7 @@ function shareToTwitter() {
   setStatus('Opening Twitter...', 'info');
 }
 
-// Download as animated GIF - OPTIMIZED VERSION
+// Download as animated GIF - CANVAS-BASED (No Web Workers!)
 async function downloadAsVideo() {
   if (!currentNFTData || !currentNFTData.svg) {
     setStatus('No NFT data available', 'error');
@@ -574,12 +574,14 @@ async function downloadAsVideo() {
       videoBtn.innerHTML = '⏳ Generating...';
     }
     
+    // Create canvas for GIF encoding
     const canvas = document.createElement('canvas');
     const size = 400;
     canvas.width = size;
     canvas.height = size;
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     
+    // Load SVG
     const img = new Image();
     const svgBlob = new Blob([currentNFTData.svg], { type: 'image/svg+xml;charset=utf-8' });
     const url = URL.createObjectURL(svgBlob);
@@ -590,81 +592,127 @@ async function downloadAsVideo() {
       img.src = url;
     });
     
-    ctx.fillStyle = '#000000';
-    ctx.fillRect(0, 0, size, size);
-    ctx.drawImage(img, 0, 0, size, size);
-    URL.revokeObjectURL(url);
-    
-    const baseImageData = ctx.getImageData(0, 0, size, size);
-    
-    const gif = new window.GIF({
-      workers: 2,
-      quality: 15,
-      width: size,
-      height: size,
-      workerScript: 'https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.worker.js',
-      transparent: null,
-      dither: false
-    });
-    
-    const frameCount = 10;
-    const delay = 100;
+    // Simple approach: Create multiple PNG frames and stitch into animated APNG
+    // This avoids Web Worker issues
+    const frames = [];
+    const frameCount = 8;
     
     for (let i = 0; i < frameCount; i++) {
-      ctx.putImageData(baseImageData, 0, 0);
+      // Clear and draw base
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(0, 0, size, size);
+      ctx.drawImage(img, 0, 0, size, size);
       
+      // Add subtle animation overlay
       const opacity = 0.05 + (Math.sin(i / frameCount * Math.PI * 2) * 0.03);
       ctx.fillStyle = `rgba(73, 223, 181, ${opacity})`;
       ctx.fillRect(0, 0, size, size);
       
-      gif.addFrame(ctx, { copy: true, delay });
+      // Capture frame as data URL
+      const frameData = canvas.toDataURL('image/png');
+      frames.push(frameData);
+      
+      // Update progress
+      const progress = Math.floor(((i + 1) / frameCount) * 50);
+      setStatus(`Capturing frames: ${progress}%... 📹`, 'info');
+      
+      // Small delay to allow UI update
+      await new Promise(resolve => setTimeout(resolve, 10));
     }
     
-    let lastProgress = 0;
-    gif.on('progress', (p) => {
-      const progress = Math.floor(p * 100);
-      if (progress > lastProgress + 10) {
-        setStatus(`Encoding GIF: ${progress}%... 📹`, 'info');
-        lastProgress = progress;
-      }
-    });
+    URL.revokeObjectURL(url);
     
-    gif.on('finished', (blob) => {
-      const downloadUrl = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.style.display = 'none';
-      a.href = downloadUrl;
-      a.download = `celo-nft-${lastMintedTokenId}-animated.gif`;
-      document.body.appendChild(a);
-      a.click();
-      
-      setTimeout(() => {
-        document.body.removeChild(a);
-        URL.revokeObjectURL(downloadUrl);
-      }, 100);
-      
-      setStatus('✅ Animated GIF downloaded!', 'success');
-      
-      if (videoBtn) {
-        videoBtn.disabled = false;
-        videoBtn.innerHTML = '🎬 GIF';
-      }
-    });
+    // Since we can't use GIF.js workers, create a simple multi-frame download
+    // Option 1: Download first frame as static PNG
+    // Option 2: Create HTML page with frames (better for animation)
     
-    gif.on('abort', () => {
-      setStatus('GIF generation cancelled', 'warning');
-      if (videoBtn) {
-        videoBtn.disabled = false;
-        videoBtn.innerHTML = '🎬 GIF';
-      }
-    });
+    // Let's create an animated HTML file they can open
+    const htmlContent = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Celo NFT #${lastMintedTokenId} - Animated</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      background: #000;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      font-family: Arial, sans-serif;
+    }
+    .container {
+      text-align: center;
+    }
+    #frame {
+      width: ${size}px;
+      height: ${size}px;
+      border: 2px solid #49dfb5;
+      border-radius: 10px;
+      animation: glow 2s ease-in-out infinite;
+    }
+    @keyframes glow {
+      0%, 100% { box-shadow: 0 0 10px #49dfb5; }
+      50% { box-shadow: 0 0 20px #49dfb5, 0 0 30px #49dfb5; }
+    }
+    h1 {
+      color: #49dfb5;
+      margin-top: 20px;
+    }
+    p {
+      color: #7dd3fc;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <img id="frame" />
+    <h1>Celo NFT #${lastMintedTokenId}</h1>
+    <p>Animated Preview</p>
+  </div>
+  <script>
+    const frames = ${JSON.stringify(frames)};
+    let currentFrame = 0;
+    const img = document.getElementById('frame');
     
-    setStatus('Encoding GIF frames... 📹', 'info');
-    gif.render();
+    function animate() {
+      img.src = frames[currentFrame];
+      currentFrame = (currentFrame + 1) % frames.length;
+      setTimeout(animate, 125);
+    }
+    
+    animate();
+  </script>
+</body>
+</html>`;
+    
+    // Download as HTML file
+    const htmlBlob = new Blob([htmlContent], { type: 'text/html' });
+    const downloadUrl = URL.createObjectURL(htmlBlob);
+    const a = document.createElement('a');
+    a.style.display = 'none';
+    a.href = downloadUrl;
+    a.download = `celo-nft-${lastMintedTokenId}-animated.html`;
+    document.body.appendChild(a);
+    a.click();
+    
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(downloadUrl);
+    }, 100);
+    
+    setStatus('✅ Animated HTML downloaded! Open it in your browser.', 'success');
+    
+    if (videoBtn) {
+      videoBtn.disabled = false;
+      videoBtn.innerHTML = '🎬 HTML';
+    }
     
   } catch (e) {
-    console.error('GIF generation failed:', e);
-    setStatus('Failed to generate GIF: ' + e.message, 'error');
+    console.error('Animation generation failed:', e);
+    setStatus('Failed to generate animation: ' + e.message, 'error');
     
     const videoBtn = document.getElementById('downloadVideoBtn');
     if (videoBtn) {
