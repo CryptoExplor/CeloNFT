@@ -14,8 +14,7 @@
     "@reown/appkit-adapter-wagmi": "^1.8.2",
     "@wagmi/core": "^2.13.4",
     "canvas-confetti": "^1.9.3",
-    "viem": "^2.21.0",
-    "gif.js": "^0.2.0"
+    "viem": "^2.21.0"
   },
   "devDependencies": {
     "vite": "^5.0.0"
