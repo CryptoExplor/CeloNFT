@@ -404,7 +404,8 @@ async function castToFarcaster(tokenId, rarity, price) {
   const text = `I just minted CELO NFT #${tokenId} (${rarity}) at ${price}! 🎨✨\n\nMint yours now:`;
   const embedUrl = MINIAPP_URL;
   
-  if (sdk?.actions?.composeCast) {
+  // Check if we're in Farcaster environment with SDK
+  if (isFarcasterEnvironment && sdk?.actions?.composeCast) {
     try {
       setStatus('Opening cast composer... 📝', 'info');
       
@@ -427,9 +428,15 @@ async function castToFarcaster(tokenId, rarity, price) {
       setStatus('Failed to create cast. Please try again.', 'error');
     }
   } else {
+    // Outside Farcaster - open Warpcast composer in new window
     const warpcastUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(text)}&embeds[]=${encodeURIComponent(embedUrl)}`;
-    window.open(warpcastUrl, '_blank');
-    setStatus('Opening Warpcast composer...', 'info');
+    const popup = window.open(warpcastUrl, '_blank', 'width=600,height=700');
+    
+    if (popup) {
+      setStatus('✅ Opening Warpcast composer...', 'success');
+    } else {
+      setStatus('⚠️ Please allow popups to share on Warpcast', 'warning');
+    }
   }
 }
 
@@ -735,6 +742,7 @@ async function previewNft(tokenId) {
   previewContainer.innerHTML = '';
   previewContainer.classList.remove("sparkles", ...ALL_RARITY_CLASSES);
   nftActions.classList.add('hidden');
+  txLinksContainer.classList.add('hidden');
   
   const nftActionsRow2 = document.getElementById('nftActionsRow2');
   if (nftActionsRow2) nftActionsRow2.classList.add('hidden');
@@ -787,8 +795,29 @@ async function previewNft(tokenId) {
     const buttonLabel = `Preview NFT #${tokenId} (${rarityText} / ${priceText})`;
     previewBtn.innerText = buttonLabel;
     
+    // Show action buttons
     nftActions.classList.remove('hidden');
     if (nftActionsRow2) nftActionsRow2.classList.remove('hidden');
+    
+    // Show Cast button for previously minted NFT
+    if (contractAddress) {
+      const celoscanTokenUrl = `https://celoscan.io/token/${contractAddress}?a=${tokenId}`;
+
+      txLinksContainer.innerHTML = `
+        <a href="${celoscanTokenUrl}" target="_blank" rel="noopener noreferrer">View on Celoscan</a>
+      `;
+      
+      const castBtnElement = document.createElement('button');
+      castBtnElement.id = 'castBtn';
+      castBtnElement.className = 'tx-link cast-link';
+      castBtnElement.innerHTML = '📣 Cast Minted NFT';
+      castBtnElement.onclick = async () => {
+        await castToFarcaster(tokenId, rarityText, priceText);
+      };
+      txLinksContainer.appendChild(castBtnElement);
+      
+      txLinksContainer.classList.remove('hidden');
+    }
 
   } catch (e) {
     setStatus("Failed to load NFT preview. Check console for details.", 'error'); 
@@ -797,6 +826,7 @@ async function previewNft(tokenId) {
     previewContainer.classList.add('hidden');
     nftActions.classList.add('hidden');
     if (nftActionsRow2) nftActionsRow2.classList.add('hidden');
+    txLinksContainer.classList.add('hidden');
   } finally {
     previewBtn.disabled = false;
   }
