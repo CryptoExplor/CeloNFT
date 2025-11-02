@@ -51,27 +51,39 @@ let wagmiConfig = null;
 let userMintCount = 0;
 let currentNFTData = null;
 
-// Farcaster detection
-function isFarcasterEmbed() {
+// Farcaster detection - FIXED VERSION
+async function isFarcasterEmbed() {
+  // Critical checks in priority order:
+  
+  // 1. Must be in an iframe (Farcaster apps run in iframes)
+  const isIframe = window.self !== window.top;
+  
+  // 2. SDK must exist
+  const hasSDK = typeof sdk !== 'undefined';
+  
+  // 3. MOST IMPORTANT: Check if SDK is actually ready (only true inside Farcaster)
+  let isSdkReady = false;
+  if (hasSDK) {
+    try {
+      // Wait briefly for SDK to initialize
+      await new Promise(resolve => setTimeout(resolve, 100));
+      isSdkReady = sdk.context !== undefined && sdk.context !== null;
+    } catch (e) {
+      isSdkReady = false;
+    }
+  }
+  
   const checks = {
-    isIframe: window.self !== window.top,
-    hasSDK: typeof sdk !== 'undefined',
-    hasContext: typeof sdk !== 'undefined' && sdk.context,
-    userAgent: /farcaster|warpcast/i.test(navigator.userAgent),
-    referrer: /farcaster|warpcast/i.test(document.referrer),
-    urlParam: new URLSearchParams(window.location.search).has('fc') || 
-              new URLSearchParams(window.location.search).has('farcaster'),
-    parentCheck: (() => {
-      try {
-        return window.parent !== window && window.parent.location.href.includes('farcaster');
-      } catch (e) {
-        return window.parent !== window;
-      }
-    })()
+    isIframe,
+    hasSDK,
+    isSdkReady,
+    hasValidContext: hasSDK && sdk.context?.user?.fid !== undefined
   };
 
   console.log('Farcaster Detection Checks:', checks);
-  return Object.values(checks).some(v => v === true);
+  
+  // Only return true if we're in iframe AND SDK is properly initialized with context
+  return isIframe && hasSDK && isSdkReady;
 }
 
 // Helper Functions
@@ -306,7 +318,7 @@ function updateUserMintCount() {
   });
 }
 
-// NEW: Load last minted NFT for connected wallet
+// Load last minted NFT for connected wallet
 async function loadLastMintedNFT() {
   if (!userAddress || !contractDetails) return;
   
@@ -818,13 +830,15 @@ wagmiConfig = wagmiAdapter.wagmiConfig;
       previewBtn.classList.remove('hidden');
     }
 
-    isFarcasterEnvironment = isFarcasterEmbed();
+    // IMPORTANT: Await the detection to ensure proper initialization
+    isFarcasterEnvironment = await isFarcasterEmbed();
     
     console.log('=== ENVIRONMENT DETECTION ===');
     console.log('Detected as Farcaster:', isFarcasterEnvironment);
     console.log('Window location:', window.location.href);
     console.log('Is iframe:', window.self !== window.top);
     console.log('Has SDK:', typeof sdk !== 'undefined');
+    console.log('SDK Context:', sdk?.context);
     console.log('User Agent:', navigator.userAgent);
     console.log('Referrer:', document.referrer);
     console.log('============================');
