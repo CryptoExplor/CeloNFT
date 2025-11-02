@@ -49,11 +49,10 @@ let modal = null;
 let isFarcasterEnvironment = false;
 let wagmiConfig = null;
 let userMintCount = 0;
-let currentNFTData = null; // Store current NFT data for downloads
+let currentNFTData = null;
 
-// FIXED: More aggressive Farcaster detection
+// Farcaster detection
 function isFarcasterEmbed() {
-  // Check multiple indicators
   const checks = {
     isIframe: window.self !== window.top,
     hasSDK: typeof sdk !== 'undefined',
@@ -66,14 +65,12 @@ function isFarcasterEmbed() {
       try {
         return window.parent !== window && window.parent.location.href.includes('farcaster');
       } catch (e) {
-        return window.parent !== window; // Cross-origin = likely iframe
+        return window.parent !== window;
       }
     })()
   };
 
   console.log('Farcaster Detection Checks:', checks);
-  
-  // Return true if ANY indicator suggests Farcaster
   return Object.values(checks).some(v => v === true);
 }
 
@@ -319,12 +316,11 @@ function saveMintToHistory(tokenId, txHash) {
   updateUserMintCount();
 }
 
-// NEW: Cast to Farcaster using SDK composeCast
+// Cast to Farcaster
 async function castToFarcaster(tokenId, rarity, price) {
   const text = `I just minted CELO NFT #${tokenId} (${rarity}) at ${price}! 🎨✨\n\nMint yours now:`;
   const embedUrl = MINIAPP_URL;
   
-  // Always try SDK first if available
   if (sdk?.actions?.composeCast) {
     try {
       setStatus('Opening cast composer... 📝', 'info');
@@ -348,14 +344,13 @@ async function castToFarcaster(tokenId, rarity, price) {
       setStatus('Failed to create cast. Please try again.', 'error');
     }
   } else {
-    // Fallback: Open Warpcast composer in new tab (only if SDK not available)
     const warpcastUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(text)}&embeds[]=${encodeURIComponent(embedUrl)}`;
     window.open(warpcastUrl, '_blank');
     setStatus('Opening Warpcast composer...', 'info');
   }
 }
 
-// NEW: Download SVG
+// Download SVG
 async function downloadSVGFile() {
   if (!currentNFTData || !currentNFTData.svg) {
     setStatus('No NFT data available for download', 'error');
@@ -363,11 +358,9 @@ async function downloadSVGFile() {
   }
   
   try {
-    // Use both blob download and data URL as fallback
     const svgData = currentNFTData.svg;
     const blob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
     
-    // Try modern download API first
     if (window.showSaveFilePicker) {
       try {
         const handle = await window.showSaveFilePicker({
@@ -389,18 +382,14 @@ async function downloadSVGFile() {
       }
     }
     
-    // Fallback to traditional download
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.style.display = 'none';
     a.href = url;
     a.download = `celo-nft-${lastMintedTokenId}.svg`;
     document.body.appendChild(a);
-    
-    // Trigger download
     a.click();
     
-    // Cleanup
     setTimeout(() => {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
@@ -413,7 +402,7 @@ async function downloadSVGFile() {
   }
 }
 
-// NEW: Convert SVG to PNG and download
+// Download PNG
 async function downloadPNGFile() {
   if (!currentNFTData || !currentNFTData.svg) {
     setStatus('No NFT data available for download', 'error');
@@ -435,22 +424,17 @@ async function downloadPNGFile() {
       
       img.onload = async () => {
         try {
-          // Draw background
           ctx.fillStyle = '#000000';
           ctx.fillRect(0, 0, 400, 400);
-          
-          // Draw SVG
           ctx.drawImage(img, 0, 0, 400, 400);
           URL.revokeObjectURL(url);
           
-          // Convert to blob
           canvas.toBlob(async (blob) => {
             if (!blob) {
               reject(new Error('Failed to generate PNG blob'));
               return;
             }
             
-            // Try modern download API first
             if (window.showSaveFilePicker) {
               try {
                 const handle = await window.showSaveFilePicker({
@@ -473,7 +457,6 @@ async function downloadPNGFile() {
               }
             }
             
-            // Fallback to traditional download
             const downloadUrl = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.style.display = 'none';
@@ -510,7 +493,7 @@ async function downloadPNGFile() {
   }
 }
 
-// NEW: Copy image to clipboard
+// Copy image to clipboard
 async function copyImageToClipboard() {
   if (!currentNFTData || !currentNFTData.svg) {
     setStatus('No NFT data available', 'error');
@@ -565,20 +548,17 @@ async function copyImageToClipboard() {
   }
 }
 
-// NEW: Share to Twitter/X
+// Share to Twitter
 function shareToTwitter() {
   const text = `I just minted a CELO NFT with live price snapshot! 🎨✨\n\nMint yours:`;
   const appUrl = 'https://celo-nft-phi.vercel.app/';
-  const miniAppUrl = MINIAPP_URL;
-  
-  // Share both links
   const twitterUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(appUrl)}&hashtags=CeloNFT,Celo`;
   
   window.open(twitterUrl, '_blank', 'width=550,height=420');
   setStatus('Opening Twitter...', 'info');
 }
 
-// NEW: Download as animated video (MP4)
+// Download as animated GIF - OPTIMIZED VERSION
 async function downloadAsVideo() {
   if (!currentNFTData || !currentNFTData.svg) {
     setStatus('No NFT data available', 'error');
@@ -586,108 +566,115 @@ async function downloadAsVideo() {
   }
   
   try {
-    setStatus('Generating video... This may take a moment ⏳', 'info');
+    setStatus('Generating animated GIF... ⏳', 'info');
     
     const videoBtn = document.getElementById('downloadVideoBtn');
     if (videoBtn) {
       videoBtn.disabled = true;
-      videoBtn.innerHTML = '⏳ Processing...';
+      videoBtn.innerHTML = '⏳ Generating...';
     }
     
-    // Dynamically import gif.js
-    const GIF = window.GIF;
-    if (!GIF) {
-      throw new Error('GIF.js library not loaded');
-    }
-    
-    // Create GIF encoder
-    const gif = new GIF({
-      workers: 2,
-      quality: 10,
-      width: 400,
-      height: 400,
-      workerScript: 'https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.worker.js'
-    });
-    
-    // Create canvas for rendering frames
     const canvas = document.createElement('canvas');
-    canvas.width = 400;
-    canvas.height = 400;
-    const ctx = canvas.getContext('2d');
+    const size = 400;
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
     
-    // Load SVG as image
     const img = new Image();
     const svgBlob = new Blob([currentNFTData.svg], { type: 'image/svg+xml;charset=utf-8' });
     const url = URL.createObjectURL(svgBlob);
     
-    img.onload = () => {
-      // Capture 30 frames (3 seconds at 10fps for smooth animation)
-      for (let frame = 0; frame < 30; frame++) {
-        // Clear canvas
-        ctx.fillStyle = '#000000';
-        ctx.fillRect(0, 0, 400, 400);
-        
-        // Draw SVG
-        ctx.drawImage(img, 0, 0, 400, 400);
-        
-        // Add frame to GIF (100ms per frame = 10fps)
-        gif.addFrame(ctx, { copy: true, delay: 100 });
+    await new Promise((resolve, reject) => {
+      img.onload = resolve;
+      img.onerror = reject;
+      img.src = url;
+    });
+    
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, size, size);
+    ctx.drawImage(img, 0, 0, size, size);
+    URL.revokeObjectURL(url);
+    
+    const baseImageData = ctx.getImageData(0, 0, size, size);
+    
+    const gif = new window.GIF({
+      workers: 2,
+      quality: 15,
+      width: size,
+      height: size,
+      workerScript: 'https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.worker.js',
+      transparent: null,
+      dither: false
+    });
+    
+    const frameCount = 10;
+    const delay = 100;
+    
+    for (let i = 0; i < frameCount; i++) {
+      ctx.putImageData(baseImageData, 0, 0);
+      
+      const opacity = 0.05 + (Math.sin(i / frameCount * Math.PI * 2) * 0.03);
+      ctx.fillStyle = `rgba(73, 223, 181, ${opacity})`;
+      ctx.fillRect(0, 0, size, size);
+      
+      gif.addFrame(ctx, { copy: true, delay });
+    }
+    
+    let lastProgress = 0;
+    gif.on('progress', (p) => {
+      const progress = Math.floor(p * 100);
+      if (progress > lastProgress + 10) {
+        setStatus(`Encoding GIF: ${progress}%... 📹`, 'info');
+        lastProgress = progress;
       }
-      
-      URL.revokeObjectURL(url);
-      
-      // Render GIF
-      gif.on('finished', (blob) => {
-        const downloadUrl = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.style.display = 'none';
-        a.href = downloadUrl;
-        a.download = `celo-nft-${lastMintedTokenId}.gif`;
-        document.body.appendChild(a);
-        a.click();
-        
-        setTimeout(() => {
-          document.body.removeChild(a);
-          URL.revokeObjectURL(downloadUrl);
-        }, 100);
-        
-        setStatus('✅ GIF downloaded!', 'success');
-        
-        if (videoBtn) {
-          videoBtn.disabled = false;
-          videoBtn.innerHTML = '🎬 Video';
-        }
-      });
-      
-      gif.render();
-      setStatus('Encoding GIF frames... 📹', 'info');
-    };
+    });
     
-    img.onerror = () => {
-      URL.revokeObjectURL(url);
-      throw new Error('Failed to load SVG');
-    };
+    gif.on('finished', (blob) => {
+      const downloadUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.style.display = 'none';
+      a.href = downloadUrl;
+      a.download = `celo-nft-${lastMintedTokenId}-animated.gif`;
+      document.body.appendChild(a);
+      a.click();
+      
+      setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(downloadUrl);
+      }, 100);
+      
+      setStatus('✅ Animated GIF downloaded!', 'success');
+      
+      if (videoBtn) {
+        videoBtn.disabled = false;
+        videoBtn.innerHTML = '🎬 GIF';
+      }
+    });
     
-    img.src = url;
+    gif.on('abort', () => {
+      setStatus('GIF generation cancelled', 'warning');
+      if (videoBtn) {
+        videoBtn.disabled = false;
+        videoBtn.innerHTML = '🎬 GIF';
+      }
+    });
+    
+    setStatus('Encoding GIF frames... 📹', 'info');
+    gif.render();
     
   } catch (e) {
-    console.error('Video generation failed:', e);
-    setStatus('⚠️ Video export requires gif.js library. Install with: npm install gif.js', 'warning');
+    console.error('GIF generation failed:', e);
+    setStatus('Failed to generate GIF: ' + e.message, 'error');
     
     const videoBtn = document.getElementById('downloadVideoBtn');
     if (videoBtn) {
       videoBtn.disabled = false;
-      videoBtn.innerHTML = '🎬 Video';
+      videoBtn.innerHTML = '🎬 GIF';
     }
-    
-    // Show tip
-    setTimeout(() => {
-      setStatus('Tip: You can screen record the animated NFT for now!', 'info');
-    }, 3000);
   }
 }
 
-// NEW: Gift NFT Modal
+// Gift Modal
 function showGiftModal() {
   if (!lastMintedTokenId) {
     setStatus('No NFT to gift. Please mint first!', 'warning');
@@ -723,7 +710,7 @@ function showGiftModal() {
   };
 }
 
-// NEW: Gift NFT Function
+// Gift NFT
 async function giftNFT(tokenId, recipient, message) {
   try {
     setStatus('Sending gift... 🎁', 'info');
@@ -744,7 +731,6 @@ async function giftNFT(tokenId, recipient, message) {
     
     setStatus(`✅ NFT #${tokenId} gifted successfully!`, 'success');
     
-    // Store gift info
     const gifts = JSON.parse(sessionStorage.getItem('giftHistory') || '[]');
     gifts.unshift({
       tokenId,
@@ -755,7 +741,6 @@ async function giftNFT(tokenId, recipient, message) {
     });
     sessionStorage.setItem('giftHistory', JSON.stringify(gifts));
     
-    // Show transaction link
     const celoscanUrl = `https://celoscan.io/tx/${hash}`;
     setTimeout(() => {
       setStatus(`Gift sent! View transaction: ${celoscanUrl}`, 'success');
@@ -807,7 +792,6 @@ async function previewNft(tokenId) {
     let svgString = atob(decodeURIComponent(base64Svg));
     const safeSvg = svgString.replace(/<script.*?>.*?<\/script>/g, '');
 
-    // Store NFT data for downloads
     currentNFTData = {
       svg: safeSvg,
       metadata: metadata,
@@ -836,7 +820,6 @@ async function previewNft(tokenId) {
     const buttonLabel = `Preview NFT #${tokenId} (${rarityText} / ${priceText})`;
     previewBtn.innerText = buttonLabel;
     
-    // Show both rows of action buttons
     nftActions.classList.remove('hidden');
     if (nftActionsRow2) nftActionsRow2.classList.remove('hidden');
 
@@ -880,7 +863,6 @@ wagmiConfig = wagmiAdapter.wagmiConfig;
       previewBtn.classList.remove('hidden');
     }
 
-    // FIXED: Better detection
     isFarcasterEnvironment = isFarcasterEmbed();
     
     console.log('=== ENVIRONMENT DETECTION ===');
@@ -1149,13 +1131,9 @@ mintBtn.addEventListener('click', async () => {
     
     setStatus("🎉 Mint Successful!", "success");
     
-    // Get rarity and price for cast
     const priceText = (price).toFixed(4);
-    
-    // Store mint info
     lastMintedInfo = { tokenId: nextTokenId, txHash: hash, price: priceText, rarity: null };
     
-    // Show Celoscan and Cast buttons
     if (contractAddress) {
       const celoscanTokenUrl = `https://celoscan.io/token/${contractAddress}?a=${nextTokenId}`;
 
@@ -1163,7 +1141,6 @@ mintBtn.addEventListener('click', async () => {
         <a href="${celoscanTokenUrl}" target="_blank" rel="noopener noreferrer">View on Celoscan</a>
       `;
       
-      // Add Cast button (will be populated with rarity after preview loads)
       const castBtnElement = document.createElement('button');
       castBtnElement.id = 'castBtn';
       castBtnElement.className = 'tx-link cast-link';
@@ -1190,7 +1167,6 @@ mintBtn.addEventListener('click', async () => {
     previewBtn.innerText = `Preview NFT #${nextTokenId}`;
     await previewNft(lastMintedTokenId);
     
-    // Update rarity info after preview
     if (currentNFTData && currentNFTData.metadata) {
       const rarityAttr = currentNFTData.metadata.attributes?.find(attr => attr.trait_type === 'Rarity');
       if (rarityAttr) {
@@ -1244,28 +1220,21 @@ previewBtn.addEventListener('click', async () => {
   }
 });
 
-// Download SVG Handler
+// Event Listeners
 downloadSVG.addEventListener('click', downloadSVGFile);
-
-// Download PNG Handler (renamed from downloadGIF)
 downloadGIF.addEventListener('click', downloadPNGFile);
-
-// Gift Button Handler
 giftBtn.addEventListener('click', showGiftModal);
 
-// Copy Image Handler
 const copyImageBtn = document.getElementById('copyImageBtn');
 if (copyImageBtn) {
   copyImageBtn.addEventListener('click', copyImageToClipboard);
 }
 
-// Share to Twitter Handler
 const twitterBtn = document.getElementById('twitterBtn');
 if (twitterBtn) {
   twitterBtn.addEventListener('click', shareToTwitter);
 }
 
-// Download Video Handler
 const downloadVideoBtn = document.getElementById('downloadVideoBtn');
 if (downloadVideoBtn) {
   downloadVideoBtn.addEventListener('click', downloadAsVideo);
