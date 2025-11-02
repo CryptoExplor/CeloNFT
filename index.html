@@ -382,11 +382,13 @@
     }
     
     /* Download Actions */
-    .nft-actions {
+    .nft-actions,
+    .nft-actions-row2 {
       display: flex;
       gap: 10px;
       justify-content: center;
       margin: 12px 0;
+      flex-wrap: wrap;
     }
     
     .action-btn-small {
@@ -401,15 +403,23 @@
       transition: transform 0.2s, box-shadow 0.2s;
       box-shadow: 0 2px 6px rgba(16, 185, 129, 0.3);
       font-family: 'Orbitron', sans-serif;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
     }
     
-    .action-btn-small:hover {
+    .action-btn-small:hover:not(:disabled) {
       transform: translateY(-2px);
       box-shadow: 0 4px 10px rgba(16, 185, 129, 0.4);
     }
     
     .action-btn-small:active {
       transform: translateY(0);
+    }
+    
+    .action-btn-small:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
     }
     
     /* Gift Modal */
@@ -495,12 +505,44 @@
     
     /* Gift Button */
     .gift-button {
-      background: linear-gradient(135deg, #f59e0b, #f97316);
-      margin-top: 12px;
+      background: linear-gradient(135deg, #f59e0b, #f97316) !important;
+      box-shadow: 0 2px 6px rgba(249, 115, 22, 0.3) !important;
+      margin-top: 0;
     }
     
     .gift-button:hover {
       opacity: 0.9;
+      box-shadow: 0 4px 10px rgba(249, 115, 22, 0.4) !important;
+    }
+    
+    /* Copy Button */
+    .copy-button {
+      background: linear-gradient(135deg, #6366f1, #8b5cf6) !important;
+      box-shadow: 0 2px 6px rgba(139, 92, 246, 0.3) !important;
+    }
+    
+    .copy-button:hover {
+      box-shadow: 0 4px 10px rgba(139, 92, 246, 0.4) !important;
+    }
+    
+    /* Twitter Button */
+    .twitter-button {
+      background: linear-gradient(135deg, #1d9bf0, #0c7abf) !important;
+      box-shadow: 0 2px 6px rgba(29, 155, 240, 0.3) !important;
+    }
+    
+    .twitter-button:hover {
+      box-shadow: 0 4px 10px rgba(29, 155, 240, 0.4) !important;
+    }
+    
+    /* Video Button */
+    .video-button {
+      background: linear-gradient(135deg, #dc2626, #b91c1c) !important;
+      box-shadow: 0 2px 6px rgba(220, 38, 38, 0.3) !important;
+    }
+    
+    .video-button:hover {
+      box-shadow: 0 4px 10px rgba(220, 38, 38, 0.4) !important;
     }
   </style>
 </head>
@@ -588,7 +630,7 @@
   <div id="nftActionsRow2" class="nft-actions-row2 hidden">
     <button id="copyImageBtn" class="action-btn-small copy-button">📋 Copy</button>
     <button id="twitterBtn" class="action-btn-small twitter-button">𝕏 Share</button>
-    <button id="downloadVideoBtn" class="action-btn-small video-button">🎬 Video</button>
+    <button id="downloadVideoBtn" class="action-btn-small video-button">🎬 GIF</button>
   </div>
 
   <!-- Footer -->
