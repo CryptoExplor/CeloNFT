@@ -144,24 +144,6 @@
       transform: scale(0.98);
     }
     
-    .external-banner {
-      background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
-      padding: 12px 16px;
-      border-radius: 10px;
-      margin-bottom: 16px;
-      width: 90%;
-      max-width: 390px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 0.9rem;
-      box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
-      animation: slideIn 0.5s ease-out;
-      text-decoration: none;
-      color: white;
-      transition: transform 0.2s, box-shadow 0.2s;
-    }
-    
     .external-banner-link {
       background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
       padding: 14px 20px;
@@ -192,26 +174,10 @@
       transform: translateY(0);
     }
     
-    .external-banner svg {
+    .external-banner-link svg {
       flex-shrink: 0;
       width: 20px;
       height: 20px;
-    }
-    
-    .external-banner span {
-      color: #e0e7ff;
-    }
-    
-    .external-banner a {
-      color: #fff;
-      font-weight: 600;
-      text-decoration: none;
-      border-bottom: 1px solid #a78bfa;
-      transition: border-color 0.2s;
-    }
-    
-    .external-banner a:hover {
-      border-color: #fff;
     }
     
     @keyframes slideIn {
@@ -236,7 +202,8 @@
       padding: 0 10px;
     }
     
-    .tx-links-container a {
+    .tx-links-container a,
+    .tx-links-container button {
       color: #fff;
       background: linear-gradient(135deg, #1e40af, #3b82f6);
       padding: 10px 20px;
@@ -246,21 +213,26 @@
       font-weight: 600;
       transition: transform 0.2s, box-shadow 0.2s;
       box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+      border: none;
+      cursor: pointer;
+      font-family: 'Orbitron', sans-serif;
     }
     
-    .tx-links-container a:hover {
+    .tx-links-container a:hover,
+    .tx-links-container button:hover {
       transform: translateY(-2px);
       box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
     }
     
     .share-link {
       background: linear-gradient(135deg, #8b5cf6, #ec4899) !important;
-      box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);
+      box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3) !important;
     }
     
     .share-link:hover {
-      box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4);
-    }    
+      box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4) !important;
+    }
+    
     .stats-grid {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -477,22 +449,11 @@
   <!-- Status Box -->
   <div id="statusBox" class="status-box" aria-live="polite"></div>
 
-  <!-- Transaction Links Container (Side by Side) -->
-  <div id="txLinksContainer" class="tx-links-container hidden">
-    <a id="celoscanLink" href="#" target="_blank" rel="noopener noreferrer" class="tx-link">View on Celoscan</a>
-    <button id="shareBtn" class="tx-link share-link">🔗 Share My NFT</button>
-  <!-- Share Button (Separate, Persistent) -->
-  </div>
+  <!-- Transaction Links Container (dynamically populated with share button) -->
+  <div id="txLinksContainer" class="tx-links-container hidden"></div>
   
   <!-- NFT SVG Preview -->
   <div id="nft-preview-container" class="hidden"></div>
-
-  <!-- Download & Actions -->
-  <div id="nftActions" class="nft-actions hidden">
-    <button id="downloadSVG" class="action-btn-small">📥 SVG</button>
-    <button id="downloadPNG" class="action-btn-small">📥 PNG</button>
-    <button id="downloadJSON" class="action-btn-small">📄 JSON</button>
-  </div>
 
   <!-- Footer -->
   <footer>
