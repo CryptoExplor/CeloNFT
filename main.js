@@ -567,14 +567,12 @@ async function copyImageToClipboard() {
 
 // NEW: Share to Twitter/X
 function shareToTwitter() {
-  if (!lastMintedTokenId) {
-    setStatus('No NFT to share', 'error');
-    return;
-  }
+  const text = `I just minted a CELO NFT with live price snapshot! 🎨✨\n\nMint yours:`;
+  const appUrl = 'https://celo-nft-phi.vercel.app/';
+  const miniAppUrl = MINIAPP_URL;
   
-  const text = `I just minted CELO NFT #${lastMintedTokenId} with live price snapshot! 🎨✨\n\nMint yours:`;
-  const url = `https://celo-nft-phi.vercel.app/?nft=${lastMintedTokenId}`;
-  const twitterUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`;
+  // Share both links
+  const twitterUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(appUrl)}&hashtags=CeloNFT,Celo`;
   
   window.open(twitterUrl, '_blank', 'width=550,height=420');
   setStatus('Opening Twitter...', 'info');
@@ -582,13 +580,111 @@ function shareToTwitter() {
 
 // NEW: Download as animated video (MP4)
 async function downloadAsVideo() {
-  setStatus('⚠️ Video export requires external library. Coming soon!', 'warning');
+  if (!currentNFTData || !currentNFTData.svg) {
+    setStatus('No NFT data available', 'error');
+    return;
+  }
   
-  // TODO: Implement with library like gif.js or ffmpeg.wasm
-  // For now, show info message
-  setTimeout(() => {
-    setStatus('Tip: You can screen record the animated NFT for now!', 'info');
-  }, 2000);
+  try {
+    setStatus('Generating video... This may take a moment ⏳', 'info');
+    
+    const videoBtn = document.getElementById('downloadVideoBtn');
+    if (videoBtn) {
+      videoBtn.disabled = true;
+      videoBtn.innerHTML = '⏳ Processing...';
+    }
+    
+    // Dynamically import gif.js
+    const GIF = window.GIF;
+    if (!GIF) {
+      throw new Error('GIF.js library not loaded');
+    }
+    
+    // Create GIF encoder
+    const gif = new GIF({
+      workers: 2,
+      quality: 10,
+      width: 400,
+      height: 400,
+      workerScript: 'https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.worker.js'
+    });
+    
+    // Create canvas for rendering frames
+    const canvas = document.createElement('canvas');
+    canvas.width = 400;
+    canvas.height = 400;
+    const ctx = canvas.getContext('2d');
+    
+    // Load SVG as image
+    const img = new Image();
+    const svgBlob = new Blob([currentNFTData.svg], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(svgBlob);
+    
+    img.onload = () => {
+      // Capture 30 frames (3 seconds at 10fps for smooth animation)
+      for (let frame = 0; frame < 30; frame++) {
+        // Clear canvas
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(0, 0, 400, 400);
+        
+        // Draw SVG
+        ctx.drawImage(img, 0, 0, 400, 400);
+        
+        // Add frame to GIF (100ms per frame = 10fps)
+        gif.addFrame(ctx, { copy: true, delay: 100 });
+      }
+      
+      URL.revokeObjectURL(url);
+      
+      // Render GIF
+      gif.on('finished', (blob) => {
+        const downloadUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = downloadUrl;
+        a.download = `celo-nft-${lastMintedTokenId}.gif`;
+        document.body.appendChild(a);
+        a.click();
+        
+        setTimeout(() => {
+          document.body.removeChild(a);
+          URL.revokeObjectURL(downloadUrl);
+        }, 100);
+        
+        setStatus('✅ GIF downloaded!', 'success');
+        
+        if (videoBtn) {
+          videoBtn.disabled = false;
+          videoBtn.innerHTML = '🎬 Video';
+        }
+      });
+      
+      gif.render();
+      setStatus('Encoding GIF frames... 📹', 'info');
+    };
+    
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      throw new Error('Failed to load SVG');
+    };
+    
+    img.src = url;
+    
+  } catch (e) {
+    console.error('Video generation failed:', e);
+    setStatus('⚠️ Video export requires gif.js library. Install with: npm install gif.js', 'warning');
+    
+    const videoBtn = document.getElementById('downloadVideoBtn');
+    if (videoBtn) {
+      videoBtn.disabled = false;
+      videoBtn.innerHTML = '🎬 Video';
+    }
+    
+    // Show tip
+    setTimeout(() => {
+      setStatus('Tip: You can screen record the animated NFT for now!', 'info');
+    }, 3000);
+  }
 }
 
 // NEW: Gift NFT Modal
