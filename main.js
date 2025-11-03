@@ -429,10 +429,8 @@ function saveMintToHistory(tokenId, txHash) {
 // Get actual minted token ID from transaction receipt
 async function getTokenIdFromReceipt(receipt) {
   try {
-    // Look for Transfer event (ERC721 standard)
     const transferEvent = receipt.logs.find(log => {
       try {
-        // Transfer event signature: Transfer(address,address,uint256)
         return log.topics[0] === '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
       } catch (e) {
         return false;
@@ -440,12 +438,10 @@ async function getTokenIdFromReceipt(receipt) {
     });
     
     if (transferEvent && transferEvent.topics[3]) {
-      // Token ID is the 4th topic (index 3)
       const tokenId = BigInt(transferEvent.topics[3]);
       return Number(tokenId);
     }
     
-    // Fallback: read current supply
     const totalSupply = await readContract(wagmiConfig, {
       address: contractDetails.address,
       abi: contractDetails.abi,
@@ -454,6 +450,70 @@ async function getTokenIdFromReceipt(receipt) {
     return Number(totalSupply);
   } catch (e) {
     console.error('Error extracting token ID:', e);
+    return null;
+  }
+}
+
+// ⭐ AIRDROP CLAIMING FUNCTION ⭐
+async function claimAirdrop(tokenId, txHash) {
+  try {
+    setStatus('🎁 Claiming your 0.01 CELO airdrop...', 'info');
+    
+    const response = await fetch('/api/airdrop', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        tokenId: tokenId,
+        userAddress: userAddress,
+        mintTxHash: txHash
+      })
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.error || 'Airdrop claim failed');
+    }
+    
+    if (data.success) {
+      setStatus(`✅ Airdrop received! ${data.amount} CELO sent to your wallet`, 'success');
+      
+      if (data.txHash) {
+        const airdropLink = document.createElement('a');
+        airdropLink.href = data.explorerUrl || `https://celoscan.io/tx/${data.txHash}`;
+        airdropLink.target = '_blank';
+        airdropLink.rel = 'noopener noreferrer';
+        airdropLink.className = 'tx-link';
+        airdropLink.textContent = 'View Airdrop Tx';
+        airdropLink.style.background = 'linear-gradient(135deg, #10b981, #059669)';
+        
+        txLinksContainer.appendChild(airdropLink);
+      }
+      
+      confetti({
+        particleCount: 150,
+        spread: 100,
+        origin: { y: 0.7 },
+        colors: ['#10b981', '#34d399', '#6ee7b7']
+      });
+      
+      return data;
+    }
+  } catch (error) {
+    console.error('Airdrop claim error:', error);
+    
+    const errorMsg = error.message || 'Airdrop claim failed';
+    
+    if (errorMsg.includes('Rate limit')) {
+      setStatus('⚠️ ' + errorMsg, 'warning');
+    } else if (errorMsg.includes('already claimed')) {
+      setStatus('ℹ️ Airdrop already claimed for this mint', 'info');
+    } else {
+      setStatus('⚠️ Airdrop claim failed: ' + errorMsg, 'warning');
+    }
+    
     return null;
   }
 }
@@ -547,7 +607,6 @@ async function downloadSVGFile() {
   }
 }
 
-// Improved PNG download with proper cleanup
 async function downloadPNGFile() {
   if (!currentNFTData || !currentNFTData.svg) {
     setStatus('No NFT data available for download', 'error');
@@ -633,21 +692,18 @@ async function downloadPNGFile() {
     console.error('PNG download failed:', e);
     setStatus('Failed to generate PNG: ' + e.message, 'error');
   } finally {
-    // Proper cleanup
     URL.revokeObjectURL(url);
     canvas.width = 0;
     canvas.height = 0;
   }
 }
 
-// Improved copy with Safari compatibility check
 async function copyImageToClipboard() {
   if (!currentNFTData || !currentNFTData.svg) {
     setStatus('No NFT data available', 'error');
     return;
   }
   
-  // Check browser support
   if (!navigator.clipboard || typeof ClipboardItem === 'undefined') {
     setStatus('⚠️ Copy not supported in this browser', 'warning');
     return;
@@ -805,7 +861,6 @@ async function previewNft(tokenId, isNewMint = false) {
   statusBox.innerHTML = '';
   statusBox.className = 'status-box';
   
-  // Show loading spinner with progressive loading
   previewContainer.innerHTML = '<div style="display: flex; justify-content: center; align-items: center; height: 200px;"><span class="spinner" style="width: 40px; height: 40px; border-width: 4px;"></span></div>';
   previewContainer.classList.remove('hidden');
   
@@ -839,8 +894,6 @@ async function previewNft(tokenId, isNewMint = false) {
     if (!base64Svg) throw new Error("Invalid image data format.");
 
     let svgString = atob(decodeURIComponent(base64Svg));
-    
-    // Enhanced SVG sanitization
     const safeSvg = sanitizeSVG(svgString);
 
     currentNFTData = {
@@ -873,7 +926,6 @@ async function previewNft(tokenId, isNewMint = false) {
     nftActions.classList.remove('hidden');
     if (nftActionsRow2) nftActionsRow2.classList.remove('hidden');
     
-    // Hide download buttons in Farcaster environment
     if (isFarcasterEnvironment) {
       if (downloadSVG) downloadSVG.style.display = 'none';
       if (downloadGIF) downloadGIF.style.display = 'none';
@@ -911,7 +963,6 @@ async function previewNft(tokenId, isNewMint = false) {
   }
 }
 
-// Lazy load TradingView widget
 function initTradingView() {
   if (tradingViewLoaded) return;
   tradingViewLoaded = true;
@@ -937,7 +988,6 @@ function initTradingView() {
   document.head.appendChild(script);
 }
 
-// Initialize lazy loading for TradingView
 if ('IntersectionObserver' in window) {
   const observer = new IntersectionObserver((entries) => {
     if (entries[0].isIntersecting) {
@@ -951,11 +1001,9 @@ if ('IntersectionObserver' in window) {
     observer.observe(chartContainer);
   }
 } else {
-  // Fallback for older browsers
   initTradingView();
 }
 
-// Initialize Farcaster SDK
 (async () => {
   try {
     await sdk.actions.ready({ disableNativeGestures: true });
@@ -965,7 +1013,6 @@ if ('IntersectionObserver' in window) {
   }
 })();
 
-// Setup Wagmi Config
 const wagmiAdapter = new WagmiAdapter({
   networks: [celo],
   projectId: PROJECT_ID,
@@ -974,7 +1021,6 @@ const wagmiAdapter = new WagmiAdapter({
 
 wagmiConfig = wagmiAdapter.wagmiConfig;
 
-// Initialize App
 (async () => {
   try {
     lastMintedTokenId = safeLocalStorage.getItem("lastMintedTokenId");
@@ -1136,7 +1182,6 @@ wagmiConfig = wagmiAdapter.wagmiConfig;
       console.warn(`Failed to read contract settings.`, e);
     }
 
-    // Try to fetch max supply
     try {
       const maxSupply = await readContract(wagmiConfig, {
         address: contractDetails.address,
@@ -1160,7 +1205,6 @@ wagmiConfig = wagmiAdapter.wagmiConfig;
   }
 })();
 
-// Watch for account changes with debouncing
 watchAccount(wagmiConfig, {
   onChange(account) {
     clearTimeout(accountChangeTimeout);
@@ -1211,7 +1255,6 @@ watchAccount(wagmiConfig, {
   },
 });
 
-// Connect Button Handler
 connectBtn.addEventListener('click', async () => {
   try {
     if (modal) {
@@ -1223,7 +1266,7 @@ connectBtn.addEventListener('click', async () => {
   }
 });
 
-// Mint Button Handler with network check and improved token ID extraction
+// ⭐ MINT BUTTON WITH AUTOMATIC AIRDROP ⭐
 mintBtn.addEventListener('click', async () => {
   try {
     if (!contractDetails) {
@@ -1236,7 +1279,6 @@ mintBtn.addEventListener('click', async () => {
       return;
     }
     
-    // Check network before minting
     const currentAccount = getAccount(wagmiConfig);
     if (currentAccount.chainId !== celo.id) {
       setStatus("⚠️ Please switch to Celo Mainnet", "error");
@@ -1279,7 +1321,6 @@ mintBtn.addEventListener('click', async () => {
       throw new Error('Transaction was reverted.');
     }
 
-    // Extract actual token ID from receipt
     const actualTokenId = await getTokenIdFromReceipt(receipt);
     
     if (!actualTokenId) {
@@ -1335,6 +1376,11 @@ mintBtn.addEventListener('click', async () => {
       }
     }
 
+    // ⭐ AUTOMATIC AIRDROP CLAIM ⭐
+    setTimeout(async () => {
+      await claimAirdrop(actualTokenId, hash);
+    }, 2000);
+
   } catch (e) {
     const errorMsg = getImprovedErrorMessage(e);
     setStatus(errorMsg, "error");
@@ -1367,7 +1413,6 @@ mintBtn.addEventListener('click', async () => {
   }
 });
 
-// Preview Button Handler
 previewBtn.addEventListener('click', async () => {
   try {
     if (lastMintedTokenId !== null) {
@@ -1381,7 +1426,6 @@ previewBtn.addEventListener('click', async () => {
   }
 });
 
-// Event Listeners
 downloadSVG.addEventListener('click', downloadSVGFile);
 downloadGIF.addEventListener('click', downloadPNGFile);
 giftBtn.addEventListener('click', showGiftModal);
