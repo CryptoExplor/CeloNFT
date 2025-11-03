@@ -1094,8 +1094,7 @@ wagmiConfig = wagmiAdapter.wagmiConfig;
       features: {
         analytics: true,
         email: false,
-        socials: false, // Disable social logins
-        emailShowWallets: false, // Don't show wallets with email
+        socials: false, // Disable social login
       },
       allWallets: 'SHOW',
       themeMode: 'dark',
@@ -1103,6 +1102,9 @@ wagmiConfig = wagmiAdapter.wagmiConfig;
         '--w3m-accent': '#49dfb5',
         '--w3m-border-radius-master': '8px'
       }
+      // Disable features not needed in Farcaster
+      enableWalletGuide: false,
+      enableOnramp: false
     });
 
     if (!connected) {
