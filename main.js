@@ -1094,7 +1094,8 @@ wagmiConfig = wagmiAdapter.wagmiConfig;
       features: {
         analytics: true,
         email: false,
-        socials: [],
+        socials: false, // Disable social logins
+        emailShowWallets: false, // Don't show wallets with email
       },
       allWallets: 'SHOW',
       themeMode: 'dark',
