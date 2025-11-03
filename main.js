@@ -1093,7 +1093,7 @@ wagmiConfig = wagmiAdapter.wagmiConfig;
       },
       features: {
         analytics: true,
-        email: false,
+        connectMethodsOrder: ["wallet"],
       },
       allWallets: 'SHOW',
       themeMode: 'dark',
