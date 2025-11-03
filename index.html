@@ -534,40 +534,13 @@
     .twitter-button:hover {
       box-shadow: 0 4px 10px rgba(29, 155, 240, 0.4) !important;
     }
-    
-    /* Video Button */
-    .video-button {
-      background: linear-gradient(135deg, #dc2626, #b91c1c) !important;
-      box-shadow: 0 2px 6px rgba(220, 38, 38, 0.3) !important;
-    }
-    
-    .video-button:hover {
-      box-shadow: 0 4px 10px rgba(220, 38, 38, 0.4) !important;
-    }
   </style>
 </head>
 <body>
 
-  <!-- Live CELOUSD chart -->
+  <!-- Live CELOUSD chart - TradingView now lazy loaded in main.js -->
   <div class="tradingview-widget-container" role="img" aria-label="Live CELO Price Chart">
     <div id="celo-chart"></div>
-    <script src="https://s3.tradingview.com/tv.js"></script>
-    <script>
-      new TradingView.widget({
-        autosize: true,
-        symbol: "BINANCE:CELOUSDT",
-        interval: "60",
-        theme: "dark",
-        style: "1",
-        hide_top_toolbar: true,
-        withdateranges: false,
-        toolbar_bg: "#1f1f1f",
-        locale: "en",
-        enable_publishing: false,
-        allow_symbol_change: false,
-        container_id: "celo-chart"
-      });
-    </script>
   </div>
 
   <h1>Mint Your Celo Price NFT</h1>
@@ -585,68 +558,66 @@
   <!-- Stats Grid -->
   <div id="statsGrid" class="stats-grid">
     <div class="stat-item">
-      <div class="stat-value" id="totalMintedStat">--</div>
+      <div class="stat-value" id="totalMintedStat" aria-live="polite">--</div>
       <div class="stat-label">Total Minted</div>
     </div>
     <div class="stat-item">
-      <div class="stat-value" id="yourMintsStat">--</div>
+      <div class="stat-value" id="yourMintsStat" aria-live="polite">--</div>
       <div class="stat-label">Your Mints</div>
     </div>
     <div class="stat-item">
-      <div class="stat-value" id="remainingStat">--</div>
+      <div class="stat-value" id="remainingStat" aria-live="polite">--</div>
       <div class="stat-label">Remaining</div>
     </div>
   </div>
 
   <!-- User Address -->
-  <div id="userAddressBox" class="addresses-box hidden"></div>
+  <div id="userAddressBox" class="addresses-box hidden" role="button" tabindex="0"></div>
   
   <!-- Wallet Connect Button -->
-  <button class="action-button" id="connectBtn">Connect Wallet</button>
+  <button class="action-button" id="connectBtn" aria-label="Connect your wallet">Connect Wallet</button>
   
   <!-- Mint Button -->
-  <button class="action-button hidden" id="mintBtn">MINT</button>
+  <button class="action-button hidden" id="mintBtn" aria-label="Mint new Celo NFT">MINT</button>
   
   <!-- Preview Button -->
-  <button class="action-button preview-button hidden" id="previewBtn">Preview NFT</button>
+  <button class="action-button preview-button hidden" id="previewBtn" aria-label="Preview your NFT">Preview NFT</button>
 
   <!-- Status Box -->
-  <div id="statusBox" class="status-box" aria-live="polite"></div>
+  <div id="statusBox" class="status-box" role="status" aria-live="polite"></div>
 
-  <!-- Transaction Links Container (View on Celoscan + Cast) -->
+  <!-- Transaction Links Container -->
   <div id="txLinksContainer" class="tx-links-container hidden"></div>
   
   <!-- NFT SVG Preview -->
-  <div id="nft-preview-container" class="hidden"></div>
+  <div id="nft-preview-container" class="hidden" role="img" aria-label="NFT Preview"></div>
 
   <!-- Download & Actions - Row 1 -->
   <div id="nftActions" class="nft-actions hidden">
-    <button id="downloadSVG" class="action-btn-small">📥 SVG</button>
-    <button id="downloadGIF" class="action-btn-small">📥 PNG</button>
-    <button id="giftBtn" class="action-btn-small gift-button">🎁 Gift</button>
+    <button id="downloadSVG" class="action-btn-small" aria-label="Download as SVG">📥 SVG</button>
+    <button id="downloadGIF" class="action-btn-small" aria-label="Download as PNG">📥 PNG</button>
+    <button id="giftBtn" class="action-btn-small gift-button" aria-label="Gift this NFT">🎁 Gift</button>
   </div>
 
   <!-- Share & Export - Row 2 -->
   <div id="nftActionsRow2" class="nft-actions-row2 hidden">
-    <button id="copyImageBtn" class="action-btn-small copy-button">📋 Copy</button>
-    <button id="twitterBtn" class="action-btn-small twitter-button">𝕏 Share</button>
+    <button id="copyImageBtn" class="action-btn-small copy-button" aria-label="Copy image to clipboard">📋 Copy</button>
+    <button id="twitterBtn" class="action-btn-small twitter-button" aria-label="Share on Twitter">𝕏 Share</button>
   </div>
 
   <!-- Footer -->
   <footer>
-    <a href="https://farcaster.com/dare1.eth" target="_blank" rel="noopener noreferrer" aria-label="Farcaster">
+    <a href="https://farcaster.com/dare1.eth" target="_blank" rel="noopener noreferrer" aria-label="Follow on Farcaster">
       <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 1000 1000" fill="none">
         <path d="M257.778 155.556H742.222V844.445H671.111V528.889H670.414C662.554 441.677 589.258 373.333 500 373.333C410.742 373.333 337.446 441.677 329.586 528.889H328.889V844.445H257.778V155.556Z" fill="white"/>
         <path d="M128.889 253.333L157.778 351.111H182.222V746.667C169.315 746.667 158.889 757.093 158.889 770V822.222H141.111V746.667H128.889V253.333Z" fill="white"/>
         <path d="M871.111 253.333L842.222 351.111H817.778V746.667C830.685 746.667 841.111 757.093 841.111 770V822.222H858.889V746.667H871.111V253.333Z" fill="white"/>
       </svg>
     </a>
-    <a href="https://x.com/kumar14700" target="_blank" rel="noopener noreferrer" aria-label="Twitter">
+    <a href="https://x.com/kumar14700" target="_blank" rel="noopener noreferrer" aria-label="Follow on Twitter">
       <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 16 16"><path d="M12.6.75h2.454l-5.36 6.142L16 15.25h-4.937l-3.867-5.07-4.425 5.07H.316l5.733-6.57L0 .75h5.063l3.495 4.633L12.601.75Zm-.86 13.028h1.36L4.323 2.145H2.865l8.875 11.633Z"/></svg>
     </a>
   </footer>
-
-  <!-- GIF.js Library removed - using canvas-based solution -->
   
   <script type="module" src="/main.js"></script>
 </body>
