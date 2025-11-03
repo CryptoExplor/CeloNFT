@@ -1,3 +1,9 @@
+// Buffer polyfill for WalletConnect
+import { Buffer } from 'buffer';
+window.Buffer = Buffer;
+window.global = window.global || window;
+window.process = window.process || { env: {} };
+
 import { sdk } from '@farcaster/miniapp-sdk';
 import {
   createConfig,
