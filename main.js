@@ -873,6 +873,12 @@ async function previewNft(tokenId, isNewMint = false) {
     nftActions.classList.remove('hidden');
     if (nftActionsRow2) nftActionsRow2.classList.remove('hidden');
     
+    // Hide download buttons in Farcaster environment
+    if (isFarcasterEnvironment) {
+      if (downloadSVG) downloadSVG.style.display = 'none';
+      if (downloadGIF) downloadGIF.style.display = 'none';
+    }
+    
     if (!isNewMint && contractAddress) {
       const celoscanTokenUrl = `https://celoscan.io/token/${contractAddress}?a=${tokenId}`;
 
