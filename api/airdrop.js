@@ -7,6 +7,7 @@ const NFT_CONTRACT_ADDRESS = '0xe90EC6F3f5C15cC76861CA5d41CD879548208Eff';
 const AIRDROP_AMOUNT = '0.01'; // CELO
 const RATE_LIMIT_WINDOW = 3600000; // 1 hour in ms
 const MAX_CLAIMS_PER_HOUR = 3;
+const LOW_BALANCE_THRESHOLD = '1.0'; // Alert when below 1 CELO
 
 // In-memory storage (use Redis/Database in production)
 const claimHistory = new Map();
@@ -150,6 +151,41 @@ async function sendAirdrop(recipientAddress) {
     });
     
     const airdropAmount = parseEther(AIRDROP_AMOUNT);
+    const lowBalanceThreshold = parseEther(LOW_BALANCE_THRESHOLD);
+    
+    // ⭐ LOW BALANCE ALERT
+    if (balance < lowBalanceThreshold) {
+      const balanceInCelo = Number(balance) / 1e18;
+      console.error(`
+⚠️⚠️⚠️ CRITICAL: AIRDROP WALLET LOW BALANCE ⚠️⚠️⚠️
+Current Balance: ${balanceInCelo.toFixed(4)} CELO
+Threshold: ${LOW_BALANCE_THRESHOLD} CELO
+Wallet Address: ${account.address}
+⚠️⚠️⚠️ PLEASE REFILL IMMEDIATELY ⚠️⚠️⚠️
+      `);
+      
+      // TODO: Add your preferred alert method here:
+      // - Send Discord webhook
+      // - Send email via SendGrid/Resend
+      // - Send Telegram message
+      // - Trigger PagerDuty alert
+      
+      // Example Discord webhook (uncomment and add your webhook URL):
+      /*
+      try {
+        await fetch(process.env.DISCORD_WEBHOOK_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            content: `🚨 **AIRDROP WALLET LOW BALANCE** 🚨\n\nCurrent: ${balanceInCelo.toFixed(4)} CELO\nWallet: ${account.address}\n\n**ACTION REQUIRED: Refill wallet immediately!**`
+          })
+        });
+      } catch (e) {
+        console.error('Failed to send Discord alert:', e);
+      }
+      */
+    }
+    
     if (balance < airdropAmount) {
       throw new Error('Insufficient airdrop wallet balance');
     }
@@ -167,7 +203,8 @@ async function sendAirdrop(recipientAddress) {
     return {
       success: receipt.status === 'success',
       txHash: hash,
-      amount: AIRDROP_AMOUNT
+      amount: AIRDROP_AMOUNT,
+      walletBalance: Number(balance) / 1e18 // Return balance for logging
     };
   } catch (error) {
     console.error('Airdrop send failed:', error);
@@ -253,6 +290,15 @@ export default async function handler(req, res) {
     
     // Mark as processed
     markAsProcessed(mintTxHash, userAddress);
+    
+    // Log success with balance info
+    console.log(`✅ Airdrop sent successfully:
+      Token ID: ${tokenId}
+      Recipient: ${userAddress}
+      Amount: ${result.amount} CELO
+      Tx Hash: ${result.txHash}
+      Wallet Balance Remaining: ${result.walletBalance.toFixed(4)} CELO
+    `);
     
     return res.status(200).json({
       success: true,
