@@ -1320,7 +1320,7 @@ mintBtn.addEventListener('click', async () => {
     });
     
     setStatus("Confirming transaction...", "info");
-    const receipt = await waitForTransactionReceipt(wagmiConfig, { hash });
+    const receipt = await waitForTransactionReceipt(wagmiConfig, { hash, timeout: 30_000});
 
     if (receipt.status === 'reverted') {
       throw new Error('Transaction was reverted.');
