@@ -58,6 +58,7 @@ let userMintCount = 0;
 let currentNFTData = null;
 let accountChangeTimeout = null;
 let tradingViewLoaded = false;
+let addMiniAppBannerInstance = null;
 
 // Safe LocalStorage wrapper
 const safeLocalStorage = {
@@ -114,6 +115,148 @@ async function isFarcasterEmbed() {
     })(),
     new Promise(resolve => setTimeout(() => resolve(false), 500))
   ]);
+}
+
+// Show Add Mini App Banner - ALWAYS shows if not added
+function showAddMiniAppBanner() {
+  if (!isFarcasterEnvironment || !sdk?.actions?.addMiniApp) {
+    console.log('Not in Farcaster environment or addMiniApp not available');
+    return;
+  }
+  
+  // Check if user has already added the mini app
+  const hasAdded = safeLocalStorage.getItem('hasAddedMiniApp');
+  if (hasAdded === 'true') {
+    console.log('User has already added the mini app');
+    return;
+  }
+  
+  // Remove existing banner if any
+  if (addMiniAppBannerInstance) {
+    addMiniAppBannerInstance.remove();
+  }
+  
+  const banner = document.createElement('div');
+  banner.className = 'add-miniapp-banner';
+  banner.innerHTML = `
+    <div class="add-miniapp-content">
+      <button class="close-banner" aria-label="Close banner">✕</button>
+      <div class="banner-icon">📌</div>
+      <h3>Add to Favorites!</h3>
+      <p>Quick access anytime - tap to save this mini app</p>
+      <button class="add-miniapp-btn">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+        </svg>
+        Add Mini App
+      </button>
+    </div>
+  `;
+  
+  document.body.appendChild(banner);
+  addMiniAppBannerInstance = banner;
+  
+  // Trigger animation
+  setTimeout(() => banner.classList.add('show'), 100);
+  
+  // Close button handler
+  const closeBtn = banner.querySelector('.close-banner');
+  closeBtn.onclick = () => {
+    banner.classList.remove('show');
+    setTimeout(() => {
+      banner.remove();
+      addMiniAppBannerInstance = null;
+      // Show again after 30 seconds if user didn't add
+      setTimeout(() => {
+        if (isFarcasterEnvironment && safeLocalStorage.getItem('hasAddedMiniApp') !== 'true') {
+          showAddMiniAppBanner();
+        }
+      }, 30000);
+    }, 500);
+  };
+  
+  // Add button handler
+  const addBtn = banner.querySelector('.add-miniapp-btn');
+  addBtn.onclick = async () => {
+    try {
+      addBtn.disabled = true;
+      addBtn.innerHTML = '<span class="spinner" style="width: 14px; height: 14px; border-width: 2px;"></span> Adding...';
+      
+      // Call the Farcaster SDK to add mini app
+      await sdk.actions.addMiniApp();
+      
+      // Mark as added
+      safeLocalStorage.setItem('hasAddedMiniApp', 'true');
+      
+      // Show success state
+      addBtn.innerHTML = '✅ Added Successfully!';
+      addBtn.style.background = 'linear-gradient(135deg, #10b981, #059669)';
+      
+      // Celebrate!
+      confetti({
+        particleCount: 80,
+        spread: 60,
+        origin: { y: 0.8 },
+        colors: ['#6366f1', '#8b5cf6', '#a855f7']
+      });
+      
+      // Remove banner after success
+      setTimeout(() => {
+        banner.classList.remove('show');
+        setTimeout(() => {
+          banner.remove();
+          addMiniAppBannerInstance = null;
+        }, 500);
+      }, 2000);
+      
+      console.log('✅ Mini app added successfully!');
+      
+    } catch (e) {
+      console.log('Add mini app error:', e);
+      addBtn.disabled = false;
+      addBtn.innerHTML = `
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+        </svg>
+        Add Mini App
+      `;
+      
+      // If user declined, close banner and try again later
+      if (e.message?.includes('declined') || e.message?.includes('cancelled') || e.message?.includes('rejected')) {
+        banner.classList.remove('show');
+        setTimeout(() => {
+          banner.remove();
+          addMiniAppBannerInstance = null;
+          // Try again after 1 minute
+          setTimeout(() => {
+            if (isFarcasterEnvironment && safeLocalStorage.getItem('hasAddedMiniApp') !== 'true') {
+              showAddMiniAppBanner();
+            }
+          }, 60000);
+        }, 500);
+      }
+    }
+  };
+}
+
+// Auto-show banner periodically if not added
+function startAddMiniAppReminder() {
+  if (!isFarcasterEnvironment) return;
+  
+  // Show immediately after 3 seconds
+  setTimeout(() => {
+    if (safeLocalStorage.getItem('hasAddedMiniApp') !== 'true') {
+      showAddMiniAppBanner();
+    }
+  }, 3000);
+  
+  // Then check every 2 minutes
+  setInterval(() => {
+    const hasAdded = safeLocalStorage.getItem('hasAddedMiniApp');
+    if (hasAdded !== 'true' && !addMiniAppBannerInstance) {
+      showAddMiniAppBanner();
+    }
+  }, 120000); // 2 minutes
 }
 
 // Helper Functions
@@ -665,7 +808,7 @@ async function downloadPNGFile() {
                 }
               }
             }
-            
+
             const downloadUrl = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.style.display = 'none';
@@ -673,12 +816,12 @@ async function downloadPNGFile() {
             a.download = `celo-nft-${lastMintedTokenId}.png`;
             document.body.appendChild(a);
             a.click();
-            
+
             setTimeout(() => {
               document.body.removeChild(a);
               URL.revokeObjectURL(downloadUrl);
             }, 100);
-            
+
             setStatus('✅ PNG downloaded!', 'success');
             resolve();
           }, 'image/png', 1.0);
@@ -686,12 +829,12 @@ async function downloadPNGFile() {
           reject(e);
         }
       };
-      
+
       img.onerror = (e) => {
         console.error('Image load failed:', e);
         reject(new Error('Failed to load SVG image'));
       };
-      
+
       img.src = url;
     });
   } catch (e) {
@@ -709,37 +852,37 @@ async function copyImageToClipboard() {
     setStatus('No NFT data available', 'error');
     return;
   }
-  
+
   if (!navigator.clipboard || typeof ClipboardItem === 'undefined') {
     setStatus('⚠️ Copy not supported in this browser', 'warning');
     return;
   }
-  
+
   const canvas = document.createElement('canvas');
   canvas.width = 400;
   canvas.height = 400;
   const ctx = canvas.getContext('2d');
-  
+
   const img = new Image();
   const svgBlob = new Blob([currentNFTData.svg], { type: 'image/svg+xml;charset=utf-8' });
   const url = URL.createObjectURL(svgBlob);
-  
+
   try {
     setStatus('Copying to clipboard... ⏳', 'info');
-    
+
     await new Promise((resolve, reject) => {
       img.onload = async () => {
         try {
           ctx.fillStyle = '#000000';
           ctx.fillRect(0, 0, 400, 400);
           ctx.drawImage(img, 0, 0, 400, 400);
-          
+
           canvas.toBlob(async (blob) => {
             if (!blob) {
               reject(new Error('Failed to generate image'));
               return;
             }
-            
+
             try {
               await navigator.clipboard.write([
                 new ClipboardItem({ 'image/png': blob })
@@ -755,11 +898,11 @@ async function copyImageToClipboard() {
           reject(e);
         }
       };
-      
+
       img.onerror = () => {
         reject(new Error('Failed to load image'));
       };
-      
+
       img.src = url;
     });
   } catch (e) {
@@ -776,7 +919,7 @@ function shareToTwitter() {
   const text = `I just minted a CELO NFT with live price snapshot! 🎨✨\n\nMint yours:`;
   const appUrl = 'https://celo-nft-phi.vercel.app/';
   const twitterUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(appUrl)}&hashtags=CeloNFT,Celo`;
-  
+
   window.open(twitterUrl, '_blank', 'width=550,height=420');
   setStatus('Opening Twitter...', 'info');
 }
@@ -786,7 +929,7 @@ function showGiftModal() {
     setStatus('No NFT to gift. Please mint first!', 'warning');
     return;
   }
-  
+
   const modal = document.createElement('div');
   modal.className = 'gift-modal';
   modal.innerHTML = `
@@ -799,18 +942,18 @@ function showGiftModal() {
       <button id="sendGiftBtn" class="action-button" style="width: 100%; margin-top: 16px;">Send Gift</button>
     </div>
   `;
-  
+
   document.body.appendChild(modal);
-  
+
   document.getElementById('sendGiftBtn').onclick = async () => {
     const recipient = document.getElementById('recipientAddress').value.trim();
     const message = document.getElementById('giftMessage').value.trim();
-    
+
     if (!recipient || !recipient.startsWith('0x') || recipient.length !== 42) {
       setStatus('Please enter a valid Celo address', 'error');
       return;
     }
-    
+
     await giftNFT(lastMintedTokenId, recipient, message);
     modal.remove();
   };
@@ -819,23 +962,23 @@ function showGiftModal() {
 async function giftNFT(tokenId, recipient, message) {
   try {
     setStatus('Sending gift... 🎁', 'info');
-    
+
     const hash = await writeContract(wagmiConfig, {
       address: contractDetails.address,
       abi: contractDetails.abi,
       functionName: 'transferFrom',
       args: [userAddress, recipient, BigInt(tokenId)]
     });
-    
+
     setStatus('Confirming transfer...', 'info');
     const receipt = await waitForTransactionReceipt(wagmiConfig, { hash });
-    
+
     if (receipt.status === 'reverted') {
       throw new Error('Transfer was reverted.');
     }
-    
+
     setStatus(`✅ NFT #${tokenId} gifted successfully!`, 'success');
-    
+
     const gifts = JSON.parse(safeLocalStorage.getItem('giftHistory') || '[]');
     gifts.unshift({
       tokenId,
@@ -845,12 +988,12 @@ async function giftNFT(tokenId, recipient, message) {
       txHash: hash
     });
     safeLocalStorage.setItem('giftHistory', JSON.stringify(gifts));
-    
+
     const celoscanUrl = `https://celoscan.io/tx/${hash}`;
     setTimeout(() => {
       setStatus(`Gift sent! View transaction: ${celoscanUrl}`, 'success');
     }, 2000);
-    
+
     updateUserMintCount();
   } catch (e) {
     const errorMsg = getImprovedErrorMessage(e);
@@ -866,19 +1009,19 @@ async function previewNft(tokenId, isNewMint = false) {
 
   statusBox.innerHTML = '';
   statusBox.className = 'status-box';
-  
+
   previewContainer.innerHTML = '<div style="display: flex; justify-content: center; align-items: center; height: 200px;"><span class="spinner" style="width: 40px; height: 40px; border-width: 4px;"></span></div>';
   previewContainer.classList.remove('hidden');
-  
+
   previewBtn.disabled = true;
   previewBtn.innerHTML = '<span class="spinner"></span> Loading Preview…';
   previewContainer.classList.remove("sparkles", ...ALL_RARITY_CLASSES);
   nftActions.classList.add('hidden');
-  
+
   if (!isNewMint) {
     txLinksContainer.classList.add('hidden');
   }
-  
+
   const nftActionsRow2 = document.getElementById('nftActionsRow2');
   if (nftActionsRow2) nftActionsRow2.classList.add('hidden');
 
@@ -895,7 +1038,7 @@ async function previewNft(tokenId, isNewMint = false) {
 
     const jsonString = atob(decodeURIComponent(base64Json));
     const metadata = JSON.parse(jsonString);
-    
+
     const base64Svg = metadata.image.split(',')[1];
     if (!base64Svg) throw new Error("Invalid image data format.");
 
@@ -910,40 +1053,40 @@ async function previewNft(tokenId, isNewMint = false) {
 
     previewContainer.innerHTML = safeSvg;
     adjustInjectedSvg(previewContainer);
-    
+
     let rarityText = "Common";
     let priceText = "N/A";
 
     if (metadata.attributes) {
       const rarityAttr = metadata.attributes.find(attr => attr.trait_type === 'Rarity');
       const priceAttr = metadata.attributes.find(attr => attr.trait_type === 'CELO Price Snapshot');
-      
+
       if (rarityAttr) rarityText = rarityAttr.value;
       if (priceAttr) priceText = priceAttr.value;
     }
-    
+
     previewContainer.classList.add("sparkles");
     const rarityClassLower = rarityText.toLowerCase();
     previewContainer.classList.add(rarityClassLower);
 
     const buttonLabel = `Preview NFT #${tokenId} (${rarityText} / ${priceText})`;
     previewBtn.innerText = buttonLabel;
-    
+
     nftActions.classList.remove('hidden');
     if (nftActionsRow2) nftActionsRow2.classList.remove('hidden');
-    
+
     if (isFarcasterEnvironment) {
       if (downloadSVG) downloadSVG.style.display = 'none';
       if (downloadGIF) downloadGIF.style.display = 'none';
     }
-    
+
     if (!isNewMint && contractAddress) {
       const celoscanTokenUrl = `https://celoscan.io/token/${contractAddress}?a=${tokenId}`;
 
       txLinksContainer.innerHTML = `
         <a href="${celoscanTokenUrl}" target="_blank" rel="noopener noreferrer">View on Celoscan</a>
       `;
-      
+
       const castBtnElement = document.createElement('button');
       castBtnElement.id = 'castBtn';
       castBtnElement.className = 'tx-link cast-link';
@@ -952,7 +1095,7 @@ async function previewNft(tokenId, isNewMint = false) {
         await castToFarcaster(tokenId, rarityText, priceText);
       };
       txLinksContainer.appendChild(castBtnElement);
-      
+
       txLinksContainer.classList.remove('hidden');
     }
 
@@ -972,7 +1115,7 @@ async function previewNft(tokenId, isNewMint = false) {
 function initTradingView() {
   if (tradingViewLoaded) return;
   tradingViewLoaded = true;
-  
+
   const script = document.createElement('script');
   script.src = 'https://s3.tradingview.com/tv.js';
   script.onload = () => {
@@ -1001,7 +1144,7 @@ if ('IntersectionObserver' in window) {
       observer.disconnect();
     }
   }, { threshold: 0.1 });
-  
+
   const chartContainer = document.querySelector('.tradingview-widget-container');
   if (chartContainer) {
     observer.observe(chartContainer);
@@ -1036,7 +1179,7 @@ wagmiConfig = wagmiAdapter.wagmiConfig;
     }
 
     isFarcasterEnvironment = await isFarcasterEmbed();
-    
+
     console.log('=== ENVIRONMENT DETECTION ===');
     console.log('Detected as Farcaster:', isFarcasterEnvironment);
     console.log('Window location:', window.location.href);
@@ -1044,7 +1187,7 @@ wagmiConfig = wagmiAdapter.wagmiConfig;
     console.log('Has SDK:', typeof sdk !== 'undefined');
     console.log('SDK Context:', sdk?.context);
     console.log('============================');
-    
+
     if (isFarcasterEnvironment) {
       externalBanner.href = 'https://celo-nft-phi.vercel.app/';
       externalBannerText.textContent = 'Open in Browser';
@@ -1065,7 +1208,7 @@ wagmiConfig = wagmiAdapter.wagmiConfig;
           showAddress(userAddress);
           connected = true;
           console.log('Connected via Farcaster:', userAddress);
-          
+
           const hasPromptedAddApp = safeLocalStorage.getItem('hasPromptedAddApp');
           if (!hasPromptedAddApp && sdk?.actions?.addMiniApp) {
             try {
@@ -1123,27 +1266,27 @@ wagmiConfig = wagmiAdapter.wagmiConfig;
       } catch {
         response = await fetch('/contract.json');
       }
-      
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      
+
       contractDetails = await response.json();
       contractAddress = contractDetails.address;
       console.log('Contract loaded:', contractAddress);
     } catch (e) { 
       setStatus("Missing contract details.", 'error'); 
       console.error('Contract load error:', e);
-      
+
       const retryBtn = document.createElement('button');
       retryBtn.className = 'action-button';
       retryBtn.style.cssText = 'background: linear-gradient(90deg, #f59e0b, #f97316); padding: 0.8rem 1.5rem; font-size: 1rem; margin-top: 12px;';
       retryBtn.innerText = '🔄 Retry Load';
       retryBtn.onclick = () => window.location.reload();
-      
+
       statusBox.appendChild(document.createElement('br'));
       statusBox.appendChild(retryBtn);
-      
+
       mintBtn.disabled = true; 
       return;
     }
@@ -1164,16 +1307,16 @@ wagmiConfig = wagmiAdapter.wagmiConfig;
     } else {
       mintBtn.title = ""; 
     }
-    
+
     try {
       const price = await readContract(wagmiConfig, {
         address: contractDetails.address,
         abi: contractDetails.abi,
         functionName: 'mintPrice'
       });
-      
+
       mintPriceWei = BigInt(price);
-      
+
       if (mintPriceWei > 0n) {
         const celoPrice = Number(mintPriceWei) / 1e18;
         mintBtn.innerText = `MINT (${celoPrice.toFixed(4)} CELO)`;
@@ -1221,16 +1364,16 @@ watchAccount(wagmiConfig, {
           showAddress(userAddress);
           setStatus('Wallet connected successfully!', 'success');
           mintBtn.disabled = false;
-          
+
           updateSupply(true);
           updateUserMintCount();
-          
+
           previewBtn.classList.add('hidden');
           previewContainer.classList.add('hidden');
           nftActions.classList.add('hidden');
           const nftActionsRow2 = document.getElementById('nftActionsRow2');
           if (nftActionsRow2) nftActionsRow2.classList.add('hidden');
-          
+
           lastMintedTokenId = null;
           sessionStorage.removeItem('lastMintedTokenId');
 
@@ -1241,7 +1384,7 @@ watchAccount(wagmiConfig, {
           showConnectButton();
           setStatus('Wallet disconnected. Please connect again.', 'warning');
           mintBtn.disabled = true;
-          
+
           previewBtn.classList.add('hidden');
           previewContainer.classList.add('hidden');
           nftActions.classList.add('hidden');
@@ -1283,7 +1426,7 @@ mintBtn.addEventListener('click', async () => {
       setStatus("This NFT drop is sold out.", "warning");
       return;
     }
-    
+
     const currentAccount = getAccount(wagmiConfig);
     if (currentAccount.chainId !== celo.id) {
       setStatus("⚠️ Please switch to Celo Mainnet", "error");
@@ -1292,7 +1435,7 @@ mintBtn.addEventListener('click', async () => {
       }
       return;
     }
-    
+
     statusBox.innerHTML = '';
     statusBox.className = 'status-box';
 
@@ -1318,7 +1461,7 @@ mintBtn.addEventListener('click', async () => {
       args: [priceForContract],
       value: mintPriceWei 
     });
-    
+
     setStatus("Confirming transaction...", "info");
     const receipt = await waitForTransactionReceipt(wagmiConfig, { hash, timeout: 30_000});
 
@@ -1327,27 +1470,27 @@ mintBtn.addEventListener('click', async () => {
     }
 
     const actualTokenId = await getTokenIdFromReceipt(receipt);
-    
+
     if (!actualTokenId) {
       throw new Error('Failed to get token ID from receipt');
     }
 
     safeLocalStorage.setItem('lastMintedTokenId', actualTokenId.toString());
-    
+
     celebrateMint();
-    
+
     setStatus("🎉 Mint Successful!", "success");
-    
+
     const priceText = (price).toFixed(4);
     lastMintedInfo = { tokenId: actualTokenId, txHash: hash, price: priceText, rarity: null };
-    
+
     if (contractAddress) {
       const celoscanTokenUrl = `https://celoscan.io/token/${contractAddress}?a=${actualTokenId}`;
 
       txLinksContainer.innerHTML = `
         <a href="${celoscanTokenUrl}" target="_blank" rel="noopener noreferrer">View on Celoscan</a>
       `;
-      
+
       const castBtnElement = document.createElement('button');
       castBtnElement.id = 'castBtn';
       castBtnElement.className = 'tx-link cast-link';
@@ -1362,7 +1505,7 @@ mintBtn.addEventListener('click', async () => {
         }
       };
       txLinksContainer.appendChild(castBtnElement);
-      
+
       txLinksContainer.classList.remove('hidden');
     }
 
@@ -1373,7 +1516,7 @@ mintBtn.addEventListener('click', async () => {
     previewBtn.classList.remove('hidden');
     previewBtn.innerText = `Preview NFT #${actualTokenId}`;
     await previewNft(lastMintedTokenId, true);
-    
+
     if (currentNFTData && currentNFTData.metadata) {
       const rarityAttr = currentNFTData.metadata.attributes?.find(attr => attr.trait_type === 'Rarity');
       if (rarityAttr) {
@@ -1390,18 +1533,18 @@ mintBtn.addEventListener('click', async () => {
     const errorMsg = getImprovedErrorMessage(e);
     setStatus(errorMsg, "error");
     console.error('Mint Error:', e);
-    
+
     if (!errorMsg.includes('rejected') && !errorMsg.includes('already minted')) {
       const retryBtn = document.createElement('button');
       retryBtn.className = 'action-button';
       retryBtn.style.cssText = 'background: linear-gradient(90deg, #f59e0b, #f97316); padding: 0.6rem 1.2rem; font-size: 0.9rem; margin-top: 12px;';
       retryBtn.innerHTML = '🔄 Retry Mint';
       retryBtn.onclick = () => mintBtn.click();
-      
+
       statusBox.appendChild(document.createElement('br'));
       statusBox.appendChild(retryBtn);
     }
-    
+
     previewBtn.classList.add('hidden');
     previewContainer.classList.add('hidden');
     previewContainer.classList.remove('sparkles', ...ALL_RARITY_CLASSES);
