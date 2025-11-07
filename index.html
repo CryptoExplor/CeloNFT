@@ -534,6 +534,123 @@
     .twitter-button:hover {
       box-shadow: 0 4px 10px rgba(29, 155, 240, 0.4) !important;
     }
+    
+    /* Add Mini App Banner */
+    .add-miniapp-banner {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%) translateY(150px);
+      width: 90%;
+      max-width: 380px;
+      z-index: 2000;
+      opacity: 0;
+      transition: transform 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55), opacity 0.5s;
+    }
+    
+    .add-miniapp-banner.show {
+      transform: translateX(-50%) translateY(0);
+      opacity: 1;
+    }
+    
+    .add-miniapp-content {
+      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+      border-radius: 16px;
+      padding: 24px 20px;
+      box-shadow: 0 12px 40px rgba(139, 92, 246, 0.5);
+      position: relative;
+      text-align: center;
+      border: 2px solid rgba(255, 255, 255, 0.2);
+      backdrop-filter: blur(10px);
+    }
+    
+    .close-banner {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      background: rgba(0, 0, 0, 0.3);
+      border: none;
+      color: white;
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      font-size: 18px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s, transform 0.2s;
+      line-height: 1;
+    }
+    
+    .close-banner:hover {
+      background: rgba(0, 0, 0, 0.5);
+      transform: scale(1.1);
+    }
+    
+    .banner-icon {
+      font-size: 3rem;
+      margin-bottom: 10px;
+      animation: bounce 2s infinite;
+      filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3));
+    }
+    
+    @keyframes bounce {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-12px); }
+    }
+    
+    .add-miniapp-content h3 {
+      margin: 0 0 8px 0;
+      font-size: 1.4rem;
+      color: white;
+      font-family: 'Orbitron', sans-serif;
+      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    }
+    
+    .add-miniapp-content p {
+      margin: 0 0 18px 0;
+      color: rgba(255, 255, 255, 0.95);
+      font-size: 0.95rem;
+      line-height: 1.4;
+    }
+    
+    .add-miniapp-btn {
+      background: white;
+      color: #6366f1;
+      border: none;
+      padding: 14px 28px;
+      border-radius: 10px;
+      font-size: 1.05rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-family: 'Orbitron', sans-serif;
+      min-width: 160px;
+      justify-content: center;
+    }
+    
+    .add-miniapp-btn:hover:not(:disabled) {
+      transform: translateY(-3px);
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+    }
+    
+    .add-miniapp-btn:active {
+      transform: translateY(0);
+    }
+    
+    .add-miniapp-btn:disabled {
+      opacity: 0.7;
+      cursor: not-allowed;
+    }
+    
+    .add-miniapp-btn svg {
+      flex-shrink: 0;
+    }
   </style>
 </head>
 <body>
