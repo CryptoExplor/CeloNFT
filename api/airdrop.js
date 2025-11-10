@@ -4,7 +4,8 @@ import { privateKeyToAccount } from 'viem/accounts';
 
 // Configuration
 const NFT_CONTRACT_ADDRESS = '0xe90EC6F3f5C15cC76861CA5d41CD879548208Eff';
-const AIRDROP_AMOUNT = '0.01'; // CELO
+const MIN_AIRDROP_AMOUNT = '0.005'; // Minimum CELO
+const MAX_AIRDROP_AMOUNT = '0.015'; // Maximum CELO
 const RATE_LIMIT_WINDOW = 3600000; // 1 hour in ms
 const MAX_CLAIMS_PER_HOUR = 3;
 const LOW_BALANCE_THRESHOLD = '1.0'; // Alert when below 1 CELO
@@ -51,6 +52,18 @@ const NFT_ABI = [
     type: 'event'
   }
 ];
+
+// Generate random airdrop amount between MIN and MAX
+function getRandomAirdropAmount() {
+  const min = parseFloat(MIN_AIRDROP_AMOUNT);
+  const max = parseFloat(MAX_AIRDROP_AMOUNT);
+  
+  // Generate random number between min and max with 4 decimal precision
+  const random = Math.random() * (max - min) + min;
+  const rounded = Math.round(random * 10000) / 10000; // Round to 4 decimals
+  
+  return rounded.toFixed(4); // Return as string with 4 decimals
+}
 
 // Security: Verify user owns the NFT
 async function verifyNFTOwnership(tokenId, userAddress) {
@@ -128,7 +141,7 @@ function markAsProcessed(txHash, address) {
   }
 }
 
-// Send CELO airdrop
+// Send CELO airdrop with random amount
 async function sendAirdrop(recipientAddress) {
   try {
     // Initialize wallet from private key (stored in env)
@@ -145,12 +158,17 @@ async function sendAirdrop(recipientAddress) {
       transport: http(process.env.CELO_RPC_URL || 'https://forno.celo.org')
     });
     
+    // Generate random airdrop amount
+    const randomAmount = getRandomAirdropAmount();
+    const airdropAmount = parseEther(randomAmount);
+    
+    console.log(`🎲 Random airdrop amount generated: ${randomAmount} CELO`);
+    
     // Check wallet balance
     const balance = await publicClient.getBalance({
       address: account.address
     });
     
-    const airdropAmount = parseEther(AIRDROP_AMOUNT);
     const lowBalanceThreshold = parseEther(LOW_BALANCE_THRESHOLD);
     
     // ⭐ LOW BALANCE ALERT
@@ -203,7 +221,7 @@ Wallet Address: ${account.address}
     return {
       success: receipt.status === 'success',
       txHash: hash,
-      amount: AIRDROP_AMOUNT,
+      amount: randomAmount,
       walletBalance: Number(balance) / 1e18 // Return balance for logging
     };
   } catch (error) {
@@ -285,7 +303,7 @@ export default async function handler(req, res) {
       });
     }
     
-    // Send airdrop
+    // Send airdrop with random amount
     const result = await sendAirdrop(userAddress);
     
     // Mark as processed
@@ -295,16 +313,18 @@ export default async function handler(req, res) {
     console.log(`✅ Airdrop sent successfully:
       Token ID: ${tokenId}
       Recipient: ${userAddress}
-      Amount: ${result.amount} CELO
+      Amount: ${result.amount} CELO (Random)
       Tx Hash: ${result.txHash}
       Wallet Balance Remaining: ${result.walletBalance.toFixed(4)} CELO
     `);
     
     return res.status(200).json({
       success: true,
-      message: `Airdrop of ${result.amount} CELO sent successfully!`,
+      message: `Airdrop of ${result.amount} CELO sent successfully! 🎁`,
+      amount: result.amount,
       txHash: result.txHash,
-      explorerUrl: `https://celoscan.io/tx/${result.txHash}`
+      explorerUrl: `https://celoscan.io/tx/${result.txHash}`,
+      randomAmount: true
     });
     
   } catch (error) {
