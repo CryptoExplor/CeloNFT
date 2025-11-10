@@ -463,7 +463,7 @@ async function getTokenIdFromReceipt(receipt) {
 // ⭐ AIRDROP CLAIMING FUNCTION ⭐
 async function claimAirdrop(tokenId, txHash) {
   try {
-    setStatus('🎁 Claiming your 0.01 CELO airdrop...', 'info');
+    setStatus('🎁 Claiming your random CELO airdrop (0.005-0.015)...', 'info');
     
     const response = await fetch('/api/airdrop', {
       method: 'POST',
@@ -484,7 +484,9 @@ async function claimAirdrop(tokenId, txHash) {
     }
     
     if (data.success) {
-      setStatus(`✅ Airdrop received! ${data.amount} CELO sent to your wallet`, 'success');
+      // Show the actual random amount received
+      const amountReceived = data.amount || '0.01';
+      setStatus(`✅ Airdrop received! ${amountReceived} CELO sent to your wallet! 🎉`, 'success');
       
       if (data.txHash) {
         const airdropLink = document.createElement('a');
@@ -492,18 +494,48 @@ async function claimAirdrop(tokenId, txHash) {
         airdropLink.target = '_blank';
         airdropLink.rel = 'noopener noreferrer';
         airdropLink.className = 'tx-link';
-        airdropLink.textContent = 'View Airdrop Tx';
+        airdropLink.textContent = `View Airdrop (${amountReceived} CELO)`;
         airdropLink.style.background = 'linear-gradient(135deg, #10b981, #059669)';
         
         txLinksContainer.appendChild(airdropLink);
       }
       
-      confetti({
+      // Enhanced confetti for lucky amounts
+      const amountNum = parseFloat(amountReceived);
+      let confettiConfig = {
         particleCount: 150,
         spread: 100,
         origin: { y: 0.7 },
         colors: ['#10b981', '#34d399', '#6ee7b7']
-      });
+      };
+      
+      // Extra celebration for higher amounts (> 0.012)
+      if (amountNum > 0.012) {
+        confettiConfig.particleCount = 250;
+        confettiConfig.colors = ['#fbbf24', '#f59e0b', '#f97316', '#10b981'];
+      }
+      
+      confetti(confettiConfig);
+      
+      // Second burst for very lucky amounts (> 0.014)
+      if (amountNum >= 0.014) {
+        setTimeout(() => {
+          confetti({
+            particleCount: 100,
+            angle: 60,
+            spread: 55,
+            origin: { x: 0 },
+            colors: ['#fbbf24', '#f59e0b']
+          });
+          confetti({
+            particleCount: 100,
+            angle: 120,
+            spread: 55,
+            origin: { x: 1 },
+            colors: ['#f97316', '#10b981']
+          });
+        }, 200);
+      }
       
       return data;
     }
@@ -523,7 +555,6 @@ async function claimAirdrop(tokenId, txHash) {
     return null;
   }
 }
-
 async function castToFarcaster(tokenId, rarity, price) {
   const text = `I just minted CELO NFT #${tokenId} (${rarity}) at ${price}! 🎨✨\n\nMint yours now:`;
   const embedUrl = MINIAPP_URL;
