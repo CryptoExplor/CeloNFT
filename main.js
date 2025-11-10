@@ -58,6 +58,7 @@ let userMintCount = 0;
 let currentNFTData = null;
 let accountChangeTimeout = null;
 let tradingViewLoaded = false;
+let lastAirdropAmount = null; // Store last airdrop amount for cast
 
 // Safe LocalStorage wrapper
 const safeLocalStorage = {
@@ -484,8 +485,10 @@ async function claimAirdrop(tokenId, txHash) {
     }
     
     if (data.success) {
-      // Show the actual random amount received
+      // Store the airdrop amount globally
       const amountReceived = data.amount || '0.01';
+      lastAirdropAmount = amountReceived;
+      
       setStatus(`✅ Airdrop received! ${amountReceived} CELO sent to your wallet! 🎉`, 'success');
       
       if (data.txHash) {
@@ -517,7 +520,7 @@ async function claimAirdrop(tokenId, txHash) {
       
       confetti(confettiConfig);
       
-      // Second burst for very lucky amounts (> 0.014)
+      // Second burst for very lucky amounts (>= 0.014)
       if (amountNum >= 0.014) {
         setTimeout(() => {
           confetti({
@@ -555,8 +558,18 @@ async function claimAirdrop(tokenId, txHash) {
     return null;
   }
 }
-async function castToFarcaster(tokenId, rarity, price) {
-  const text = `I just minted CELO NFT #${tokenId} (${rarity}) at ${price}! 🎨✨\n\nMint yours now:`;
+
+async function castToFarcaster(tokenId, rarity, price, airdropAmount = null) {
+  let text;
+  
+  if (airdropAmount) {
+    // Format airdrop amount nicely
+    const airdropFormatted = parseFloat(airdropAmount).toFixed(4);
+    text = `I just minted CELO NFT #${tokenId} (${rarity}) at ${price} and received ${airdropFormatted} CELO airdrop! 🎨✨💰\n\nMint yours now:`;
+  } else {
+    text = `I just minted CELO NFT #${tokenId} (${rarity}) at ${price}! 🎨✨\n\nMint yours now:`;
+  }
+  
   const embedUrl = MINIAPP_URL;
   
   if (isFarcasterEnvironment && sdk?.actions?.composeCast) {
@@ -804,7 +817,16 @@ async function copyImageToClipboard() {
 }
 
 function shareToTwitter() {
-  const text = `I just minted a CELO NFT with live price snapshot! 🎨✨\n\nMint yours:`;
+  let text = `I just minted a CELO NFT with live price snapshot! 🎨✨`;
+  
+  // Add airdrop info if available
+  if (lastAirdropAmount) {
+    const airdropFormatted = parseFloat(lastAirdropAmount).toFixed(4);
+    text = `I just minted a CELO NFT and received ${airdropFormatted} CELO airdrop! 🎨✨💰`;
+  }
+  
+  text += `\n\nMint yours:`;
+  
   const appUrl = 'https://celo-nft-phi.vercel.app/';
   const twitterUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(appUrl)}&hashtags=CeloNFT,Celo`;
   
@@ -978,9 +1000,10 @@ async function previewNft(tokenId, isNewMint = false) {
       const castBtnElement = document.createElement('button');
       castBtnElement.id = 'castBtn';
       castBtnElement.className = 'tx-link cast-link';
-      castBtnElement.innerHTML = '📣 Cast Minted NFT';
+      castBtnElement.innerHTML = '📣 Cast';
       castBtnElement.onclick = async () => {
-        await castToFarcaster(tokenId, rarityText, priceText);
+        // Use stored airdrop amount if available
+        await castToFarcaster(tokenId, rarityText, priceText, lastAirdropAmount);
       };
       txLinksContainer.appendChild(castBtnElement);
       
@@ -1045,7 +1068,6 @@ if ('IntersectionObserver' in window) {
   try {
     await sdk.actions.ready({ disableNativeGestures: true });
     console.log('Farcaster SDK initialized successfully');
-    // Delay for 2 seconds + full error handling
     await new Promise(resolve => setTimeout(resolve, 2000));
     await sdk.actions.addMiniApp();
   } catch (e) {
@@ -1266,6 +1288,7 @@ watchAccount(wagmiConfig, {
           if (nftActionsRow2) nftActionsRow2.classList.add('hidden');
           
           lastMintedTokenId = null;
+          lastAirdropAmount = null;
           sessionStorage.removeItem('lastMintedTokenId');
 
         } else if (!account.isConnected && userAddress) {
@@ -1286,6 +1309,7 @@ watchAccount(wagmiConfig, {
           if (remainingStat) remainingStat.textContent = '--';
           sessionStorage.removeItem('lastMintedTokenId');
           lastMintedTokenId = null;
+          lastAirdropAmount = null;
         }
       } catch (error) {
         console.error('Account change error:', error);
@@ -1339,6 +1363,7 @@ mintBtn.addEventListener('click', async () => {
     mintBtn.disabled = true;
     mintBtn.innerHTML = '<span class="spinner"></span> Minting...';
     lastMintedTokenId = null;
+    lastAirdropAmount = null; // Reset airdrop amount
 
     const { address, abi } = contractDetails;
 
@@ -1391,7 +1416,8 @@ mintBtn.addEventListener('click', async () => {
           await castToFarcaster(
             lastMintedInfo.tokenId, 
             lastMintedInfo.rarity || 'Common', 
-            lastMintedInfo.price
+            lastMintedInfo.price,
+            lastAirdropAmount // Include airdrop amount
           );
         }
       };
@@ -1442,6 +1468,7 @@ mintBtn.addEventListener('click', async () => {
     nftActions.classList.add('hidden');
     sessionStorage.removeItem('lastMintedTokenId');
     lastMintedTokenId = null;
+    lastAirdropAmount = null;
     lastMintedInfo = { tokenId: null, txHash: null, rarity: null, price: null };
   } finally {
     if (mintBtn.innerText !== "SOLD OUT") {
