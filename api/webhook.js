@@ -14,7 +14,8 @@ import { celo } from 'viem/chains';
 import { privateKeyToAccount } from 'viem/accounts';
 
 const NFT_CONTRACT_ADDRESS = '0xe90EC6F3f5C15cC76861CA5d41CD879548208Eff';
-const AIRDROP_AMOUNT = '0.01';
+const MIN_AIRDROP_AMOUNT = '0.005'; // Minimum CELO
+const MAX_AIRDROP_AMOUNT = '0.015'; // Maximum CELO
 
 // Track processed mints (use database in production)
 const processedMints = new Set();
@@ -37,6 +38,18 @@ const MINT_EVENT_ABI = {
   type: 'event'
 };
 
+// Generate random airdrop amount between MIN and MAX
+function getRandomAirdropAmount() {
+  const min = parseFloat(MIN_AIRDROP_AMOUNT);
+  const max = parseFloat(MAX_AIRDROP_AMOUNT);
+  
+  // Generate random number between min and max with 4 decimal precision
+  const random = Math.random() * (max - min) + min;
+  const rounded = Math.round(random * 10000) / 10000; // Round to 4 decimals
+  
+  return rounded.toFixed(4); // Return as string with 4 decimals
+}
+
 async function sendAirdrop(recipientAddress, tokenId) {
   try {
     const privateKey = process.env.AIRDROP_WALLET_PRIVATE_KEY;
@@ -52,12 +65,17 @@ async function sendAirdrop(recipientAddress, tokenId) {
       transport: http(process.env.CELO_RPC_URL || 'https://forno.celo.org')
     });
     
+    // Generate random airdrop amount
+    const randomAmount = getRandomAirdropAmount();
+    const airdropAmount = parseEther(randomAmount);
+    
+    console.log(`🎲 Random airdrop amount for Token #${tokenId}: ${randomAmount} CELO`);
+    
     // Check balance
     const balance = await publicClient.getBalance({
       address: account.address
     });
     
-    const airdropAmount = parseEther(AIRDROP_AMOUNT);
     if (balance < airdropAmount) {
       console.error('Insufficient balance in airdrop wallet');
       return { success: false, error: 'Insufficient balance' };
@@ -70,14 +88,14 @@ async function sendAirdrop(recipientAddress, tokenId) {
       gas: 21000n
     });
     
-    console.log(`Airdrop sent to ${recipientAddress} for token #${tokenId}: ${hash}`);
+    console.log(`Airdrop sent to ${recipientAddress} for token #${tokenId}: ${randomAmount} CELO - ${hash}`);
     
     const receipt = await publicClient.waitForTransactionReceipt({ hash });
     
     return {
       success: receipt.status === 'success',
       txHash: hash,
-      amount: AIRDROP_AMOUNT,
+      amount: randomAmount,
       recipient: recipientAddress,
       tokenId
     };
@@ -128,7 +146,7 @@ export default async function handler(req, res) {
       });
     }
     
-    // Send airdrop
+    // Send airdrop with random amount
     const result = await sendAirdrop(minterAddress, tokenId);
     
     if (result.success) {
@@ -140,7 +158,8 @@ export default async function handler(req, res) {
         txHash: result.txHash,
         recipient: minterAddress,
         tokenId,
-        amount: AIRDROP_AMOUNT
+        amount: result.amount,
+        randomAmount: true
       });
     } else {
       return res.status(500).json({
@@ -204,6 +223,7 @@ export async function pollForMints(req, res) {
             tokenId: tokenId.toString(),
             recipient: owner,
             txHash: result.txHash,
+            amount: result.amount,
             status: 'sent'
           });
         } else {
