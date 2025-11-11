@@ -5,7 +5,7 @@ import { privateKeyToAccount } from 'viem/accounts';
 // Configuration
 const NFT_CONTRACT_ADDRESS = '0xe90EC6F3f5C15cC76861CA5d41CD879548208Eff';
 const MIN_AIRDROP_AMOUNT = '0.005'; // Minimum CELO
-const MAX_AIRDROP_AMOUNT = '0.015'; // Maximum CELO
+const MAX_AIRDROP_AMOUNT = '0.01'; // Maximum CELO
 const ABSOLUTE_MAX_AIRDROP = '0.033'; // Hard cap - no one can get more than this
 const RATE_LIMIT_WINDOW = 3600000; // 1 hour in ms
 const MAX_CLAIMS_PER_HOUR = 3;
