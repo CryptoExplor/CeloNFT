@@ -1505,3 +1505,131 @@ const twitterBtn = document.getElementById('twitterBtn');
 if (twitterBtn) {
   twitterBtn.addEventListener('click', shareToTwitter);
 }
+
+// ===== RECENT MINTS FEED =====
+
+let recentMintsInterval = null;
+
+async function fetchRecentMints(limit = 5) {
+  try {
+    if (!contractDetails) return [];
+    
+    const totalSupply = await readContract(wagmiConfig, {
+      address: contractDetails.address,
+      abi: contractDetails.abi,
+      functionName: 'totalSupply'
+    });
+    
+    const total = Number(totalSupply);
+    if (total === 0) return [];
+    
+    const start = Math.max(1, total - limit + 1);
+    const mints = [];
+    
+    for (let i = total; i >= start; i--) {
+      try {
+        const [owner, traits] = await Promise.all([
+          readContract(wagmiConfig, {
+            address: contractDetails.address,
+            abi: contractDetails.abi,
+            functionName: 'ownerOf',
+            args: [BigInt(i)]
+          }),
+          readContract(wagmiConfig, {
+            address: contractDetails.address,
+            abi: contractDetails.abi,
+            functionName: 'tokenTraits',
+            args: [BigInt(i)]
+          })
+        ]);
+        
+        const rarity = Number(traits[1]);
+        const rarityLabels = ['Common', 'Rare', 'Legendary', 'Mythic'];
+        const rarityColors = ['#9ca3af', '#3b82f6', '#f59e0b', '#ec4899'];
+        
+        mints.push({
+          tokenId: i,
+          owner: owner,
+          ownerShort: `${owner.slice(0, 6)}...${owner.slice(-4)}`,
+          rarity: rarityLabels[rarity],
+          rarityColor: rarityColors[rarity],
+          timestamp: Number(traits[2]) * 1000
+        });
+      } catch (e) {
+        console.log(`Failed to fetch mint #${i}:`, e);
+      }
+    }
+    
+    return mints;
+  } catch (e) {
+    console.error('Failed to fetch recent mints:', e);
+    return [];
+  }
+}
+
+function renderRecentMints(mints) {
+  const container = document.getElementById('recentMintsContainer');
+  if (!container || mints.length === 0) return;
+  
+  const now = Date.now();
+  
+  container.innerHTML = mints.map(mint => {
+    const timeAgo = getTimeAgo(now - mint.timestamp);
+    const isYours = userAddress && mint.owner.toLowerCase() === userAddress.toLowerCase();
+    
+    return `
+      <div class="mint-item ${isYours ? 'your-mint' : ''}" style="animation: slideIn 0.3s ease-out;">
+        <div class="mint-info">
+          <span class="token-id">#${mint.tokenId}</span>
+          <span class="rarity-badge" style="color: ${mint.rarityColor}; border-color: ${mint.rarityColor};">
+            ${mint.rarity}
+          </span>
+        </div>
+        <div class="mint-meta">
+          <span class="owner">${isYours ? 'You' : mint.ownerShort}</span>
+          <span class="time">${timeAgo}</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function getTimeAgo(ms) {
+  const seconds = Math.floor(ms / 1000);
+  if (seconds < 60) return 'Just now';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+async function startRecentMintsPolling() {
+  if (recentMintsInterval) return;
+  
+  const updateFeed = async () => {
+    const mints = await fetchRecentMints(5);
+    renderRecentMints(mints);
+  };
+  
+  await updateFeed();
+  recentMintsInterval = setInterval(updateFeed, 15000); // Update every 15s
+}
+
+function stopRecentMintsPolling() {
+  if (recentMintsInterval) {
+    clearInterval(recentMintsInterval);
+    recentMintsInterval = null;
+  }
+}
+
+// Start polling when page loads
+document.addEventListener('DOMContentLoaded', () => {
+  startRecentMintsPolling();
+});
+
+// Stop polling when page unloads
+window.addEventListener('beforeunload', () => {
+  stopRecentMintsPolling();
+});
