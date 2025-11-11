@@ -617,6 +617,133 @@
       color: #6b7280;
       font-style: italic;
     }
+    
+    /* Leaderboard */
+    .leaderboard-section {
+      width: 90%;
+      max-width: 390px;
+      margin: 20px auto;
+      background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+      border-radius: 12px;
+      padding: 20px 16px;
+      border: 2px solid #334155;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+
+    .leaderboard-section h3 {
+      margin: 0 0 16px 0;
+      font-size: 1.2rem;
+      color: #fbbf24;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    #leaderboardContainer {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .leaderboard-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: rgba(15, 23, 42, 0.6);
+      padding: 12px;
+      border-radius: 8px;
+      border: 1px solid #334155;
+      transition: all 0.3s;
+    }
+
+    .leaderboard-item:hover {
+      background: rgba(30, 41, 59, 0.8);
+      border-color: #49dfb5;
+      transform: translateX(4px);
+    }
+
+    .leaderboard-item.your-rank {
+      background: linear-gradient(90deg, rgba(251, 191, 36, 0.15), rgba(30, 41, 59, 0.6));
+      border-color: #fbbf24;
+      box-shadow: 0 0 15px rgba(251, 191, 36, 0.3);
+    }
+
+    .rank-badge {
+      font-size: 1.5rem;
+      min-width: 40px;
+      text-align: center;
+      font-weight: bold;
+    }
+
+    .holder-info {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .holder-address {
+      font-size: 0.95rem;
+      color: #e2e8f0;
+      font-weight: 600;
+    }
+
+    .holder-rarities {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .rarity-count {
+      font-size: 0.7rem;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+
+    .rarity-count.mythic {
+      background: linear-gradient(135deg, #ec4899, #a855f7);
+      color: white;
+    }
+
+    .rarity-count.legendary {
+      background: linear-gradient(135deg, #f59e0b, #d97706);
+      color: white;
+    }
+
+    .rarity-count.rare {
+      background: linear-gradient(135deg, #3b82f6, #2563eb);
+      color: white;
+    }
+
+    .holder-count {
+      font-size: 1.1rem;
+      font-weight: bold;
+      color: #49dfb5;
+      min-width: 70px;
+      text-align: right;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 30px 20px;
+      color: #9ca3af;
+      font-size: 0.9rem;
+    }
+
+    @keyframes slideUp {
+      from {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
   </style>
 </head>
 <body>
@@ -654,15 +781,6 @@
     </div>
   </div>
 
-  <!-- Recent Mints Feed -->
-  <div class="recent-mints-section">
-    <h3>
-      <span>🔥</span>
-      <span>Recent Mints</span>
-    </h3>
-    <div id="recentMintsContainer"></div>
-  </div>
-
   <!-- User Address -->
   <div id="userAddressBox" class="addresses-box hidden" role="button" tabindex="0"></div>
   
@@ -695,6 +813,26 @@
   <div id="nftActionsRow2" class="nft-actions-row2 hidden">
     <button id="copyImageBtn" class="action-btn-small copy-button" aria-label="Copy image to clipboard">📋 Copy</button>
     <button id="twitterBtn" class="action-btn-small twitter-button" aria-label="Share on Twitter">𝕏 Share</button>
+  </div>
+
+  <!-- Recent Mints Feed -->
+  <div class="recent-mints-section">
+    <h3>
+      <span>🔥</span>
+      <span>Recent Mints</span>
+    </h3>
+    <div id="recentMintsContainer"></div>
+  </div>
+
+  <!-- Leaderboard -->
+  <div class="leaderboard-section">
+    <h3>
+      <span>🏆</span>
+      <span>Top Collectors</span>
+    </h3>
+    <div id="leaderboardContainer">
+      <div class="empty-state">Loading leaderboard...</div>
+    </div>
   </div>
 
   <!-- Footer -->
