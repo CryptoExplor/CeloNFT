@@ -1434,6 +1434,11 @@ wagmiConfig = wagmiAdapter.wagmiConfig;
     if (connected) {
       await updateSupply(true);
       updateUserMintCount();
+      
+      // Show tabs and balance on initial connection
+      const tabNav = document.getElementById('tabNavigation');
+      if (tabNav) tabNav.classList.remove('hidden');
+      updateWalletBalance();
     }
   } catch (error) {
     console.error('Initialization error:', error);
@@ -1456,6 +1461,11 @@ watchAccount(wagmiConfig, {
           updateSupply(true);
           updateUserMintCount();
           
+          // Show tab navigation and update balance
+          const tabNav = document.getElementById('tabNavigation');
+          if (tabNav) tabNav.classList.remove('hidden');
+          updateWalletBalance();
+          
           previewBtn.classList.add('hidden');
           previewContainer.classList.add('hidden');
           nftActions.classList.add('hidden');
@@ -1473,6 +1483,12 @@ watchAccount(wagmiConfig, {
           showConnectButton();
           setStatus('Wallet disconnected. Please connect again.', 'warning');
           mintBtn.disabled = true;
+          
+          // Hide tabs and balance
+          const tabNav = document.getElementById('tabNavigation');
+          if (tabNav) tabNav.classList.add('hidden');
+          const balanceBox = document.getElementById('walletBalanceBox');
+          if (balanceBox) balanceBox.classList.add('hidden');
           
           previewBtn.classList.add('hidden');
           previewContainer.classList.add('hidden');
@@ -1608,6 +1624,9 @@ mintBtn.addEventListener('click', async () => {
     previewBtn.classList.remove('hidden');
     previewBtn.innerText = `Preview NFT #${actualTokenId}`;
     await previewNft(lastMintedTokenId, true);
+    
+    // Update wallet balance after mint
+    updateWalletBalance();
     
     if (currentNFTData && currentNFTData.metadata) {
       const rarityAttr = currentNFTData.metadata.attributes?.find(attr => attr.trait_type === 'Rarity');
@@ -2144,3 +2163,334 @@ document.addEventListener('DOMContentLoaded', () => {
 window.addEventListener('beforeunload', () => {
   stopLeaderboardPolling();
 });
+
+// ===== WALLET BALANCE DISPLAY =====
+let celoPrice = 0;
+
+async function updateWalletBalance() {
+  const balanceBox = document.getElementById('walletBalanceBox');
+  const celoBalanceEl = document.getElementById('celoBalance');
+  const celoBalanceUSDEl = document.getElementById('celoBalanceUSD');
+  
+  if (!userAddress || !balanceBox) return;
+  
+  try {
+    // Get CELO balance
+    const balance = await publicClient.getBalance({
+      address: userAddress,
+      chain: celo
+    });
+    
+    const balanceInCelo = Number(balance) / 1e18;
+    celoBalanceEl.textContent = balanceInCelo.toFixed(4) + ' CELO';
+    
+    // Get CELO price if not already fetched
+    if (celoPrice === 0) {
+      try {
+        celoPrice = await fetchCeloPrice();
+      } catch (e) {
+        console.log('Could not fetch CELO price for USD conversion');
+      }
+    }
+    
+    // Calculate USD value
+    const usdValue = balanceInCelo * celoPrice;
+    celoBalanceUSDEl.textContent = `≈ $${usdValue.toFixed(2)} USD`;
+    
+    balanceBox.classList.remove('hidden');
+  } catch (e) {
+    console.error('Failed to fetch wallet balance:', e);
+  }
+}
+
+// ===== TAB NAVIGATION =====
+const tabButtons = document.querySelectorAll('.tab-button');
+const tabContents = document.querySelectorAll('.tab-content');
+
+function switchTab(tabName) {
+  // Update buttons
+  tabButtons.forEach(btn => {
+    if (btn.dataset.tab === tabName) {
+      btn.classList.add('active');
+    } else {
+      btn.classList.remove('active');
+    }
+  });
+  
+  // Update content
+  tabContents.forEach(content => {
+    if (content.id === tabName + 'Tab') {
+      content.classList.add('active');
+    } else {
+      content.classList.remove('active');
+    }
+  });
+  
+  // Load content based on tab
+  if (tabName === 'gallery') {
+    loadGallery();
+  } else if (tabName === 'achievements') {
+    loadAchievements();
+  }
+}
+
+tabButtons.forEach(btn => {
+  btn.addEventListener('click', () => {
+    switchTab(btn.dataset.tab);
+  });
+});
+
+// ===== GALLERY SYSTEM =====
+let userNFTs = [];
+
+async function loadGallery() {
+  const galleryGrid = document.getElementById('galleryGrid');
+  
+  if (!userAddress || !contractDetails) {
+    galleryGrid.innerHTML = '<div class="empty-state">Connect wallet to view your NFTs</div>';
+    return;
+  }
+  
+  galleryGrid.innerHTML = '<div class="empty-state">Loading your NFTs... ⏳</div>';
+  
+  try {
+    // Get user's NFT count
+    const balance = await readContract(wagmiConfig, {
+      address: contractDetails.address,
+      abi: contractDetails.abi,
+      functionName: 'balanceOf',
+      args: [userAddress]
+    });
+    
+    const nftCount = Number(balance);
+    
+    if (nftCount === 0) {
+      galleryGrid.innerHTML = '<div class="empty-state">You don\'t own any NFTs yet. Mint your first one! 🎨</div>';
+      return;
+    }
+    
+    // Get total supply to scan
+    const totalSupply = await readContract(wagmiConfig, {
+      address: contractDetails.address,
+      abi: contractDetails.abi,
+      functionName: 'totalSupply'
+    });
+    
+    const total = Number(totalSupply);
+    userNFTs = [];
+    
+    // Scan for user's NFTs
+    const promises = [];
+    for (let i = 1; i <= total && userNFTs.length < nftCount; i++) {
+      promises.push(
+        readContract(wagmiConfig, {
+          address: contractDetails.address,
+          abi: contractDetails.abi,
+          functionName: 'ownerOf',
+          args: [BigInt(i)]
+        }).then(owner => {
+          if (owner.toLowerCase() === userAddress.toLowerCase()) {
+            return readContract(wagmiConfig, {
+              address: contractDetails.address,
+              abi: contractDetails.abi,
+              functionName: 'tokenTraits',
+              args: [BigInt(i)]
+            }).then(traits => ({
+              tokenId: i,
+              owner,
+              rarity: Number(traits[1]),
+              timestamp: Number(traits[2])
+            }));
+          }
+          return null;
+        }).catch(() => null)
+      );
+    }
+    
+    const results = await Promise.all(promises);
+    userNFTs = results.filter(nft => nft !== null);
+    
+    renderGallery(userNFTs);
+  } catch (e) {
+    console.error('Failed to load gallery:', e);
+    galleryGrid.innerHTML = '<div class="empty-state">Failed to load NFTs. Please try again.</div>';
+  }
+}
+
+function renderGallery(nfts) {
+  const galleryGrid = document.getElementById('galleryGrid');
+  const rarityFilter = document.getElementById('rarityFilter').value;
+  const sortFilter = document.getElementById('sortFilter').value;
+  
+  // Filter by rarity
+  let filtered = nfts;
+  if (rarityFilter !== 'all') {
+    const rarityMap = { 'common': 0, 'rare': 1, 'legendary': 2, 'mythic': 3 };
+    filtered = nfts.filter(nft => nft.rarity === rarityMap[rarityFilter]);
+  }
+  
+  // Sort
+  filtered.sort((a, b) => {
+    if (sortFilter === 'newest') return b.timestamp - a.timestamp;
+    if (sortFilter === 'oldest') return a.timestamp - b.timestamp;
+    if (sortFilter === 'rarity') return b.rarity - a.rarity;
+    if (sortFilter === 'tokenId') return a.tokenId - b.tokenId;
+    return 0;
+  });
+  
+  if (filtered.length === 0) {
+    galleryGrid.innerHTML = '<div class="empty-state">No NFTs match your filters</div>';
+    return;
+  }
+  
+  const rarityLabels = ['Common', 'Rare', 'Legendary', 'Mythic'];
+  const rarityColors = ['#9ca3af', '#3b82f6', '#f59e0b', '#ec4899'];
+  
+  galleryGrid.innerHTML = filtered.map(nft => `
+    <div class="gallery-item" onclick="viewNFTDetails(${nft.tokenId})">
+      <div class="gallery-item-image">
+        <div style="display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; background: #000; color: #49dfb5; font-size: 2rem;">
+          #${nft.tokenId}
+        </div>
+      </div>
+      <div class="gallery-item-info">
+        <div class="gallery-token-id">#${nft.tokenId}</div>
+        <div class="gallery-rarity" style="color: ${rarityColors[nft.rarity]}; border: 1px solid ${rarityColors[nft.rarity]};">
+          ${rarityLabels[nft.rarity]}
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function viewNFTDetails(tokenId) {
+  // Switch to mint tab and preview this NFT
+  switchTab('mint');
+  lastMintedTokenId = tokenId;
+  previewNft(tokenId);
+}
+
+// Add filter listeners
+document.getElementById('rarityFilter')?.addEventListener('change', () => {
+  renderGallery(userNFTs);
+});
+
+document.getElementById('sortFilter')?.addEventListener('change', () => {
+  renderGallery(userNFTs);
+});
+
+// ===== ACHIEVEMENTS SYSTEM =====
+const achievements = [
+  {
+    id: 'first_mint',
+    icon: '🎯',
+    title: 'First Steps',
+    description: 'Mint your first CELO NFT',
+    check: () => userMintCount >= 1
+  },
+  {
+    id: 'five_mints',
+    icon: '🔥',
+    title: 'Getting Started',
+    description: 'Mint 5 NFTs',
+    check: () => userMintCount >= 5
+  },
+  {
+    id: 'ten_mints',
+    icon: '💎',
+    title: 'Collector',
+    description: 'Mint 10 NFTs',
+    check: () => userMintCount >= 10
+  },
+  {
+    id: 'rare_pull',
+    icon: '💙',
+    title: 'Rare Find',
+    description: 'Own a Rare NFT',
+    check: () => userNFTs.some(nft => nft.rarity >= 1)
+  },
+  {
+    id: 'legendary_pull',
+    icon: '⭐',
+    title: 'Legendary!',
+    description: 'Own a Legendary NFT',
+    check: () => userNFTs.some(nft => nft.rarity >= 2)
+  },
+  {
+    id: 'mythic_pull',
+    icon: '👑',
+    title: 'Mythic Master',
+    description: 'Own a Mythic NFT',
+    check: () => userNFTs.some(nft => nft.rarity === 3)
+  },
+  {
+    id: 'early_adopter',
+    icon: '🚀',
+    title: 'Early Adopter',
+    description: 'Minted in the first 100',
+    check: () => userNFTs.some(nft => nft.tokenId <= 100)
+  },
+  {
+    id: 'lucky_token',
+    icon: '🍀',
+    title: 'Lucky Number',
+    description: 'Own a lucky token (77, 111, 222, etc.)',
+    check: () => {
+      const luckyNumbers = [77, 111, 222, 333, 444, 555, 666, 777, 888, 999];
+      return userNFTs.some(nft => luckyNumbers.includes(nft.tokenId));
+    }
+  },
+  {
+    id: 'milestone_token',
+    icon: '🎯',
+    title: 'Milestone Collector',
+    description: 'Own a milestone token (100, 250, 500, 1000)',
+    check: () => {
+      const milestones = [100, 250, 500, 1000, 2500, 5000];
+      return userNFTs.some(nft => milestones.includes(nft.tokenId));
+    }
+  },
+  {
+    id: 'top_collector',
+    icon: '🏆',
+    title: 'Top Collector',
+    description: 'Be in the top 10 leaderboard',
+    check: () => {
+      // This would need leaderboard data
+      return userMintCount >= 20;
+    }
+  }
+];
+
+function loadAchievements() {
+  const achievementsGrid = document.getElementById('achievementsGrid');
+  const achievementCount = document.getElementById('achievementCount');
+  const totalAchievements = document.getElementById('totalAchievements');
+  
+  let unlockedCount = 0;
+  
+  const html = achievements.map(achievement => {
+    const unlocked = achievement.check();
+    if (unlocked) unlockedCount++;
+    
+    return `
+      <div class="achievement-card ${unlocked ? 'unlocked' : 'locked'}">
+        <div class="achievement-icon">${achievement.icon}</div>
+        <div class="achievement-title">${achievement.title}</div>
+        <div class="achievement-description">${achievement.description}</div>
+        ${unlocked ? '<div class="achievement-reward">✅ Unlocked!</div>' : '<div class="achievement-reward" style="color: #6b7280;">🔒 Locked</div>'}
+      </div>
+    `;
+  }).join('');
+  
+  achievementsGrid.innerHTML = html;
+  achievementCount.textContent = unlockedCount;
+  totalAchievements.textContent = achievements.length;
+  
+  // Save achievements to localStorage
+  safeLocalStorage.setItem('achievements', JSON.stringify({
+    unlocked: unlockedCount,
+    total: achievements.length,
+    timestamp: Date.now()
+  }));
+}
