@@ -464,7 +464,7 @@ async function getTokenIdFromReceipt(receipt) {
 // ⭐ AIRDROP CLAIMING FUNCTION ⭐
 async function claimAirdrop(tokenId, txHash) {
   try {
-    setStatus('🎁 Calculating your airdrop bonus...', 'info');
+    setStatus('Calculating your airdrop bonus...', 'info');
     
     const response = await fetch('/api/airdrop', {
       method: 'POST',
@@ -506,7 +506,7 @@ async function claimAirdrop(tokenId, txHash) {
           playSound('bonus');
         }
       } else {
-        setStatus(`✅ Airdrop received! ${amountReceived} CELO sent to your wallet! 🎉`, 'success');
+        setStatus(`Airdrop received! ${amountReceived} CELO sent to your wallet! 🎉`, 'success');
         
         // Normal confetti
         confetti({
@@ -542,11 +542,11 @@ async function claimAirdrop(tokenId, txHash) {
     const errorMsg = error.message || 'Airdrop claim failed';
     
     if (errorMsg.includes('Rate limit')) {
-      setStatus('⚠️ ' + errorMsg, 'warning');
+      setStatus(errorMsg, 'warning');
     } else if (errorMsg.includes('already claimed')) {
-      setStatus('ℹ️ Airdrop already claimed for this mint', 'info');
+      setStatus('Airdrop already claimed for this mint', 'info');
     } else {
-      setStatus('⚠️ Airdrop claim failed: ' + errorMsg, 'warning');
+      setStatus('Airdrop claim failed: ' + errorMsg, 'warning');
     }
     
     return null;
@@ -774,9 +774,9 @@ async function castToFarcaster(tokenId, rarity, price, airdropAmount = null) {
     const popup = window.open(warpcastUrl, '_blank', 'width=600,height=700');
     
     if (popup) {
-      setStatus('✅ Opening Warpcast composer...', 'success');
+      setStatus('Opening Warpcast composer...', 'success');
     } else {
-      setStatus('⚠️ Please allow popups to share on Warpcast', 'warning');
+      setStatus('Please allow popups to share on Warpcast', 'warning');
     }
   }
 }
@@ -803,7 +803,7 @@ async function downloadSVGFile() {
         const writable = await handle.createWritable();
         await writable.write(blob);
         await writable.close();
-        setStatus('✅ SVG downloaded!', 'success');
+        setStatus('SVG downloaded!', 'success');
         return;
       } catch (e) {
         if (e.name !== 'AbortError') {
@@ -825,7 +825,7 @@ async function downloadSVGFile() {
       URL.revokeObjectURL(url);
     }, 100);
     
-    setStatus('✅ SVG downloaded!', 'success');
+    setStatus('SVG downloaded!', 'success');
   } catch (e) {
     console.error('SVG download failed:', e);
     setStatus('Failed to download SVG: ' + e.message, 'error');
@@ -875,7 +875,7 @@ async function downloadPNGFile() {
                 const writable = await handle.createWritable();
                 await writable.write(blob);
                 await writable.close();
-                setStatus('✅ PNG downloaded!', 'success');
+                setStatus('PNG downloaded!', 'success');
                 resolve();
                 return;
               } catch (e) {
@@ -898,7 +898,7 @@ async function downloadPNGFile() {
               URL.revokeObjectURL(downloadUrl);
             }, 100);
             
-            setStatus('✅ PNG downloaded!', 'success');
+            setStatus('PNG downloaded!', 'success');
             resolve();
           }, 'image/png', 1.0);
         } catch (e) {
@@ -930,7 +930,7 @@ async function copyImageToClipboard() {
   }
   
   if (!navigator.clipboard || typeof ClipboardItem === 'undefined') {
-    setStatus('⚠️ Copy not supported in this browser', 'warning');
+    setStatus('Copy not supported in this browser', 'warning');
     return;
   }
   
@@ -963,7 +963,7 @@ async function copyImageToClipboard() {
               await navigator.clipboard.write([
                 new ClipboardItem({ 'image/png': blob })
               ]);
-              setStatus('✅ Image copied to clipboard!', 'success');
+              setStatus('Image copied to clipboard!', 'success');
               resolve();
             } catch (e) {
               console.error('Clipboard write failed:', e);
