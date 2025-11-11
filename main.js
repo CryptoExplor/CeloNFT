@@ -2237,8 +2237,8 @@ function switchTab(tabName) {
   const leaderboardSection = document.getElementById('leaderboardSection');
   const achievementsSection = document.getElementById('achievementsSection');
   
-  if (tabName === 'gallery' || tabName === 'achievements') {
-    // Hide all three sections in gallery and achievements tab
+  if (tabName === 'gallery') {
+    // Hide all three sections in gallery tab
     if (recentSection) recentSection.style.display = 'none';
     if (leaderboardSection) leaderboardSection.style.display = 'none';
     if (achievementsSection) achievementsSection.style.display = 'none';
@@ -2261,8 +2261,6 @@ function switchTab(tabName) {
   // Load content based on tab
   if (tabName === 'gallery') {
     loadGallery();
-  } else if (tabName === 'achievements') {
-    loadAchievements();
   }
 }
 
@@ -2294,9 +2292,11 @@ toggleButtons.forEach(btn => {
     } else if (section === 'achievements') {
       const achievementsSection = document.getElementById('achievementsSection');
       if (achievementsSection) {
-        achievementsSection.style.display = btn.classList.contains('active') ? 'block' : 'none';
+        const isActive = btn.classList.contains('active');
+        achievementsSection.style.display = isActive ? 'block' : 'none';
+        
         // Load achievements when showing
-        if (btn.classList.contains('active')) {
+        if (isActive) {
           loadAchievementsBottom();
         }
       }
@@ -2526,40 +2526,7 @@ const achievements = [
   }
 ];
 
-function loadAchievements() {
-  const achievementsGrid = document.getElementById('achievementsGrid');
-  const achievementCount = document.getElementById('achievementCount');
-  const totalAchievements = document.getElementById('totalAchievements');
-  
-  let unlockedCount = 0;
-  
-  const html = achievements.map(achievement => {
-    const unlocked = achievement.check();
-    if (unlocked) unlockedCount++;
-    
-    return `
-      <div class="achievement-card ${unlocked ? 'unlocked' : 'locked'}">
-        <div class="achievement-icon">${achievement.icon}</div>
-        <div class="achievement-title">${achievement.title}</div>
-        <div class="achievement-description">${achievement.description}</div>
-        ${unlocked ? '<div class="achievement-reward">✅ Unlocked!</div>' : '<div class="achievement-reward" style="color: #6b7280;">🔒 Locked</div>'}
-      </div>
-    `;
-  }).join('');
-  
-  achievementsGrid.innerHTML = html;
-  achievementCount.textContent = unlockedCount;
-  totalAchievements.textContent = achievements.length;
-  
-  // Save achievements to localStorage
-  safeLocalStorage.setItem('achievements', JSON.stringify({
-    unlocked: unlockedCount,
-    total: achievements.length,
-    timestamp: Date.now()
-  }));
-}
-
-// Load achievements in bottom section (separate from tab)
+// Load achievements in bottom section
 function loadAchievementsBottom() {
   const achievementsGrid = document.getElementById('achievementsGrid2');
   const achievementCount = document.getElementById('achievementCount2');
@@ -2586,4 +2553,11 @@ function loadAchievementsBottom() {
   achievementsGrid.innerHTML = html;
   if (achievementCount) achievementCount.textContent = unlockedCount;
   if (totalAchievements) totalAchievements.textContent = achievements.length;
+  
+  // Save achievements to localStorage
+  safeLocalStorage.setItem('achievements', JSON.stringify({
+    unlocked: unlockedCount,
+    total: achievements.length,
+    timestamp: Date.now()
+  }));
 }
