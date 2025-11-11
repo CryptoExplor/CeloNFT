@@ -464,7 +464,7 @@ async function getTokenIdFromReceipt(receipt) {
 // ⭐ AIRDROP CLAIMING FUNCTION ⭐
 async function claimAirdrop(tokenId, txHash) {
   try {
-    setStatus('🎁 Claiming your random CELO airdrop (0.005-0.015)...', 'info');
+    setStatus('🎁 Calculating your airdrop bonus...', 'info');
     
     const response = await fetch('/api/airdrop', {
       method: 'POST',
@@ -485,59 +485,53 @@ async function claimAirdrop(tokenId, txHash) {
     }
     
     if (data.success) {
-      // Store the airdrop amount globally
       const amountReceived = data.amount || '0.01';
       lastAirdropAmount = amountReceived;
       
-      setStatus(`✅ Airdrop received! ${amountReceived} CELO sent to your wallet! 🎉`, 'success');
+      // Check if this was a bonus airdrop
+      const isBonus = data.isBonus || (data.bonusMessages && data.bonusMessages.length > 0);
       
+      if (isBonus) {
+        // SUPER BONUS CELEBRATION! 🎉
+        setStatus(`💎 BONUS AIRDROP! ${amountReceived} CELO! 🎉`, 'success');
+        
+        // Show bonus breakdown
+        showBonusBreakdown(data);
+        
+        // Epic confetti for bonuses
+        launchBonusConfetti(parseFloat(amountReceived));
+        
+        // Play bonus sound (if you add sounds)
+        if (typeof playSound === 'function') {
+          playSound('bonus');
+        }
+      } else {
+        setStatus(`✅ Airdrop received! ${amountReceived} CELO sent to your wallet! 🎉`, 'success');
+        
+        // Normal confetti
+        confetti({
+          particleCount: 150,
+          spread: 100,
+          origin: { y: 0.7 },
+          colors: ['#10b981', '#34d399', '#6ee7b7']
+        });
+      }
+      
+      // Add airdrop link to transaction container
       if (data.txHash) {
         const airdropLink = document.createElement('a');
         airdropLink.href = data.explorerUrl || `https://celoscan.io/tx/${data.txHash}`;
         airdropLink.target = '_blank';
         airdropLink.rel = 'noopener noreferrer';
         airdropLink.className = 'tx-link';
-        airdropLink.textContent = `View Airdrop (${amountReceived} CELO)`;
-        airdropLink.style.background = 'linear-gradient(135deg, #10b981, #059669)';
+        airdropLink.textContent = isBonus 
+          ? `💎 View Bonus (${amountReceived} CELO)` 
+          : `View Airdrop (${amountReceived} CELO)`;
+        airdropLink.style.background = isBonus 
+          ? 'linear-gradient(135deg, #fbbf24, #f59e0b)' 
+          : 'linear-gradient(135deg, #10b981, #059669)';
         
         txLinksContainer.appendChild(airdropLink);
-      }
-      
-      // Enhanced confetti for lucky amounts
-      const amountNum = parseFloat(amountReceived);
-      let confettiConfig = {
-        particleCount: 150,
-        spread: 100,
-        origin: { y: 0.7 },
-        colors: ['#10b981', '#34d399', '#6ee7b7']
-      };
-      
-      // Extra celebration for higher amounts (> 0.012)
-      if (amountNum > 0.012) {
-        confettiConfig.particleCount = 250;
-        confettiConfig.colors = ['#fbbf24', '#f59e0b', '#f97316', '#10b981'];
-      }
-      
-      confetti(confettiConfig);
-      
-      // Second burst for very lucky amounts (>= 0.014)
-      if (amountNum >= 0.014) {
-        setTimeout(() => {
-          confetti({
-            particleCount: 100,
-            angle: 60,
-            spread: 55,
-            origin: { x: 0 },
-            colors: ['#fbbf24', '#f59e0b']
-          });
-          confetti({
-            particleCount: 100,
-            angle: 120,
-            spread: 55,
-            origin: { x: 1 },
-            colors: ['#f97316', '#10b981']
-          });
-        }, 200);
       }
       
       return data;
@@ -558,6 +552,187 @@ async function claimAirdrop(tokenId, txHash) {
     return null;
   }
 }
+
+// Show bonus breakdown modal
+function showBonusBreakdown(data) {
+  const modal = document.createElement('div');
+  modal.className = 'bonus-modal';
+  modal.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.9);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 10000;
+    animation: fadeIn 0.3s;
+  `;
+  
+  const content = document.createElement('div');
+  content.style.cssText = `
+    background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+    padding: 30px;
+    border-radius: 16px;
+    max-width: 400px;
+    width: 90%;
+    border: 3px solid #fbbf24;
+    box-shadow: 0 0 30px rgba(251, 191, 36, 0.5);
+    animation: popIn 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  `;
+  
+  const bonusMessages = data.bonusMessages || [];
+  const bonusesHTML = bonusMessages.map(msg => `<div class="bonus-item">✨ ${msg}</div>`).join('');
+  
+  content.innerHTML = `
+    <div style="text-align: center;">
+      <div style="font-size: 4rem; margin-bottom: 10px;">💎</div>
+      <h2 style="color: #fbbf24; margin: 0 0 10px 0; font-size: 1.8rem;">BONUS AIRDROP!</h2>
+      <div style="font-size: 2.5rem; font-weight: bold; color: #10b981; margin: 20px 0;">
+        ${data.amount} CELO
+      </div>
+      
+      <div style="background: rgba(15, 23, 42, 0.6); padding: 16px; border-radius: 8px; margin: 20px 0; border: 1px solid #334155;">
+        <div style="color: #94a3b8; font-size: 0.9rem; margin-bottom: 8px;">Breakdown:</div>
+        <div style="color: #e2e8f0; font-size: 0.9rem; line-height: 1.6;">
+          ${data.baseAmount ? `<div>Base: ${data.baseAmount} CELO</div>` : ''}
+          ${data.luckyMultiplier > 1 ? `<div>Lucky: ${data.luckyMultiplier}x</div>` : ''}
+          ${data.rarityMultiplier > 1 ? `<div>${data.rarity}: ${data.rarityMultiplier}x</div>` : ''}
+        </div>
+      </div>
+      
+      ${bonusesHTML ? `
+        <div style="background: rgba(251, 191, 36, 0.1); padding: 16px; border-radius: 8px; margin: 20px 0; border: 1px solid rgba(251, 191, 36, 0.3);">
+          <div style="color: #fbbf24; font-size: 0.9rem; font-weight: 600; margin-bottom: 10px;">🎯 Your Bonuses:</div>
+          <div style="display: flex; flex-direction: column; gap: 8px; color: #e2e8f0; font-size: 0.85rem;">
+            ${bonusesHTML}
+          </div>
+        </div>
+      ` : ''}
+      
+      <button id="closeBonusModal" style="
+        background: linear-gradient(90deg, #49dfb5, #10b981);
+        color: #0f0f0f;
+        border: none;
+        padding: 12px 30px;
+        border-radius: 8px;
+        font-size: 1rem;
+        font-weight: bold;
+        cursor: pointer;
+        margin-top: 20px;
+        width: 100%;
+        font-family: 'Orbitron', sans-serif;
+      ">
+        Awesome! 🎉
+      </button>
+    </div>
+  `;
+  
+  modal.appendChild(content);
+  document.body.appendChild(modal);
+  
+  // Close modal
+  document.getElementById('closeBonusModal').onclick = () => {
+    modal.style.animation = 'fadeOut 0.3s';
+    setTimeout(() => modal.remove(), 300);
+  };
+  
+  // Click outside to close
+  modal.onclick = (e) => {
+    if (e.target === modal) {
+      modal.style.animation = 'fadeOut 0.3s';
+      setTimeout(() => modal.remove(), 300);
+    }
+  };
+}
+
+// Epic confetti for bonuses
+function launchBonusConfetti(amount) {
+  const duration = 5000;
+  const end = Date.now() + duration;
+  
+  // Determine confetti intensity based on amount
+  const intensity = amount > 0.1 ? 'mega' : amount > 0.05 ? 'super' : 'normal';
+  
+  const colors = intensity === 'mega' 
+    ? ['#fbbf24', '#f59e0b', '#ec4899', '#a855f7', '#10b981']
+    : intensity === 'super'
+    ? ['#fbbf24', '#f59e0b', '#10b981', '#3b82f6']
+    : ['#10b981', '#34d399', '#6ee7b7'];
+  
+  const frame = () => {
+    confetti({
+      particleCount: intensity === 'mega' ? 15 : intensity === 'super' ? 10 : 5,
+      angle: 60,
+      spread: 55,
+      origin: { x: 0, y: 0.6 },
+      colors: colors
+    });
+    
+    confetti({
+      particleCount: intensity === 'mega' ? 15 : intensity === 'super' ? 10 : 5,
+      angle: 120,
+      spread: 55,
+      origin: { x: 1, y: 0.6 },
+      colors: colors
+    });
+    
+    if (Date.now() < end) {
+      requestAnimationFrame(frame);
+    }
+  };
+  
+  frame();
+  
+  // Final burst
+  setTimeout(() => {
+    confetti({
+      particleCount: intensity === 'mega' ? 300 : intensity === 'super' ? 200 : 150,
+      spread: 180,
+      origin: { y: 0.5 },
+      colors: colors,
+      ticks: 400
+    });
+  }, duration - 500);
+}
+
+// Add CSS animations for bonus modal
+const bonusStyle = document.createElement('style');
+bonusStyle.textContent = `
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  
+  @keyframes fadeOut {
+    from { opacity: 1; }
+    to { opacity: 0; }
+  }
+  
+  @keyframes popIn {
+    0% {
+      transform: scale(0.8);
+      opacity: 0;
+    }
+    50% {
+      transform: scale(1.05);
+    }
+    100% {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+  
+  .bonus-item {
+    padding: 6px 12px;
+    background: rgba(251, 191, 36, 0.1);
+    border-radius: 6px;
+    border: 1px solid rgba(251, 191, 36, 0.3);
+  }
+`;
+document.head.appendChild(bonusStyle);
 
 async function castToFarcaster(tokenId, rarity, price, airdropAmount = null) {
   let text;
