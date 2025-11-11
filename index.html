@@ -1107,6 +1107,69 @@
       0%, 100% { transform: scale(1); }
       50% { transform: scale(1.1); }
     }
+    
+    /* Section Toggle Buttons */
+    .section-toggle-buttons {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      width: 90%;
+      max-width: 600px;
+      margin: 30px auto 20px auto;
+      flex-wrap: wrap;
+    }
+
+    .toggle-btn {
+      padding: 10px 16px;
+      background: #1a1d23;
+      border: 2px solid #334155;
+      border-radius: 8px;
+      color: #9ca3af;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+      font-family: 'Roboto Mono', monospace;
+    }
+
+    .toggle-btn:hover {
+      border-color: #49dfb5;
+      transform: translateY(-2px);
+    }
+
+    .toggle-btn.active {
+      background: linear-gradient(90deg, #3b82f6, #1e40af);
+      border-color: #3b82f6;
+      color: #fff;
+    }
+    
+    @media (max-width: 480px) {
+      .toggle-btn {
+        font-size: 0.75rem;
+        padding: 8px 12px;
+        flex: 1 1 calc(50% - 5px);
+        min-width: 120px;
+      }
+      
+      .section-toggle-buttons {
+        gap: 8px;
+      }
+    }
+    
+    /* Achievements Section (bottom) */
+    .achievements-section {
+      width: 100%;
+      margin: 20px auto;
+    }
+    
+    .achievements-section .achievements-header {
+      width: 90%;
+      max-width: 800px;
+      margin: 0 auto 20px auto;
+      text-align: center;
+      padding: 20px 0 10px 0;
+      border-top: 2px solid #334155;
+    }
   </style>
 </head>
 <body>
@@ -1193,6 +1256,13 @@
       <button id="copyImageBtn" class="action-btn-small copy-button" aria-label="Copy image to clipboard">📋 Copy</button>
       <button id="twitterBtn" class="action-btn-small twitter-button" aria-label="Share on Twitter">𝕏 Share</button>
     </div>
+    
+    <!-- Section Toggle Buttons -->
+    <div class="section-toggle-buttons">
+      <button class="toggle-btn active" id="toggleRecentBtn" data-section="recent">🔥 Recent Mints</button>
+      <button class="toggle-btn active" id="toggleLeaderboardBtn" data-section="leaderboard">🏆 Leaderboard</button>
+      <button class="toggle-btn active" id="toggleAchievementsBtn" data-section="achievements">🏅 Achievements</button>
+    </div>
   </div>
 
   <!-- Gallery Tab Content -->
@@ -1234,7 +1304,7 @@
   </div>
 
   <!-- Recent Mints Feed -->
-  <div class="recent-mints-section">
+  <div class="recent-mints-section" id="recentMintsSection">
     <h3>
       <span>🔥</span>
       <span>Recent Mints</span>
@@ -1245,13 +1315,26 @@
   </div>
 
   <!-- Leaderboard -->
-  <div class="leaderboard-section">
+  <div class="leaderboard-section" id="leaderboardSection">
     <h3>
       <span>🏆</span>
       <span>Top Collectors</span>
     </h3>
     <div id="leaderboardContainer">
       <div class="empty-state">Loading leaderboard...</div>
+    </div>
+  </div>
+  
+  <!-- Achievements Section (moved from tab) -->
+  <div class="achievements-section" id="achievementsSection">
+    <div class="achievements-header">
+      <h2>🏅 Your Achievements</h2>
+      <div class="achievement-progress">
+        <span id="achievementCount2">0</span> / <span id="totalAchievements2">10</span> Unlocked
+      </div>
+    </div>
+    <div id="achievementsGrid2" class="achievements-grid">
+      <!-- Achievements will be dynamically loaded -->
     </div>
   </div>
 
