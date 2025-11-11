@@ -6,9 +6,96 @@ import { privateKeyToAccount } from 'viem/accounts';
 const NFT_CONTRACT_ADDRESS = '0xe90EC6F3f5C15cC76861CA5d41CD879548208Eff';
 const MIN_AIRDROP_AMOUNT = '0.005'; // Minimum CELO
 const MAX_AIRDROP_AMOUNT = '0.015'; // Maximum CELO
+const ABSOLUTE_MAX_AIRDROP = '0.033'; // Hard cap - no one can get more than this
 const RATE_LIMIT_WINDOW = 3600000; // 1 hour in ms
 const MAX_CLAIMS_PER_HOUR = 3;
 const LOW_BALANCE_THRESHOLD = '1.0'; // Alert when below 1 CELO
+
+// ===== LUCKY TOKEN BONUSES =====
+const LUCKY_NUMBERS = [
+  77, 111, 222, 333, 444, 555, 666, 777, 888, 999,
+  1111, 2222, 3333, 4444, 5555, 6666, 7777, 8888, 9999
+];
+
+const MILESTONE_TOKENS = [
+  100, 250, 500, 1000, 2500, 5000, 10000, 25000, 50000, 100000
+];
+
+function isPalindrome(num) {
+  const str = num.toString();
+  return str.length > 1 && str === str.split('').reverse().join('');
+}
+
+function isSequential(num) {
+  const str = num.toString();
+  if (str.length < 3) return false;
+  
+  // Check ascending (123, 234, etc)
+  let isAscending = true;
+  for (let i = 1; i < str.length; i++) {
+    if (parseInt(str[i]) !== parseInt(str[i-1]) + 1) {
+      isAscending = false;
+      break;
+    }
+  }
+  
+  // Check descending (321, 543, etc)
+  let isDescending = true;
+  for (let i = 1; i < str.length; i++) {
+    if (parseInt(str[i]) !== parseInt(str[i-1]) - 1) {
+      isDescending = false;
+      break;
+    }
+  }
+  
+  return isAscending || isDescending;
+}
+
+function isRepeatingDigits(num) {
+  const str = num.toString();
+  if (str.length < 2) return false;
+  
+  const firstDigit = str[0];
+  return str.split('').every(d => d === firstDigit);
+}
+
+function calculateLuckyBonus(tokenId) {
+  let multiplier = 1;
+  let bonusReasons = [];
+  
+  // Milestone tokens get massive bonus
+  if (MILESTONE_TOKENS.includes(tokenId)) {
+    multiplier = 1.4;
+    bonusReasons.push(`🎯 MILESTONE #${tokenId}`);
+    return { multiplier, bonusReasons };
+  }
+  
+  // Lucky numbers get 3x
+  if (LUCKY_NUMBERS.includes(tokenId)) {
+    multiplier = 1.2;
+    bonusReasons.push(`🍀 Lucky Number #${tokenId}`);
+  }
+  
+  // Palindromes get 2x (e.g., 121, 1331, 45654)
+  if (isPalindrome(tokenId)) {
+    multiplier = Math.max(multiplier, 2);
+    bonusReasons.push(`🔄 Palindrome #${tokenId}`);
+  }
+  
+  // Sequential numbers get 2x (e.g., 123, 4567, 987)
+  if (isSequential(tokenId)) {
+    multiplier = Math.max(multiplier, 1.2);
+    bonusReasons.push(`🔢 Sequential #${tokenId}`);
+  }
+  
+  // All same digits get 4x (e.g., 1111, 5555)
+  if (isRepeatingDigits(tokenId)) {
+    multiplier = Math.max(multiplier, 1.5);
+    bonusReasons.push(`🎰 All ${tokenId.toString()[0]}s!`);
+  }
+  
+  return { multiplier, bonusReasons };
+}
 
 // In-memory storage (use Redis/Database in production)
 const claimHistory = new Map();
@@ -53,16 +140,50 @@ const NFT_ABI = [
   }
 ];
 
-// Generate random airdrop amount between MIN and MAX
-function getRandomAirdropAmount() {
+// Get rarity multiplier from NFT traits
+async function getRarityMultiplier(tokenId) {
+  try {
+    const traits = await publicClient.readContract({
+      address: NFT_CONTRACT_ADDRESS,
+      abi: NFT_ABI,
+      functionName: 'tokenTraits',
+      args: [BigInt(tokenId)]
+    });
+    
+    const rarity = Number(traits[1]);
+    const rarityLabels = ['Common', 'Rare', 'Legendary', 'Mythic'];
+    const multipliers = [1, 1.1, 1.25, 2]; // Based on rarity
+    
+    return {
+      multiplier: multipliers[rarity] || 1,
+      rarity: rarityLabels[rarity] || 'Unknown'
+    };
+  } catch (error) {
+    console.error('Failed to get rarity:', error);
+    return { multiplier: 1, rarity: 'Unknown' };
+  }
+}
+
+// Generate random airdrop amount with lucky and rarity bonuses
+function getRandomAirdropAmount(tokenId) {
   const min = parseFloat(MIN_AIRDROP_AMOUNT);
   const max = parseFloat(MAX_AIRDROP_AMOUNT);
   
-  // Generate random number between min and max with 4 decimal precision
+  // Generate base random amount
   const random = Math.random() * (max - min) + min;
-  const rounded = Math.round(random * 10000) / 10000; // Round to 4 decimals
+  const baseAmount = Math.round(random * 10000) / 10000;
   
-  return rounded.toFixed(4); // Return as string with 4 decimals
+  // Apply lucky bonus
+  const { multiplier, bonusReasons } = calculateLuckyBonus(tokenId);
+  const amountWithLucky = baseAmount * multiplier;
+  
+  return {
+    baseAmount: baseAmount.toFixed(4),
+    amountWithLucky,
+    luckyMultiplier: multiplier,
+    bonusReasons,
+    isLucky: multiplier > 1
+  };
 }
 
 // Security: Verify user owns the NFT
@@ -141,8 +262,8 @@ function markAsProcessed(txHash, address) {
   }
 }
 
-// Send CELO airdrop with random amount
-async function sendAirdrop(recipientAddress) {
+// Send CELO airdrop with random amount, lucky bonuses, and rarity multiplier
+async function sendAirdrop(recipientAddress, tokenId) {
   try {
     // Initialize wallet from private key (stored in env)
     const privateKey = process.env.AIRDROP_WALLET_PRIVATE_KEY;
@@ -158,11 +279,44 @@ async function sendAirdrop(recipientAddress) {
       transport: http(process.env.CELO_RPC_URL || 'https://forno.celo.org')
     });
     
-    // Generate random airdrop amount
-    const randomAmount = getRandomAirdropAmount();
-    const airdropAmount = parseEther(randomAmount);
+    // Get lucky bonus
+    const luckyBonus = getRandomAirdropAmount(tokenId);
     
-    console.log(`🎲 Random airdrop amount generated: ${randomAmount} CELO`);
+    // Get rarity bonus
+    const rarityBonus = await getRarityMultiplier(tokenId);
+    
+    // Calculate final amount with both bonuses
+    const baseWithLucky = luckyBonus.amountWithLucky;
+    let finalAmount = baseWithLucky * rarityBonus.multiplier;
+    
+    // HARD CAP: Ensure no one gets more than ABSOLUTE_MAX_AIRDROP
+    const absoluteMax = parseFloat(ABSOLUTE_MAX_AIRDROP);
+    if (finalAmount > absoluteMax) {
+      console.log(`⚠️ Capping airdrop from ${finalAmount.toFixed(4)} to ${absoluteMax} CELO`);
+      finalAmount = absoluteMax;
+    }
+    
+    const finalAmountString = finalAmount.toFixed(4);
+    const airdropAmount = parseEther(finalAmountString);
+    
+    // Build bonus message
+    const bonusMessages = [];
+    if (luckyBonus.isLucky) {
+      bonusMessages.push(...luckyBonus.bonusReasons);
+      bonusMessages.push(`${luckyBonus.luckyMultiplier}x Lucky Bonus`);
+    }
+    if (rarityBonus.multiplier > 1) {
+      bonusMessages.push(`${rarityBonus.rarity} (${rarityBonus.multiplier}x Rarity)`);
+    }
+    
+    console.log(`🎲 Airdrop calculation for Token #${tokenId}:
+      Base Random: ${luckyBonus.baseAmount} CELO
+      Lucky Bonus: ${luckyBonus.luckyMultiplier}x → ${luckyBonus.amountWithLucky.toFixed(4)} CELO
+      Rarity: ${rarityBonus.rarity} (${rarityBonus.multiplier}x)
+      Before Cap: ${(baseWithLucky * rarityBonus.multiplier).toFixed(4)} CELO
+      Final Amount: ${finalAmountString} CELO (Max: ${ABSOLUTE_MAX_AIRDROP})
+      Bonuses: ${bonusMessages.join(', ') || 'None'}
+    `);
     
     // Check wallet balance
     const balance = await publicClient.getBalance({
@@ -181,27 +335,6 @@ Threshold: ${LOW_BALANCE_THRESHOLD} CELO
 Wallet Address: ${account.address}
 ⚠️⚠️⚠️ PLEASE REFILL IMMEDIATELY ⚠️⚠️⚠️
       `);
-      
-      // TODO: Add your preferred alert method here:
-      // - Send Discord webhook
-      // - Send email via SendGrid/Resend
-      // - Send Telegram message
-      // - Trigger PagerDuty alert
-      
-      // Example Discord webhook (uncomment and add your webhook URL):
-      /*
-      try {
-        await fetch(process.env.DISCORD_WEBHOOK_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            content: `🚨 **AIRDROP WALLET LOW BALANCE** 🚨\n\nCurrent: ${balanceInCelo.toFixed(4)} CELO\nWallet: ${account.address}\n\n**ACTION REQUIRED: Refill wallet immediately!**`
-          })
-        });
-      } catch (e) {
-        console.error('Failed to send Discord alert:', e);
-      }
-      */
     }
     
     if (balance < airdropAmount) {
@@ -221,8 +354,13 @@ Wallet Address: ${account.address}
     return {
       success: receipt.status === 'success',
       txHash: hash,
-      amount: randomAmount,
-      walletBalance: Number(balance) / 1e18 // Return balance for logging
+      amount: finalAmountString,
+      baseAmount: luckyBonus.baseAmount,
+      luckyMultiplier: luckyBonus.luckyMultiplier,
+      rarityMultiplier: rarityBonus.multiplier,
+      rarity: rarityBonus.rarity,
+      bonusMessages,
+      walletBalance: Number(balance) / 1e18
     };
   } catch (error) {
     console.error('Airdrop send failed:', error);
@@ -303,8 +441,8 @@ export default async function handler(req, res) {
       });
     }
     
-    // Send airdrop with random amount
-    const result = await sendAirdrop(userAddress);
+    // Send airdrop with random amount, lucky bonuses, and rarity multiplier
+    const result = await sendAirdrop(userAddress, tokenId);
     
     // Mark as processed
     markAsProcessed(mintTxHash, userAddress);
@@ -313,18 +451,29 @@ export default async function handler(req, res) {
     console.log(`✅ Airdrop sent successfully:
       Token ID: ${tokenId}
       Recipient: ${userAddress}
-      Amount: ${result.amount} CELO (Random)
+      Base Amount: ${result.baseAmount} CELO
+      Lucky Multiplier: ${result.luckyMultiplier}x
+      Rarity Multiplier: ${result.rarityMultiplier}x (${result.rarity})
+      Final Amount: ${result.amount} CELO
+      Bonuses: ${result.bonusMessages.join(', ') || 'None'}
       Tx Hash: ${result.txHash}
       Wallet Balance Remaining: ${result.walletBalance.toFixed(4)} CELO
     `);
     
     return res.status(200).json({
       success: true,
-      message: `Airdrop of ${result.amount} CELO sent successfully! 🎁`,
+      message: result.bonusMessages.length > 0 
+        ? `💎 BONUS AIRDROP! ${result.amount} CELO sent! 🎉\n${result.bonusMessages.join(' • ')}`
+        : `Airdrop of ${result.amount} CELO sent successfully! 🎁`,
       amount: result.amount,
+      baseAmount: result.baseAmount,
+      luckyMultiplier: result.luckyMultiplier,
+      rarityMultiplier: result.rarityMultiplier,
+      rarity: result.rarity,
+      bonusMessages: result.bonusMessages,
       txHash: result.txHash,
       explorerUrl: `https://celoscan.io/tx/${result.txHash}`,
-      randomAmount: true
+      isBonus: result.bonusMessages.length > 0
     });
     
   } catch (error) {
