@@ -2243,19 +2243,19 @@ function switchTab(tabName) {
     if (leaderboardSection) leaderboardSection.style.display = 'none';
     if (achievementsSection) achievementsSection.style.display = 'none';
   } else {
-    // Show sections in mint tab (based on toggle state)
-    if (recentSection) {
-      const recentBtn = document.getElementById('toggleRecentBtn');
-      recentSection.style.display = recentBtn?.classList.contains('active') ? 'block' : 'none';
-    }
-    if (leaderboardSection) {
-      const leaderboardBtn = document.getElementById('toggleLeaderboardBtn');
-      leaderboardSection.style.display = leaderboardBtn?.classList.contains('active') ? 'block' : 'none';
-    }
-    if (achievementsSection) {
-      const achievementsBtn = document.getElementById('toggleAchievementsBtn');
-      achievementsSection.style.display = achievementsBtn?.classList.contains('active') ? 'block' : 'none';
-    }
+    // Show only recent mints by default in mint tab
+    if (recentSection) recentSection.style.display = 'block';
+    if (leaderboardSection) leaderboardSection.style.display = 'none';
+    if (achievementsSection) achievementsSection.style.display = 'none';
+    
+    // Reset toggle buttons to show only Recent active
+    const recentBtn = document.getElementById('toggleRecentBtn');
+    const leaderboardBtn = document.getElementById('toggleLeaderboardBtn');
+    const achievementsBtn = document.getElementById('toggleAchievementsBtn');
+    
+    if (recentBtn) recentBtn.classList.add('active');
+    if (leaderboardBtn) leaderboardBtn.classList.remove('active');
+    if (achievementsBtn) achievementsBtn.classList.remove('active');
   }
   
   // Load content based on tab
@@ -2276,30 +2276,29 @@ const toggleButtons = document.querySelectorAll('.toggle-btn');
 toggleButtons.forEach(btn => {
   btn.addEventListener('click', () => {
     const section = btn.dataset.section;
-    btn.classList.toggle('active');
     
-    // Toggle visibility
-    if (section === 'recent') {
-      const recentSection = document.getElementById('recentMintsSection');
-      if (recentSection) {
-        recentSection.style.display = btn.classList.contains('active') ? 'block' : 'none';
-      }
-    } else if (section === 'leaderboard') {
-      const leaderboardSection = document.getElementById('leaderboardSection');
-      if (leaderboardSection) {
-        leaderboardSection.style.display = btn.classList.contains('active') ? 'block' : 'none';
-      }
-    } else if (section === 'achievements') {
-      const achievementsSection = document.getElementById('achievementsSection');
-      if (achievementsSection) {
-        const isActive = btn.classList.contains('active');
-        achievementsSection.style.display = isActive ? 'block' : 'none';
-        
-        // Load achievements when showing
-        if (isActive) {
-          loadAchievementsBottom();
-        }
-      }
+    // Remove active from all buttons
+    toggleButtons.forEach(b => b.classList.remove('active'));
+    // Add active to clicked button
+    btn.classList.add('active');
+    
+    // Hide all sections
+    const recentSection = document.getElementById('recentMintsSection');
+    const leaderboardSection = document.getElementById('leaderboardSection');
+    const achievementsSection = document.getElementById('achievementsSection');
+    
+    if (recentSection) recentSection.style.display = 'none';
+    if (leaderboardSection) leaderboardSection.style.display = 'none';
+    if (achievementsSection) achievementsSection.style.display = 'none';
+    
+    // Show selected section
+    if (section === 'recent' && recentSection) {
+      recentSection.style.display = 'block';
+    } else if (section === 'leaderboard' && leaderboardSection) {
+      leaderboardSection.style.display = 'block';
+    } else if (section === 'achievements' && achievementsSection) {
+      achievementsSection.style.display = 'block';
+      loadAchievementsBottom();
     }
   });
 });
@@ -2527,37 +2526,38 @@ const achievements = [
 ];
 
 // Load achievements in bottom section
-function loadAchievementsBottom() {
+async function loadAchievementsBottom() {
   const achievementsGrid = document.getElementById('achievementsGrid2');
   const achievementCount = document.getElementById('achievementCount2');
   const totalAchievements = document.getElementById('totalAchievements2');
   
   if (!achievementsGrid) return;
   
-  let unlockedCount = 0;
-  
-  const html = achievements.map(achievement => {
-    const unlocked = achievement.check();
-    if (unlocked) unlockedCount++;
-    
-    return `
-      <div class="achievement-card ${unlocked ? 'unlocked' : 'locked'}">
-        <div class="achievement-icon">${achievement.icon}</div>
-        <div class="achievement-title">${achievement.title}</div>
-        <div class="achievement-description">${achievement.description}</div>
-        ${unlocked ? '<div class="achievement-reward">✅ Unlocked!</div>' : '<div class="achievement-reward" style="color: #6b7280;">🔒 Locked</div>'}
-      </div>
-    `;
-  }).join('');
-  
-  achievementsGrid.innerHTML = html;
-  if (achievementCount) achievementCount.textContent = unlockedCount;
-  if (totalAchievements) totalAchievements.textContent = achievements.length;
-  
-  // Save achievements to localStorage
-  safeLocalStorage.setItem('achievements', JSON.stringify({
-    unlocked: unlockedCount,
-    total: achievements.length,
-    timestamp: Date.now()
-  }));
-}
+  // Ensure userNFTs are loaded for accurate achievement checking
+  if (userNFTs.length === 0 && userAddress && contractDetails) {
+    try {
+      const balance = await readContract(wagmiConfig, {
+        address: contractDetails.address,
+        abi: contractDetails.abi,
+        functionName: 'balanceOf',
+        args: [userAddress]
+      });
+      
+      const nftCount = Number(balance);
+      
+      if (nftCount > 0) {
+        const totalSupply = await readContract(wagmiConfig, {
+          address: contractDetails.address,
+          abi: contractDetails.abi,
+          functionName: 'totalSupply'
+        });
+        
+        const total = Number(totalSupply);
+        const promises = [];
+        
+        for (let i = 1; i <= total; i++) {
+          promises.push(
+            readContract(wagmiConfig, {
+              address: contractDetails.address,
+              abi: contractDetails.abi,
+              functionName: 'ownerOf',
