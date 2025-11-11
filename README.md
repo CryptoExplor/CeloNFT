@@ -109,7 +109,7 @@ AIRDROP_WALLET_PRIVATE_KEY=0x...your_private_key_here...
 ⚠️ **CRITICAL**: Never commit your `.env` file or expose your private key!
 
 **Optional**: Get a Celoscan API key for better leaderboard performance:
-- Visit [Celoscan API](https://celoscan.io/apis)
+- Visit [Etherscan API](https://etherscan.io/apis)
 - Get free API key (100k calls/day)
 - Add to `main.js` in the `fetchLeaderboard` function
 
