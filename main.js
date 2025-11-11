@@ -1633,3 +1633,169 @@ document.addEventListener('DOMContentLoaded', () => {
 window.addEventListener('beforeunload', () => {
   stopRecentMintsPolling();
 });
+
+// ===== LEADERBOARD SYSTEM =====
+let leaderboardCache = null;
+let leaderboardLastFetch = 0;
+const LEADERBOARD_CACHE_TTL = 60000; // 1 minute
+
+async function fetchLeaderboard() {
+  try {
+    // Return cached data if fresh
+    const now = Date.now();
+    if (leaderboardCache && (now - leaderboardLastFetch) < LEADERBOARD_CACHE_TTL) {
+      return leaderboardCache;
+    }
+    
+    if (!contractDetails) return [];
+    
+    const totalSupply = await readContract(wagmiConfig, {
+      address: contractDetails.address,
+      abi: contractDetails.abi,
+      functionName: 'totalSupply'
+    });
+    
+    const total = Number(totalSupply);
+    if (total === 0) return [];
+    
+    // Sample last 200 tokens or all if less (efficient for large collections)
+    const sampleSize = Math.min(200, total);
+    const start = Math.max(1, total - sampleSize + 1);
+    
+    const holderMap = new Map();
+    const rarityMap = new Map(); // Track rarity counts per holder
+    
+    console.log(`Scanning tokens ${start} to ${total} for leaderboard...`);
+    
+    // Batch requests for better performance
+    const promises = [];
+    for (let i = start; i <= total; i++) {
+      promises.push(
+        Promise.all([
+          readContract(wagmiConfig, {
+            address: contractDetails.address,
+            abi: contractDetails.abi,
+            functionName: 'ownerOf',
+            args: [BigInt(i)]
+          }),
+          readContract(wagmiConfig, {
+            address: contractDetails.address,
+            abi: contractDetails.abi,
+            functionName: 'tokenTraits',
+            args: [BigInt(i)]
+          })
+        ]).then(([owner, traits]) => ({ owner, rarity: Number(traits[1]) }))
+      );
+    }
+    
+    const results = await Promise.allSettled(promises);
+    
+    results.forEach(result => {
+      if (result.status === 'fulfilled') {
+        const { owner, rarity } = result.value;
+        const ownerLower = owner.toLowerCase();
+        
+        holderMap.set(ownerLower, (holderMap.get(ownerLower) || 0) + 1);
+        
+        if (!rarityMap.has(ownerLower)) {
+          rarityMap.set(ownerLower, { mythic: 0, legendary: 0, rare: 0, common: 0 });
+        }
+        const rarities = rarityMap.get(ownerLower);
+        if (rarity === 3) rarities.mythic++;
+        else if (rarity === 2) rarities.legendary++;
+        else if (rarity === 1) rarities.rare++;
+        else rarities.common++;
+      }
+    });
+    
+    // Convert to array and sort by count
+    const leaderboard = Array.from(holderMap.entries())
+      .map(([address, count]) => ({
+        address,
+        shortAddress: `${address.slice(0, 6)}...${address.slice(-4)}`,
+        count,
+        rarities: rarityMap.get(address) || { mythic: 0, legendary: 0, rare: 0, common: 0 }
+      }))
+      .sort((a, b) => {
+        // Sort by count first
+        if (b.count !== a.count) return b.count - a.count;
+        // If tied, sort by mythic count
+        if (b.rarities.mythic !== a.rarities.mythic) return b.rarities.mythic - a.rarities.mythic;
+        // Then legendary
+        return b.rarities.legendary - a.rarities.legendary;
+      })
+      .slice(0, 10); // Top 10
+    
+    leaderboardCache = leaderboard;
+    leaderboardLastFetch = now;
+    
+    return leaderboard;
+  } catch (e) {
+    console.error('Leaderboard fetch error:', e);
+    return [];
+  }
+}
+
+function renderLeaderboard(leaderboard) {
+  const container = document.getElementById('leaderboardContainer');
+  if (!container) return;
+  
+  if (leaderboard.length === 0) {
+    container.innerHTML = '<div class="empty-state">No data yet. Be the first collector! 🎯</div>';
+    return;
+  }
+  
+  const medals = ['🥇', '🥈', '🥉'];
+  
+  container.innerHTML = leaderboard.map((holder, index) => {
+    const rank = index + 1;
+    const medal = medals[index] || `#${rank}`;
+    const isYou = userAddress && holder.address === userAddress.toLowerCase();
+    
+    return `
+      <div class="leaderboard-item ${isYou ? 'your-rank' : ''}" style="animation: slideUp ${0.1 * (index + 1)}s ease-out;">
+        <div class="rank-badge">${medal}</div>
+        <div class="holder-info">
+          <div class="holder-address">${isYou ? '👑 You' : holder.shortAddress}</div>
+          <div class="holder-rarities">
+            ${holder.rarities.mythic > 0 ? `<span class="rarity-count mythic" title="Mythic">${holder.rarities.mythic}M</span>` : ''}
+            ${holder.rarities.legendary > 0 ? `<span class="rarity-count legendary" title="Legendary">${holder.rarities.legendary}L</span>` : ''}
+            ${holder.rarities.rare > 0 ? `<span class="rarity-count rare" title="Rare">${holder.rarities.rare}R</span>` : ''}
+          </div>
+        </div>
+        <div class="holder-count">${holder.count} NFTs</div>
+      </div>
+    `;
+  }).join('');
+}
+
+async function updateLeaderboard() {
+  const leaderboard = await fetchLeaderboard();
+  renderLeaderboard(leaderboard);
+}
+
+// Auto-refresh leaderboard every 2 minutes
+let leaderboardInterval = null;
+
+function startLeaderboardPolling() {
+  if (leaderboardInterval) return;
+  
+  updateLeaderboard(); // Initial load
+  leaderboardInterval = setInterval(updateLeaderboard, 120000); // Every 2 minutes
+}
+
+function stopLeaderboardPolling() {
+  if (leaderboardInterval) {
+    clearInterval(leaderboardInterval);
+    leaderboardInterval = null;
+  }
+}
+
+// Start on page load
+document.addEventListener('DOMContentLoaded', () => {
+  startLeaderboardPolling();
+});
+
+window.addEventListener('beforeunload', () => {
+  stopLeaderboardPolling();
+});
