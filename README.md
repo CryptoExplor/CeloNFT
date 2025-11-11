@@ -4,16 +4,33 @@
 [![Farcaster](https://img.shields.io/badge/Farcaster-Mini_App-purple?style=for-the-badge&logo=farcaster)](https://farcaster.xyz/miniapps/Tip8ngTAKnHC/celo-nft)
 [![Contract](https://img.shields.io/badge/Contract-Celo-yellow?style=for-the-badge&logo=ethereum)](https://celoscan.io/address/0xe90EC6F3f5C15cC76861CA5d41CD879548208Eff)
 
-> A decentralized NFT minting platform on Celo that captures live CELO price snapshots, features automatic CELO airdrops, and functions as a Farcaster mini app.
+> A decentralized NFT minting platform on Celo that captures live CELO price snapshots, features smart airdrop bonuses with lucky token multipliers, recent mints feed, leaderboard system, and functions as a Farcaster mini app.
 
 ## 🌟 Features
 
 ### Core Functionality
 - **🆓 Free NFT Minting** - Mint unique NFTs on the Celo blockchain
-- **💰 Automatic Airdrop** - Receive 0.01 CELO automatically when minting
+- **💎 Smart Airdrop System** - Receive 0.005-0.01 CELO with lucky bonuses (max 0.033 CELO)
+- **🎰 Lucky Token Bonuses** - Special multipliers for milestone, palindrome, sequential, and repeating digit tokens
 - **📊 Live Price Integration** - Each NFT captures the exact CELO price at mint time
 - **📈 TradingView Chart** - Real-time CELO/USD price visualization
-- **🎲 Rarity System** - Four-tier rarity (Common, Rare, Legendary, Mythic)
+- **🎲 Rarity System** - Four-tier rarity (Common, Rare, Legendary, Mythic) with airdrop multipliers
+
+### Community Features
+- **🔥 Recent Mints Feed** - Live feed showing last 5 mints with rarity badges and timestamps
+- **🏆 Top Collectors Leaderboard** - Top 10 NFT holders with rarity breakdowns
+- **📊 Advanced Stats** - Real-time collection statistics via Celoscan API
+- **⚡ Auto-Refresh** - Recent mints update every 15s, leaderboard every 2 minutes
+
+### Airdrop Bonus System
+- **🎯 Milestone Tokens** (100, 250, 500, 1000+): **1.4x multiplier**
+- **🍀 Lucky Numbers** (77, 111, 222, 333+): **1.2x multiplier**
+- **🎰 Repeating Digits** (1111, 5555): **1.5x multiplier**
+- **🔄 Palindromes** (121, 1331): **2x multiplier**
+- **🔢 Sequential** (123, 4567): **1.2x multiplier**
+- **💎 Rarity Bonuses**: Common 1x, Rare 1.1x, Legendary 1.25x, Mythic 2x
+- **🎉 Bonus Modal** - Beautiful breakdown showing all applied bonuses
+- **✨ Epic Confetti** - Intensity-based celebrations for lucky airdrops
 
 ### Visual Experience
 - **✨ Dynamic Sparkle Effects** - Rarity-based animations with varying speeds
@@ -51,9 +68,11 @@
 
 ### Backend (Serverless)
 - **Platform**: Vercel Functions
-- **Airdrop System**: Automatic CELO distribution via Viem
+- **Airdrop System**: Smart bonus system with lucky token multipliers
+- **Data Source**: Celoscan API for accurate holder tracking
 - **Rate Limiting**: 3 claims per hour per address
 - **Security**: NFT ownership verification, recent mint validation
+- **Caching**: 60-second TTL for leaderboard performance
 
 ## 🚀 Quick Start
 
@@ -81,13 +100,18 @@ npm install
 cp .env.example .env
 ```
 
-Edit `.env` and add your airdrop wallet private key:
+Edit `.env` and add your configuration:
 ```env
 CELO_RPC_URL=https://forno.celo.org
 AIRDROP_WALLET_PRIVATE_KEY=0x...your_private_key_here...
 ```
 
 ⚠️ **CRITICAL**: Never commit your `.env` file or expose your private key!
+
+**Optional**: Get a Celoscan API key for better leaderboard performance:
+- Visit [Celoscan API](https://celoscan.io/apis)
+- Get free API key (100k calls/day)
+- Add to `main.js` in the `fetchLeaderboard` function
 
 4. **Run development server**
 ```bash
@@ -114,7 +138,7 @@ vercel deploy
 ```
 CeloNFT/
 ├── api/
-│   ├── airdrop.js          # Main airdrop endpoint (user-triggered)
+│   ├── airdrop.js          # Enhanced airdrop with lucky bonuses
 │   └── webhook.js          # Event-based airdrop (alternative)
 ├── public/
 │   ├── contract.json       # Contract ABI & address
@@ -123,8 +147,8 @@ CeloNFT/
 │   └── splash.png         # Splash screen
 ├── .well-known/
 │   └── farcaster.json     # Farcaster manifest
-├── index.html             # Main application
-├── main.js                # Application logic
+├── index.html             # Main application with enhanced UI
+├── main.js                # Application logic (2100+ lines)
 ├── package.json           # Dependencies
 ├── vite.config.js         # Vite configuration
 ├── vercel.json            # Vercel deployment config
@@ -135,12 +159,70 @@ CeloNFT/
 
 NFT rarity is determined randomly during minting:
 
-| Rarity | Probability | Sparkle Color | Animation Speed |
-|--------|-------------|---------------|-----------------|
-| Common | 60% | Gray | 6s |
-| Rare | 30% | Blue | 4s |
-| Legendary | 9% | Gold | 2s |
-| Mythic | 1% | Crimson | 1.5s |
+| Rarity | Probability | Sparkle Color | Animation Speed | Airdrop Multiplier |
+|--------|-------------|---------------|-----------------|--------------------| 
+| Common | 60% | Gray | 6s | 1x |
+| Rare | 30% | Blue | 4s | 1.1x |
+| Legendary | 9% | Gold | 2s | 1.25x |
+| Mythic | 1% | Crimson | 1.5s | 2x |
+
+## 🎰 Lucky Token System
+
+### Token Bonuses
+
+Special token IDs receive airdrop multipliers:
+
+| Type | Examples | Multiplier | Description |
+|------|----------|------------|-------------|
+| 🎯 **Milestone** | 100, 250, 500, 1000 | **1.4x** | Major collection milestones |
+| 🍀 **Lucky Numbers** | 77, 111, 222, 333 | **1.2x** | Special lucky numbers |
+| 🎰 **Repeating** | 1111, 5555, 8888 | **1.5x** | All same digits |
+| 🔄 **Palindrome** | 121, 1331, 45654 | **2x** | Reads same forwards/backwards |
+| 🔢 **Sequential** | 123, 4567, 987 | **1.2x** | Consecutive digits |
+
+### Airdrop Calculation
+
+1. **Base Amount**: Random 0.005-0.01 CELO
+2. **Lucky Bonus**: Base × Lucky Multiplier
+3. **Rarity Bonus**: (Base × Lucky) × Rarity Multiplier
+4. **Hard Cap**: Maximum 0.033 CELO regardless of bonuses
+
+**Example:**
+- Token #1000 (Milestone, Legendary)
+- Base: 0.010 CELO
+- Lucky: 1.4x → 0.014 CELO
+- Rarity: 1.25x → 0.0175 CELO
+- **Final: 0.0175 CELO**
+
+## 🏆 Leaderboard System
+
+### How It Works
+- Fetches all NFT holders via **Celoscan API**
+- Displays **Top 10 collectors**
+- Shows rarity breakdown (Mythic, Legendary, Rare counts)
+- Highlights your rank with crown emoji 👑
+- Auto-updates every **2 minutes**
+- **Caching**: 60-second TTL for performance
+
+### Sorting Logic
+1. **Primary**: Total NFTs owned
+2. **Tiebreaker 1**: Most Mythic NFTs
+3. **Tiebreaker 2**: Most Legendary NFTs
+
+## 🔥 Recent Mints Feed
+
+### Features
+- Shows **last 5 minted NFTs**
+- Real-time rarity badges with color coding
+- **Relative timestamps** (Just now, 5m ago, 2h ago)
+- Highlights **your mints** with special styling
+- Auto-updates every **15 seconds**
+- Smooth slide-in animations
+
+### Performance
+- Parallel batch processing for speed
+- Graceful error handling
+- Initialization delay ensures contract readiness
 
 ## 🔐 Security Features
 
@@ -172,8 +254,21 @@ To use a different contract, update `public/contract.json`:
 
 Modify in `api/airdrop.js`:
 ```javascript
-const AIRDROP_AMOUNT = '0.01'; // CELO
+const MIN_AIRDROP_AMOUNT = '0.005'; // Minimum CELO
+const MAX_AIRDROP_AMOUNT = '0.01'; // Maximum CELO
+const ABSOLUTE_MAX_AIRDROP = '0.033'; // Hard cap
 ```
+
+### Celoscan API
+
+Add your API key in `main.js`:
+```javascript
+const apiUrl = `https://api.celoscan.io/api?...&apikey=YOUR_KEY_HERE`;
+```
+
+Get a free API key at [Celoscan](https://celoscan.io/apis)
+- **Rate Limit**: 5 calls/second
+- **Daily Limit**: 100,000 calls
 
 ### Rate Limits
 
@@ -190,11 +285,12 @@ The app fetches CELO price from CoinGecko API. To use a different source, modify
 ## 📊 Stats & Analytics
 
 The app tracks:
-- **Total Minted**: Global mint counter
-- **Your Mints**: User's NFT balance
+- **Total Minted**: Global mint counter (on-chain)
+- **Your Mints**: User's NFT balance (real-time)
 - **Remaining Supply**: Available NFTs (if max supply set)
-- **Mint History**: localStorage-based history
-- **User Balance**: Real-time wallet NFT count
+- **Recent Mints**: Last 5 mints with rarity and timestamps
+- **Top Collectors**: Leaderboard with holder counts and rarities
+- **Mint History**: localStorage-based personal history
 
 ## 🎁 Airdrop System
 
@@ -208,8 +304,28 @@ The app tracks:
    - Recent mint (< 10 minutes)
    - Rate limit compliance
    - No duplicate claims
-5. 0.01 CELO is sent to user's wallet
-6. Confetti celebration! 🎉
+5. **Bonus calculation**:
+   - Checks for lucky token patterns
+   - Applies rarity multiplier
+   - Enforces 0.033 CELO hard cap
+6. CELO is sent to user's wallet
+7. **Bonus modal** appears if lucky bonuses applied
+8. Epic confetti celebration! 🎉
+
+### Bonus Breakdown Modal
+
+For lucky airdrops, users see:
+- 💎 **Total amount received**
+- 📊 **Breakdown**: Base, Lucky, Rarity multipliers
+- 🎯 **Applied bonuses**: List of all bonuses
+- ✨ **Smooth animations**: fadeIn, popIn effects
+- 🎊 **Continuous confetti**: 5-second celebration
+
+### Confetti Intensity
+
+- **Normal** (< 0.05 CELO): Standard green confetti
+- **Super** (0.05-0.1 CELO): Multi-color with gold accents
+- **Mega** (> 0.1 CELO): Rainbow explosion with 300 particles
 
 ### Alternative: Webhook System
 
@@ -320,6 +436,16 @@ event Minted(
 **"NFT Ownership Verification Failed"**
 - NFT not in your wallet
 - Check on Celoscan
+
+**"Leaderboard Not Loading"**
+- Celoscan API rate limit
+- Fallback to blockchain scan activates
+- Get free API key for better performance
+
+**"Recent Mints Taking Too Long"**
+- Large collection scan
+- Shows last 5 tokens only for speed
+- Auto-refreshes every 15 seconds
 
 **Preview Not Loading**
 - Clear localStorage
