@@ -1512,7 +1512,10 @@ let recentMintsInterval = null;
 
 async function fetchRecentMints(limit = 5) {
   try {
-    if (!contractDetails) return [];
+    if (!contractDetails || !wagmiConfig) {
+      console.log('Contract details or wagmi config not ready');
+      return [];
+    }
     
     const totalSupply = await readContract(wagmiConfig, {
       address: contractDetails.address,
@@ -1526,39 +1529,54 @@ async function fetchRecentMints(limit = 5) {
     const start = Math.max(1, total - limit + 1);
     const mints = [];
     
+    // Batch all requests together for better performance
+    const tokenIds = [];
     for (let i = total; i >= start; i--) {
-      try {
-        const [owner, traits] = await Promise.all([
-          readContract(wagmiConfig, {
-            address: contractDetails.address,
-            abi: contractDetails.abi,
-            functionName: 'ownerOf',
-            args: [BigInt(i)]
-          }),
-          readContract(wagmiConfig, {
-            address: contractDetails.address,
-            abi: contractDetails.abi,
-            functionName: 'tokenTraits',
-            args: [BigInt(i)]
-          })
-        ]);
-        
-        const rarity = Number(traits[1]);
-        const rarityLabels = ['Common', 'Rare', 'Legendary', 'Mythic'];
-        const rarityColors = ['#9ca3af', '#3b82f6', '#f59e0b', '#ec4899'];
-        
-        mints.push({
-          tokenId: i,
-          owner: owner,
-          ownerShort: `${owner.slice(0, 6)}...${owner.slice(-4)}`,
-          rarity: rarityLabels[rarity],
-          rarityColor: rarityColors[rarity],
-          timestamp: Number(traits[2]) * 1000
-        });
-      } catch (e) {
-        console.log(`Failed to fetch mint #${i}:`, e);
-      }
+      tokenIds.push(i);
     }
+    
+    const promises = tokenIds.map(tokenId => 
+      Promise.all([
+        readContract(wagmiConfig, {
+          address: contractDetails.address,
+          abi: contractDetails.abi,
+          functionName: 'ownerOf',
+          args: [BigInt(tokenId)]
+        }),
+        readContract(wagmiConfig, {
+          address: contractDetails.address,
+          abi: contractDetails.abi,
+          functionName: 'tokenTraits',
+          args: [BigInt(tokenId)]
+        })
+      ]).then(([owner, traits]) => ({
+        tokenId,
+        owner,
+        traits
+      })).catch(e => {
+        console.log(`Failed to fetch token #${tokenId}:`, e.message);
+        return null;
+      })
+    );
+    
+    const results = await Promise.all(promises);
+    
+    const rarityLabels = ['Common', 'Rare', 'Legendary', 'Mythic'];
+    const rarityColors = ['#9ca3af', '#3b82f6', '#f59e0b', '#ec4899'];
+    
+    results.forEach(result => {
+      if (result) {
+        const rarity = Number(result.traits[1]);
+        mints.push({
+          tokenId: result.tokenId,
+          owner: result.owner,
+          ownerShort: `${result.owner.slice(0, 6)}...${result.owner.slice(-4)}`,
+          rarity: rarityLabels[rarity] || 'Common',
+          rarityColor: rarityColors[rarity] || '#9ca3af',
+          timestamp: Number(result.traits[2]) * 1000
+        });
+      }
+    });
     
     return mints;
   } catch (e) {
@@ -1569,7 +1587,16 @@ async function fetchRecentMints(limit = 5) {
 
 function renderRecentMints(mints) {
   const container = document.getElementById('recentMintsContainer');
-  if (!container || mints.length === 0) return;
+  if (!container) return;
+  
+  if (mints.length === 0) {
+    if (!contractDetails) {
+      container.innerHTML = '<div class="empty-state">Loading... ⏳</div>';
+    } else {
+      container.innerHTML = '<div class="empty-state">No mints yet. Be the first! 🚀</div>';
+    }
+    return;
+  }
   
   const now = Date.now();
   
@@ -1609,11 +1636,16 @@ async function startRecentMintsPolling() {
   if (recentMintsInterval) return;
   
   const updateFeed = async () => {
+    if (!contractDetails || !wagmiConfig) {
+      console.log('Waiting for contract initialization...');
+      return;
+    }
     const mints = await fetchRecentMints(5);
     renderRecentMints(mints);
   };
   
-  await updateFeed();
+  // Initial load with delay to ensure contract is ready
+  setTimeout(updateFeed, 1000);
   recentMintsInterval = setInterval(updateFeed, 15000); // Update every 15s
 }
 
@@ -1647,7 +1679,10 @@ async function fetchLeaderboard() {
       return leaderboardCache;
     }
     
-    if (!contractDetails) return [];
+    if (!contractDetails || !wagmiConfig) {
+      console.log('Contract details or wagmi config not ready for leaderboard');
+      return [];
+    }
     
     const totalSupply = await readContract(wagmiConfig, {
       address: contractDetails.address,
@@ -1667,46 +1702,61 @@ async function fetchLeaderboard() {
     
     console.log(`Scanning tokens ${start} to ${total} for leaderboard...`);
     
-    // Batch requests for better performance
-    const promises = [];
+    // Create array of token IDs to process
+    const tokenIds = [];
     for (let i = start; i <= total; i++) {
-      promises.push(
+      tokenIds.push(i);
+    }
+    
+    // Process in chunks of 20 to avoid overwhelming the RPC
+    const chunkSize = 20;
+    const chunks = [];
+    for (let i = 0; i < tokenIds.length; i += chunkSize) {
+      chunks.push(tokenIds.slice(i, i + chunkSize));
+    }
+    
+    for (const chunk of chunks) {
+      const promises = chunk.map(tokenId =>
         Promise.all([
           readContract(wagmiConfig, {
             address: contractDetails.address,
             abi: contractDetails.abi,
             functionName: 'ownerOf',
-            args: [BigInt(i)]
+            args: [BigInt(tokenId)]
           }),
           readContract(wagmiConfig, {
             address: contractDetails.address,
             abi: contractDetails.abi,
             functionName: 'tokenTraits',
-            args: [BigInt(i)]
+            args: [BigInt(tokenId)]
           })
         ]).then(([owner, traits]) => ({ owner, rarity: Number(traits[1]) }))
+        .catch(e => {
+          console.log(`Token ${tokenId} fetch failed:`, e.message);
+          return null;
+        })
       );
-    }
-    
-    const results = await Promise.allSettled(promises);
-    
-    results.forEach(result => {
-      if (result.status === 'fulfilled') {
-        const { owner, rarity } = result.value;
-        const ownerLower = owner.toLowerCase();
-        
-        holderMap.set(ownerLower, (holderMap.get(ownerLower) || 0) + 1);
-        
-        if (!rarityMap.has(ownerLower)) {
-          rarityMap.set(ownerLower, { mythic: 0, legendary: 0, rare: 0, common: 0 });
+      
+      const results = await Promise.all(promises);
+      
+      results.forEach(result => {
+        if (result && result.owner) {
+          const { owner, rarity } = result;
+          const ownerLower = owner.toLowerCase();
+          
+          holderMap.set(ownerLower, (holderMap.get(ownerLower) || 0) + 1);
+          
+          if (!rarityMap.has(ownerLower)) {
+            rarityMap.set(ownerLower, { mythic: 0, legendary: 0, rare: 0, common: 0 });
+          }
+          const rarities = rarityMap.get(ownerLower);
+          if (rarity === 3) rarities.mythic++;
+          else if (rarity === 2) rarities.legendary++;
+          else if (rarity === 1) rarities.rare++;
+          else rarities.common++;
         }
-        const rarities = rarityMap.get(ownerLower);
-        if (rarity === 3) rarities.mythic++;
-        else if (rarity === 2) rarities.legendary++;
-        else if (rarity === 1) rarities.rare++;
-        else rarities.common++;
-      }
-    });
+      });
+    }
     
     // Convert to array and sort by count
     const leaderboard = Array.from(holderMap.entries())
@@ -1728,6 +1778,8 @@ async function fetchLeaderboard() {
     
     leaderboardCache = leaderboard;
     leaderboardLastFetch = now;
+    
+    console.log(`Leaderboard updated: ${leaderboard.length} collectors found`);
     
     return leaderboard;
   } catch (e) {
@@ -1780,7 +1832,11 @@ let leaderboardInterval = null;
 function startLeaderboardPolling() {
   if (leaderboardInterval) return;
   
-  updateLeaderboard(); // Initial load
+  // Initial load with delay to ensure contract is ready
+  setTimeout(() => {
+    updateLeaderboard();
+  }, 2000);
+  
   leaderboardInterval = setInterval(updateLeaderboard, 120000); // Every 2 minutes
 }
 
