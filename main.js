@@ -2561,3 +2561,58 @@ async function loadAchievementsBottom() {
               address: contractDetails.address,
               abi: contractDetails.abi,
               functionName: 'ownerOf',
+              args: [BigInt(i)]
+            }).then(owner => {
+              if (owner.toLowerCase() === userAddress.toLowerCase()) {
+                return readContract(wagmiConfig, {
+                  address: contractDetails.address,
+                  abi: contractDetails.abi,
+                  functionName: 'tokenTraits',
+                  args: [BigInt(i)]
+                }).then(traits => ({
+                  tokenId: i,
+                  owner,
+                  rarity: Number(traits[1]),
+                  timestamp: Number(traits[2])
+                }));
+              }
+              return null;
+            }).catch(() => null)
+          );
+        }
+        
+        const results = await Promise.all(promises);
+        userNFTs = results.filter(nft => nft !== null);
+      }
+    } catch (e) {
+      console.error('Failed to load NFTs for achievements:', e);
+    }
+  }
+  
+  let unlockedCount = 0;
+  
+  const html = achievements.map(achievement => {
+    const unlocked = achievement.check();
+    if (unlocked) unlockedCount++;
+    
+    return `
+      <div class="achievement-card ${unlocked ? 'unlocked' : 'locked'}">
+        <div class="achievement-icon">${achievement.icon}</div>
+        <div class="achievement-title">${achievement.title}</div>
+        <div class="achievement-description">${achievement.description}</div>
+        ${unlocked ? '<div class="achievement-reward">✅ Unlocked!</div>' : '<div class="achievement-reward" style="color: #6b7280;">🔒 Locked</div>'}
+      </div>
+    `;
+  }).join('');
+  
+  achievementsGrid.innerHTML = html;
+  if (achievementCount) achievementCount.textContent = unlockedCount;
+  if (totalAchievements) totalAchievements.textContent = achievements.length;
+  
+  // Save achievements to localStorage
+  safeLocalStorage.setItem('achievements', JSON.stringify({
+    unlocked: unlockedCount,
+    total: achievements.length,
+    timestamp: Date.now()
+  }));
+}
