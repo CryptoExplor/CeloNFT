@@ -262,8 +262,8 @@ function markAsProcessed(txHash, address) {
   }
 }
 
-// Send CELO airdrop with random amount, lucky bonuses, and rarity multiplier
-async function sendAirdrop(recipientAddress, tokenId) {
+// Send CELO airdrop with random amount, lucky bonuses, rarity multiplier, and prediction bonus
+async function sendAirdrop(recipientAddress, tokenId, predictionMultiplier = 1) {
   try {
     // Initialize wallet from private key (stored in env)
     const privateKey = process.env.AIRDROP_WALLET_PRIVATE_KEY;
@@ -285,9 +285,9 @@ async function sendAirdrop(recipientAddress, tokenId) {
     // Get rarity bonus
     const rarityBonus = await getRarityMultiplier(tokenId);
     
-    // Calculate final amount with both bonuses
+    // Calculate final amount with all bonuses (lucky, rarity, prediction)
     const baseWithLucky = luckyBonus.amountWithLucky;
-    let finalAmount = baseWithLucky * rarityBonus.multiplier;
+    let finalAmount = baseWithLucky * rarityBonus.multiplier * predictionMultiplier;
     
     // HARD CAP: Ensure no one gets more than ABSOLUTE_MAX_AIRDROP
     const absoluteMax = parseFloat(ABSOLUTE_MAX_AIRDROP);
@@ -308,12 +308,18 @@ async function sendAirdrop(recipientAddress, tokenId) {
     if (rarityBonus.multiplier > 1) {
       bonusMessages.push(`${rarityBonus.rarity} (${rarityBonus.multiplier}x Rarity)`);
     }
+    if (predictionMultiplier === 2) {
+      bonusMessages.push('🎯 Correct Prediction (2x Bonus)');
+    } else if (predictionMultiplier === 0.5) {
+      bonusMessages.push('🎲 Consolation Prize (0.5x)');
+    }
     
     console.log(`🎲 Airdrop calculation for Token #${tokenId}:
       Base Random: ${luckyBonus.baseAmount} CELO
       Lucky Bonus: ${luckyBonus.luckyMultiplier}x → ${luckyBonus.amountWithLucky.toFixed(4)} CELO
       Rarity: ${rarityBonus.rarity} (${rarityBonus.multiplier}x)
-      Before Cap: ${(baseWithLucky * rarityBonus.multiplier).toFixed(4)} CELO
+      Prediction: ${predictionMultiplier}x
+      Before Cap: ${(baseWithLucky * rarityBonus.multiplier * predictionMultiplier).toFixed(4)} CELO
       Final Amount: ${finalAmountString} CELO (Max: ${ABSOLUTE_MAX_AIRDROP})
       Bonuses: ${bonusMessages.join(', ') || 'None'}
     `);
@@ -358,6 +364,7 @@ Wallet Address: ${account.address}
       baseAmount: luckyBonus.baseAmount,
       luckyMultiplier: luckyBonus.luckyMultiplier,
       rarityMultiplier: rarityBonus.multiplier,
+      predictionMultiplier,
       rarity: rarityBonus.rarity,
       bonusMessages,
       walletBalance: Number(balance) / 1e18
@@ -384,7 +391,7 @@ export default async function handler(req, res) {
   }
   
   try {
-    const { tokenId, userAddress, mintTxHash } = req.body;
+    const { tokenId, userAddress, mintTxHash, predictionMultiplier } = req.body;
     
     // Validation
     if (!tokenId || !userAddress || !mintTxHash) {
@@ -441,8 +448,8 @@ export default async function handler(req, res) {
       });
     }
     
-    // Send airdrop with random amount, lucky bonuses, and rarity multiplier
-    const result = await sendAirdrop(userAddress, tokenId);
+    // Send airdrop with random amount, lucky bonuses, rarity multiplier, and prediction bonus
+    const result = await sendAirdrop(userAddress, tokenId, predictionMultiplier || 1);
     
     // Mark as processed
     markAsProcessed(mintTxHash, userAddress);
@@ -454,6 +461,7 @@ export default async function handler(req, res) {
       Base Amount: ${result.baseAmount} CELO
       Lucky Multiplier: ${result.luckyMultiplier}x
       Rarity Multiplier: ${result.rarityMultiplier}x (${result.rarity})
+      Prediction Multiplier: ${result.predictionMultiplier}x
       Final Amount: ${result.amount} CELO
       Bonuses: ${result.bonusMessages.join(', ') || 'None'}
       Tx Hash: ${result.txHash}
@@ -469,6 +477,7 @@ export default async function handler(req, res) {
       baseAmount: result.baseAmount,
       luckyMultiplier: result.luckyMultiplier,
       rarityMultiplier: result.rarityMultiplier,
+      predictionMultiplier: result.predictionMultiplier,
       rarity: result.rarity,
       bonusMessages: result.bonusMessages,
       txHash: result.txHash,
