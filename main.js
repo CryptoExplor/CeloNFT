@@ -648,6 +648,14 @@ async function showPredictionModal() {
       cleanup();
       resolve({ skip: true });
     };
+    
+    // Click outside to close (only on modal background, not content)
+    modal.onclick = (e) => {
+      if (e.target === modal) {
+        cleanup();
+        resolve({ skip: true });
+      }
+    };
   });
 }
 
@@ -693,7 +701,7 @@ async function verifyPrediction(prediction, startPrice, timestamp, modal, cleanu
       <div class="prediction-info">
         <div class="info-item">
           <span class="info-label">Airdrop Multiplier:</span>
-          <span class="info-value" style="color: ${isCorrect ? '#10b981' : '#ef4444'};">
+          <span class="info-value" style="color: ${isCorrect ? '#10b981' : '#f59e0b'};">
             ${result.multiplier}x
           </span>
         </div>
@@ -710,7 +718,10 @@ async function verifyPrediction(prediction, startPrice, timestamp, modal, cleanu
       </div>
       
       <button class="action-button" id="continueBtn" style="width: 100%; margin-top: 20px;">
-        ${isCorrect ? '🎉 Claim 2x Airdrop!' : '😔 Continue to Mint'}
+        ${isCorrect ? '🎉 Claim 2x Airdrop!' : '🎲 Claim 0.5x Consolation'}
+      </button>
+      <button class="skip-btn" id="cancelPrediction" style="margin-top: 10px;">
+        ❌ Cancel & Start Over
       </button>
     `;
     
@@ -725,6 +736,11 @@ async function verifyPrediction(prediction, startPrice, timestamp, modal, cleanu
         startPrice,
         endPrice: newPrice
       });
+    };
+    
+    document.getElementById('cancelPrediction').onclick = () => {
+      cleanup();
+      resolve({ skip: true });
     };
     
   } catch (error) {
