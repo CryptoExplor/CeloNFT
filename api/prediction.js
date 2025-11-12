@@ -1,9 +1,106 @@
-// Price Prediction Game API
-const predictions = new Map(); // User predictions storage
+// Price Prediction Game API with Vercel KV (Redis) support
+// Falls back to in-memory storage if KV is not available
+
+let kv = null;
+let useKV = false;
+
+// Try to import Vercel KV
+try {
+  const kvModule = await import('@vercel/kv');
+  kv = kvModule.kv;
+  useKV = true;
+  console.log('✅ Vercel KV enabled');
+} catch (e) {
+  console.log('⚠️ Vercel KV not available, using in-memory storage (predictions will be lost on restart)');
+  useKV = false;
+}
+
+// Fallback in-memory storage
+const predictions = new Map();
+const predictionHistory = new Map();
+const userStats = new Map();
+
 const PREDICTION_WINDOW = 60000; // 1 minute
-const MAX_PREDICTIONS_PER_HOUR = 10; // Allow more predictions for gameplay
-const predictionHistory = new Map(); // Rate limiting
-const userStats = new Map(); // Track user statistics
+const MAX_PREDICTIONS_PER_HOUR = 10;
+
+// Helper functions for KV storage
+async function storePrediction(key, data) {
+  if (useKV) {
+    // Store in Vercel KV with 2-minute expiration (prediction window + buffer)
+    await kv.set(key, JSON.stringify(data), { ex: 120 }); // 120 seconds = 2 minutes
+  } else {
+    predictions.set(key, data);
+  }
+}
+
+async function getPrediction(key) {
+  if (useKV) {
+    const data = await kv.get(key);
+    return data ? JSON.parse(data) : null;
+  } else {
+    return predictions.get(key) || null;
+  }
+}
+
+async function deletePrediction(key) {
+  if (useKV) {
+    await kv.del(key);
+  } else {
+    predictions.delete(key);
+  }
+}
+
+async function getUserStats(address) {
+  if (useKV) {
+    const statsKey = `stats:${address.toLowerCase()}`;
+    const data = await kv.get(statsKey);
+    return data || {
+      totalPredictions: 0,
+      correctPredictions: 0,
+      currentStreak: 0,
+      bestStreak: 0,
+      lastPredictionCorrect: false
+    };
+  } else {
+    return userStats.get(address.toLowerCase()) || {
+      totalPredictions: 0,
+      correctPredictions: 0,
+      currentStreak: 0,
+      bestStreak: 0,
+      lastPredictionCorrect: false
+    };
+  }
+}
+
+async function setUserStats(address, stats) {
+  if (useKV) {
+    const statsKey = `stats:${address.toLowerCase()}`;
+    // Store stats for 30 days (will persist across sessions)
+    await kv.set(statsKey, stats, { ex: 2592000 }); // 30 days in seconds
+  } else {
+    userStats.set(address.toLowerCase(), stats);
+  }
+}
+
+async function getUserHistory(address) {
+  if (useKV) {
+    const historyKey = `history:${address.toLowerCase()}`;
+    const data = await kv.get(historyKey);
+    return data || [];
+  } else {
+    return predictionHistory.get(address.toLowerCase()) || [];
+  }
+}
+
+async function setUserHistory(address, history) {
+  if (useKV) {
+    const historyKey = `history:${address.toLowerCase()}`;
+    // Store history for 1 hour (rate limiting window)
+    await kv.set(historyKey, history, { ex: 3600 }); // 1 hour
+  } else {
+    predictionHistory.set(address.toLowerCase(), history);
+  }
+}
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -27,7 +124,7 @@ export default async function handler(req, res) {
       }
       
       // Rate limiting check
-      const userHistory = predictionHistory.get(userAddress.toLowerCase()) || [];
+      const userHistory = await getUserHistory(userAddress);
       const recentPredictions = userHistory.filter(
         t => Date.now() - t < 3600000 // Last hour
       );
@@ -41,7 +138,7 @@ export default async function handler(req, res) {
       
       // Store prediction
       const predictionKey = `${userAddress.toLowerCase()}-${timestamp}`;
-      predictions.set(predictionKey, {
+      await storePrediction(predictionKey, {
         userAddress: userAddress.toLowerCase(),
         currentPrice,
         prediction, // 'up' or 'down'
@@ -51,7 +148,7 @@ export default async function handler(req, res) {
       
       // Update history
       userHistory.push(timestamp);
-      predictionHistory.set(userAddress.toLowerCase(), userHistory);
+      await setUserHistory(userAddress, userHistory);
       
       console.log(`📊 Prediction recorded:
         User: ${userAddress.slice(0, 6)}...${userAddress.slice(-4)}
@@ -72,7 +169,7 @@ export default async function handler(req, res) {
       const { userAddress, timestamp, newPrice } = req.body;
       
       const predictionKey = `${userAddress.toLowerCase()}-${timestamp}`;
-      const prediction = predictions.get(predictionKey);
+      const prediction = await getPrediction(predictionKey);
       
       if (!prediction) {
         return res.status(404).json({
@@ -84,7 +181,7 @@ export default async function handler(req, res) {
       
       // Check if expired (allow 5 extra seconds grace period)
       if (Date.now() > prediction.expiresAt + 5000) {
-        predictions.delete(predictionKey);
+        await deletePrediction(predictionKey);
         return res.status(400).json({
           error: 'Prediction expired',
           correct: false,
@@ -101,13 +198,7 @@ export default async function handler(req, res) {
       const multiplier = correct ? 2 : 0.5; // 2x for correct, 0.5x consolation prize for wrong
       
       // Update user stats
-      const stats = userStats.get(userAddress.toLowerCase()) || {
-        totalPredictions: 0,
-        correctPredictions: 0,
-        currentStreak: 0,
-        bestStreak: 0,
-        lastPredictionCorrect: false
-      };
+      const stats = await getUserStats(userAddress);
       
       stats.totalPredictions++;
       if (correct) {
@@ -119,10 +210,10 @@ export default async function handler(req, res) {
       }
       stats.lastPredictionCorrect = correct;
       
-      userStats.set(userAddress.toLowerCase(), stats);
+      await setUserStats(userAddress, stats);
       
       // Clean up
-      predictions.delete(predictionKey);
+      await deletePrediction(predictionKey);
       
       console.log(`${correct ? '✅' : '❌'} Prediction result:
         User: ${userAddress.slice(0, 6)}...${userAddress.slice(-4)}
@@ -163,13 +254,7 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'Missing userAddress' });
       }
       
-      const stats = userStats.get(userAddress.toLowerCase()) || {
-        totalPredictions: 0,
-        correctPredictions: 0,
-        currentStreak: 0,
-        bestStreak: 0,
-        winRate: 0
-      };
+      const stats = await getUserStats(userAddress);
       
       stats.winRate = stats.totalPredictions > 0 
         ? ((stats.correctPredictions / stats.totalPredictions) * 100).toFixed(1)
