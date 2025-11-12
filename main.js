@@ -466,6 +466,153 @@ async function getTokenIdFromReceipt(receipt) {
 
 // ===== PRICE PREDICTION GAME =====
 
+// Show prediction result popup after airdrop
+function showPredictionResultPopup(verifyResult, airdropResult) {
+  const isCorrect = verifyResult.correct;
+  const priceChange = parseFloat(verifyResult.priceChange);
+  const multiplier = verifyResult.multiplier;
+  const airdropAmount = airdropResult.amount;
+  
+  const modal = document.createElement('div');
+  modal.className = 'prediction-result-modal';
+  modal.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.9);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 10000;
+    animation: fadeIn 0.3s;
+  `;
+  
+  const content = document.createElement('div');
+  content.style.cssText = `
+    background: linear-gradient(135deg, ${isCorrect ? '#1e3a2f 0%, #0f1f1a 100%' : '#3a2e1e 0%, #1f1a0f 100%'});
+    padding: 30px;
+    border-radius: 16px;
+    max-width: 400px;
+    width: 90%;
+    border: 3px solid ${isCorrect ? '#10b981' : '#f59e0b'};
+    box-shadow: 0 0 40px ${isCorrect ? 'rgba(16, 185, 129, 0.5)' : 'rgba(245, 158, 11, 0.5)'};
+    animation: popIn 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    text-align: center;
+  `;
+  
+  content.innerHTML = `
+    <div style="font-size: 4rem; margin-bottom: 15px;">
+      ${isCorrect ? '✅' : '🎲'}
+    </div>
+    
+    <h2 style="color: ${isCorrect ? '#10b981' : '#f59e0b'}; margin: 0 0 10px 0; font-size: 1.8rem;">
+      ${isCorrect ? 'CORRECT PREDICTION!' : 'WRONG PREDICTION'}
+    </h2>
+    
+    <div style="color: #94a3b8; font-size: 0.95rem; margin-bottom: 20px;">
+      ${verifyResult.prediction.toUpperCase()}: $${verifyResult.startPrice.toFixed(4)} → $${verifyResult.endPrice.toFixed(4)}
+      <br>
+      <span style="color: ${priceChange > 0 ? '#10b981' : '#ef4444'}; font-weight: 600;">
+        ${priceChange > 0 ? '+' : ''}$${Math.abs(priceChange).toFixed(4)} (${verifyResult.priceChangePercent}%)
+      </span>
+    </div>
+    
+    <div style="background: rgba(15, 23, 42, 0.6); padding: 20px; border-radius: 12px; margin: 20px 0; border: 1px solid #334155;">
+      <div style="color: #94a3b8; font-size: 0.9rem; margin-bottom: 10px;">Airdrop Breakdown</div>
+      
+      <div style="display: flex; justify-content: space-between; margin: 8px 0; color: #e2e8f0; font-size: 0.9rem;">
+        <span>Prediction Multiplier:</span>
+        <span style="color: ${isCorrect ? '#10b981' : '#f59e0b'}; font-weight: bold;">${multiplier}x</span>
+      </div>
+      
+      ${airdropResult.luckyMultiplier > 1 ? `
+        <div style="display: flex; justify-content: space-between; margin: 8px 0; color: #e2e8f0; font-size: 0.9rem;">
+          <span>Lucky Bonus:</span>
+          <span style="color: #fbbf24; font-weight: bold;">${airdropResult.luckyMultiplier}x</span>
+        </div>
+      ` : ''}
+      
+      ${airdropResult.rarityMultiplier > 1 ? `
+        <div style="display: flex; justify-content: space-between; margin: 8px 0; color: #e2e8f0; font-size: 0.9rem;">
+          <span>${airdropResult.rarity}:</span>
+          <span style="color: #a855f7; font-weight: bold;">${airdropResult.rarityMultiplier}x</span>
+        </div>
+      ` : ''}
+      
+      <div style="border-top: 2px solid #334155; margin: 12px 0; padding-top: 12px;">
+        <div style="font-size: 1.1rem; color: #94a3b8;">Total Airdrop</div>
+        <div style="font-size: 2.5rem; font-weight: bold; color: ${isCorrect ? '#10b981' : '#f59e0b'}; margin-top: 5px;">
+          ${airdropAmount} CELO
+        </div>
+      </div>
+    </div>
+    
+    ${verifyResult.stats ? `
+      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 20px 0;">
+        <div style="background: rgba(15, 23, 42, 0.4); padding: 10px; border-radius: 8px; border: 1px solid #334155;">
+          <div style="font-size: 1.3rem; font-weight: bold; color: #49dfb5;">${verifyResult.stats.winRate}%</div>
+          <div style="font-size: 0.7rem; color: #94a3b8; text-transform: uppercase;">Win Rate</div>
+        </div>
+        <div style="background: rgba(15, 23, 42, 0.4); padding: 10px; border-radius: 8px; border: 1px solid #334155;">
+          <div style="font-size: 1.3rem; font-weight: bold; color: #49dfb5;">${verifyResult.stats.currentStreak}</div>
+          <div style="font-size: 0.7rem; color: #94a3b8; text-transform: uppercase;">Streak</div>
+        </div>
+        <div style="background: rgba(15, 23, 42, 0.4); padding: 10px; border-radius: 8px; border: 1px solid #334155;">
+          <div style="font-size: 1.3rem; font-weight: bold; color: #49dfb5;">${verifyResult.stats.totalPredictions}</div>
+          <div style="font-size: 0.7rem; color: #94a3b8; text-transform: uppercase;">Total</div>
+        </div>
+      </div>
+    ` : ''}
+    
+    <button id="closePredictionResult" style="
+      width: 100%;
+      padding: 12px;
+      background: linear-gradient(90deg, #49dfb5, #10b981);
+      color: #0f0f0f;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: bold;
+      cursor: pointer;
+      font-family: 'Orbitron', sans-serif;
+      margin-top: 10px;
+    ">
+      ${isCorrect ? '🎉 Awesome!' : '👍 Got It!'}
+    </button>
+  `;
+  
+  modal.appendChild(content);
+  document.body.appendChild(modal);
+  
+  // Trigger confetti for correct predictions
+  if (isCorrect) {
+    setTimeout(() => {
+      confetti({
+        particleCount: 150,
+        spread: 120,
+        origin: { y: 0.6 },
+        colors: ['#10b981', '#34d399', '#6ee7b7', '#fbbf24']
+      });
+    }, 300);
+  }
+  
+  // Close button
+  document.getElementById('closePredictionResult').onclick = () => {
+    modal.style.animation = 'fadeOut 0.3s';
+    setTimeout(() => modal.remove(), 300);
+  };
+  
+  // Click outside to close
+  modal.onclick = (e) => {
+    if (e.target === modal) {
+      modal.style.animation = 'fadeOut 0.3s';
+      setTimeout(() => modal.remove(), 300);
+    }
+  };
+}
+
 // Show prediction modal and return user's choice
 async function showPredictionModal() {
   return new Promise((resolve) => {
@@ -1943,7 +2090,8 @@ mintBtn.addEventListener('click', async () => {
       }, 2000);
     } else {
       // User made a prediction - wait for verification
-      setStatus(`⏳ Waiting for price verification... (${predictionResult.timeLeft}s remaining)`, 'info');
+      const remainingSeconds = Math.ceil(predictionResult.timeLeft / 1000);
+      setStatus(`⏳ Waiting for price verification... (${remainingSeconds}s remaining)`, 'info');
       
       // Schedule airdrop after remaining time
       setTimeout(async () => {
@@ -1973,7 +2121,14 @@ mintBtn.addEventListener('click', async () => {
           }
           
           // Claim airdrop with verified multiplier
-          await claimAirdrop(actualTokenId, hash, multiplier);
+          const airdropResult = await claimAirdrop(actualTokenId, hash, multiplier);
+          
+          // Show prediction result popup after airdrop is sent
+          if (airdropResult) {
+            setTimeout(() => {
+              showPredictionResultPopup(verifyResult, airdropResult);
+            }, 2000);
+          }
           
         } catch (error) {
           console.error('Prediction verification failed:', error);
