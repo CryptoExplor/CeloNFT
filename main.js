@@ -469,9 +469,11 @@ async function getTokenIdFromReceipt(receipt) {
 // Show prediction result popup after airdrop
 function showPredictionResultPopup(verifyResult, airdropResult) {
   const isCorrect = verifyResult.correct;
-  const priceChange = parseFloat(verifyResult.priceChange);
-  const multiplier = verifyResult.multiplier;
-  const airdropAmount = airdropResult.amount;
+  const priceChange = parseFloat(verifyResult.priceChange || 0);
+  const multiplier = verifyResult.multiplier || 1;
+  const airdropAmount = airdropResult.amount || '0';
+  
+  console.log('Creating popup with:', { verifyResult, airdropResult });
   
   const modal = document.createElement('div');
   modal.className = 'prediction-result-modal';
@@ -502,6 +504,11 @@ function showPredictionResultPopup(verifyResult, airdropResult) {
     text-align: center;
   `;
   
+  const startPrice = verifyResult.startPrice || 0;
+  const endPrice = verifyResult.endPrice || 0;
+  const prediction = verifyResult.prediction || 'unknown';
+  const priceChangePercent = verifyResult.priceChangePercent || '0';
+  
   content.innerHTML = `
     <div style="font-size: 4rem; margin-bottom: 15px;">
       ${isCorrect ? '✅' : '🎲'}
@@ -512,10 +519,10 @@ function showPredictionResultPopup(verifyResult, airdropResult) {
     </h2>
     
     <div style="color: #94a3b8; font-size: 0.95rem; margin-bottom: 20px;">
-      ${verifyResult.prediction.toUpperCase()}: $${verifyResult.startPrice.toFixed(4)} → $${verifyResult.endPrice.toFixed(4)}
+      ${prediction.toUpperCase()}: $${startPrice.toFixed(4)} → $${endPrice.toFixed(4)}
       <br>
       <span style="color: ${priceChange > 0 ? '#10b981' : '#ef4444'}; font-weight: 600;">
-        ${priceChange > 0 ? '+' : ''}$${Math.abs(priceChange).toFixed(4)} (${verifyResult.priceChangePercent}%)
+        ${priceChange > 0 ? '+' : ''}$${Math.abs(priceChange).toFixed(4)} (${priceChangePercent}%)
       </span>
     </div>
     
@@ -527,16 +534,16 @@ function showPredictionResultPopup(verifyResult, airdropResult) {
         <span style="color: ${isCorrect ? '#10b981' : '#f59e0b'}; font-weight: bold;">${multiplier}x</span>
       </div>
       
-      ${airdropResult.luckyMultiplier > 1 ? `
+      ${airdropResult.luckyMultiplier && airdropResult.luckyMultiplier > 1 ? `
         <div style="display: flex; justify-content: space-between; margin: 8px 0; color: #e2e8f0; font-size: 0.9rem;">
           <span>Lucky Bonus:</span>
           <span style="color: #fbbf24; font-weight: bold;">${airdropResult.luckyMultiplier}x</span>
         </div>
       ` : ''}
       
-      ${airdropResult.rarityMultiplier > 1 ? `
+      ${airdropResult.rarityMultiplier && airdropResult.rarityMultiplier > 1 ? `
         <div style="display: flex; justify-content: space-between; margin: 8px 0; color: #e2e8f0; font-size: 0.9rem;">
-          <span>${airdropResult.rarity}:</span>
+          <span>${airdropResult.rarity || 'Rarity'}:</span>
           <span style="color: #a855f7; font-weight: bold;">${airdropResult.rarityMultiplier}x</span>
         </div>
       ` : ''}
@@ -585,6 +592,8 @@ function showPredictionResultPopup(verifyResult, airdropResult) {
   
   modal.appendChild(content);
   document.body.appendChild(modal);
+  
+  console.log('Popup created and added to DOM');
   
   // Trigger confetti for correct predictions
   if (isCorrect) {
@@ -2114,6 +2123,8 @@ mintBtn.addEventListener('click', async () => {
           const verifyResult = await verifyResponse.json();
           const multiplier = verifyResult.multiplier || 1;
           
+          console.log('Prediction verification result:', verifyResult);
+          
           if (verifyResult.correct) {
             setStatus('🎯 Correct prediction! Claiming 2x airdrop...', 'success');
           } else {
@@ -2123,11 +2134,16 @@ mintBtn.addEventListener('click', async () => {
           // Claim airdrop with verified multiplier
           const airdropResult = await claimAirdrop(actualTokenId, hash, multiplier);
           
+          console.log('Airdrop result:', airdropResult);
+          
           // Show prediction result popup after airdrop is sent
-          if (airdropResult) {
+          if (airdropResult && verifyResult) {
+            console.log('Showing prediction result popup...');
             setTimeout(() => {
               showPredictionResultPopup(verifyResult, airdropResult);
             }, 2000);
+          } else {
+            console.log('Popup not shown - missing data:', { airdropResult, verifyResult });
           }
           
         } catch (error) {
