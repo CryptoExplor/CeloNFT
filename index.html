@@ -1170,6 +1170,314 @@
       padding: 20px 0 10px 0;
       border-top: 2px solid #334155;
     }
+    
+    /* ===== PRICE PREDICTION MODAL ===== */
+    .prediction-modal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.95);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 9999;
+      animation: fadeIn 0.3s;
+    }
+    
+    .prediction-content {
+      background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+      padding: 30px;
+      border-radius: 20px;
+      max-width: 450px;
+      width: 95%;
+      border: 3px solid #49dfb5;
+      box-shadow: 0 0 40px rgba(73, 223, 181, 0.4);
+      animation: slideUp 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+      position: relative;
+    }
+    
+    .prediction-header {
+      text-align: center;
+      margin-bottom: 25px;
+    }
+    
+    .prediction-icon {
+      font-size: 3.5rem;
+      margin-bottom: 15px;
+      animation: pulse 2s infinite;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.1); }
+    }
+    
+    .prediction-title {
+      font-size: 1.8rem;
+      color: #49dfb5;
+      margin-bottom: 8px;
+      font-weight: bold;
+    }
+    
+    .prediction-subtitle {
+      color: #94a3b8;
+      font-size: 0.95rem;
+    }
+    
+    .current-price-box {
+      background: rgba(15, 23, 42, 0.8);
+      padding: 20px;
+      border-radius: 12px;
+      border: 2px solid #334155;
+      margin-bottom: 25px;
+      text-align: center;
+    }
+    
+    .price-label {
+      color: #94a3b8;
+      font-size: 0.9rem;
+      margin-bottom: 8px;
+    }
+    
+    .price-value {
+      font-size: 2.5rem;
+      font-weight: bold;
+      color: #fbbf24;
+      margin-bottom: 10px;
+    }
+    
+    .timer-display {
+      position: absolute;
+      top: 15px;
+      right: 15px;
+      background: rgba(251, 191, 36, 0.2);
+      padding: 8px 16px;
+      border-radius: 20px;
+      border: 2px solid #fbbf24;
+      font-size: 1.1rem;
+      font-weight: bold;
+      color: #fbbf24;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      animation: timerPulse 1s infinite;
+    }
+    
+    @keyframes timerPulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+    }
+    
+    .timer-urgent {
+      animation: timerUrgent 0.5s infinite;
+      border-color: #ef4444;
+      background: rgba(239, 68, 68, 0.2);
+      color: #ef4444;
+    }
+    
+    @keyframes timerUrgent {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.1); }
+    }
+    
+    .prediction-buttons {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    
+    .predict-btn {
+      flex: 1;
+      padding: 16px;
+      border: 3px solid;
+      border-radius: 12px;
+      font-size: 1.3rem;
+      font-weight: bold;
+      cursor: pointer;
+      transition: all 0.3s;
+      font-family: 'Orbitron', sans-serif;
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .predict-btn:hover:not(:disabled) {
+      transform: translateY(-4px);
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+    }
+    
+    .predict-btn:active {
+      transform: translateY(-2px);
+    }
+    
+    .predict-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    
+    .predict-up {
+      background: linear-gradient(135deg, #10b981, #059669);
+      border-color: #10b981;
+      color: white;
+    }
+    
+    .predict-down {
+      background: linear-gradient(135deg, #ef4444, #dc2626);
+      border-color: #ef4444;
+      color: white;
+    }
+    
+    .skip-btn {
+      width: 100%;
+      padding: 12px;
+      background: rgba(51, 65, 85, 0.5);
+      border: 2px solid #475569;
+      border-radius: 8px;
+      color: #94a3b8;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+      font-family: 'Orbitron', sans-serif;
+    }
+    
+    .skip-btn:hover {
+      background: rgba(71, 85, 105, 0.6);
+      border-color: #64748b;
+      color: #cbd5e1;
+    }
+    
+    .prediction-info {
+      background: rgba(73, 223, 181, 0.1);
+      padding: 16px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      border: 1px solid rgba(73, 223, 181, 0.3);
+    }
+    
+    .info-item {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 10px;
+      font-size: 0.9rem;
+    }
+    
+    .info-item:last-child {
+      margin-bottom: 0;
+    }
+    
+    .info-label {
+      color: #94a3b8;
+    }
+    
+    .info-value {
+      color: #e2e8f0;
+      font-weight: 600;
+    }
+    
+    .prediction-result {
+      text-align: center;
+      padding: 20px;
+      border-radius: 12px;
+      margin-bottom: 20px;
+      animation: resultPop 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    }
+    
+    @keyframes resultPop {
+      0% {
+        transform: scale(0.8);
+        opacity: 0;
+      }
+      100% {
+        transform: scale(1);
+        opacity: 1;
+      }
+    }
+    
+    .result-correct {
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(5, 150, 105, 0.2));
+      border: 2px solid #10b981;
+    }
+    
+    .result-wrong {
+      background: linear-gradient(135deg, rgba(239, 68, 68, 0.2), rgba(220, 38, 38, 0.2));
+      border: 2px solid #ef4444;
+    }
+    
+    .result-icon {
+      font-size: 4rem;
+      margin-bottom: 10px;
+    }
+    
+    .result-text {
+      font-size: 1.5rem;
+      font-weight: bold;
+      margin-bottom: 8px;
+    }
+    
+    .result-details {
+      color: #94a3b8;
+      font-size: 0.9rem;
+    }
+    
+    .user-stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-top: 20px;
+    }
+    
+    .stat-box {
+      background: rgba(15, 23, 42, 0.6);
+      padding: 12px;
+      border-radius: 8px;
+      text-align: center;
+      border: 1px solid #334155;
+    }
+    
+    .stat-number {
+      font-size: 1.5rem;
+      font-weight: bold;
+      color: #49dfb5;
+      margin-bottom: 4px;
+    }
+    
+    .stat-label {
+      font-size: 0.75rem;
+      color: #94a3b8;
+      text-transform: uppercase;
+    }
+    
+    @media (max-width: 480px) {
+      .prediction-content {
+        padding: 20px;
+      }
+      
+      .prediction-title {
+        font-size: 1.5rem;
+      }
+      
+      .prediction-icon {
+        font-size: 2.5rem;
+      }
+      
+      .price-value {
+        font-size: 2rem;
+      }
+      
+      .predict-btn {
+        font-size: 1.1rem;
+        padding: 14px;
+      }
+      
+      .timer-display {
+        top: 10px;
+        right: 10px;
+        font-size: 0.9rem;
+        padding: 6px 12px;
+      }
+    }
   </style>
 </head>
 <body>
