@@ -12,6 +12,7 @@
     "@farcaster/miniapp-wagmi-connector": "latest",
     "@reown/appkit": "^1.8.10",
     "@reown/appkit-adapter-wagmi": "^1.8.10",
+    "@vercel/kv": "^3.0.0",
     "@wagmi/core": "^2.13.4",
     "buffer": "^6.0.3",
     "canvas-confetti": "^1.9.3",
