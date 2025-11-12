@@ -27,7 +27,8 @@ const MAX_PREDICTIONS_PER_HOUR = 10;
 async function storePrediction(key, data) {
   if (useKV) {
     // Store in Vercel KV with 2-minute expiration (prediction window + buffer)
-    await kv.set(key, JSON.stringify(data), { ex: 120 }); // 120 seconds = 2 minutes
+    // KV automatically handles JSON serialization
+    await kv.set(key, data, { ex: 120 }); // 120 seconds = 2 minutes
   } else {
     predictions.set(key, data);
   }
@@ -35,8 +36,9 @@ async function storePrediction(key, data) {
 
 async function getPrediction(key) {
   if (useKV) {
+    // KV automatically deserializes JSON
     const data = await kv.get(key);
-    return data ? JSON.parse(data) : null;
+    return data || null;
   } else {
     return predictions.get(key) || null;
   }
@@ -166,84 +168,97 @@ export default async function handler(req, res) {
     
     // Verify prediction
     if (req.method === 'POST' && req.body.action === 'verify') {
-      const { userAddress, timestamp, newPrice } = req.body;
-      
-      const predictionKey = `${userAddress.toLowerCase()}-${timestamp}`;
-      const prediction = await getPrediction(predictionKey);
-      
-      if (!prediction) {
-        return res.status(404).json({
-          error: 'Prediction not found',
-          correct: false,
-          multiplier: 0
-        });
-      }
-      
-      // Check if expired (allow 5 extra seconds grace period)
-      if (Date.now() > prediction.expiresAt + 5000) {
-        await deletePrediction(predictionKey);
-        return res.status(400).json({
-          error: 'Prediction expired',
-          correct: false,
-          multiplier: 0
-        });
-      }
-      
-      // Verify prediction
-      const priceChange = newPrice - prediction.currentPrice;
-      const predictedUp = prediction.prediction === 'up';
-      const actuallyWentUp = priceChange > 0;
-      
-      const correct = predictedUp === actuallyWentUp;
-      const multiplier = correct ? 2 : 0.5; // 2x for correct, 0.5x consolation prize for wrong
-      
-      // Update user stats
-      const stats = await getUserStats(userAddress);
-      
-      stats.totalPredictions++;
-      if (correct) {
-        stats.correctPredictions++;
-        stats.currentStreak = stats.lastPredictionCorrect ? stats.currentStreak + 1 : 1;
-        stats.bestStreak = Math.max(stats.bestStreak, stats.currentStreak);
-      } else {
-        stats.currentStreak = 0;
-      }
-      stats.lastPredictionCorrect = correct;
-      
-      await setUserStats(userAddress, stats);
-      
-      // Clean up
-      await deletePrediction(predictionKey);
-      
-      console.log(`${correct ? '✅' : '❌'} Prediction result:
-        User: ${userAddress.slice(0, 6)}...${userAddress.slice(-4)}
-        Start: $${prediction.currentPrice.toFixed(4)}
-        End: $${newPrice.toFixed(4)}
-        Change: ${priceChange > 0 ? '+' : ''}${priceChange.toFixed(4)} (${((priceChange / prediction.currentPrice) * 100).toFixed(2)}%)
-        Predicted: ${prediction.prediction.toUpperCase()}
-        Result: ${correct ? 'CORRECT' : 'WRONG'}
-        Multiplier: ${multiplier}x
-        Win Rate: ${((stats.correctPredictions / stats.totalPredictions) * 100).toFixed(1)}%
-        Streak: ${stats.currentStreak}
-      `);
-      
-      return res.status(200).json({
-        success: true,
-        correct,
-        prediction: prediction.prediction,
-        startPrice: prediction.currentPrice,
-        endPrice: newPrice,
-        priceChange: priceChange.toFixed(4),
-        priceChangePercent: ((priceChange / prediction.currentPrice) * 100).toFixed(2),
-        multiplier,
-        stats: {
-          totalPredictions: stats.totalPredictions,
-          correctPredictions: stats.correctPredictions,
-          currentStreak: stats.currentStreak,
-          bestStreak: stats.bestStreak,
-          winRate: ((stats.correctPredictions / stats.totalPredictions) * 100).toFixed(1)
+      try {
+        const { userAddress, timestamp, newPrice } = req.body;
+        
+        console.log(`Verifying prediction for ${userAddress.slice(0,6)}...${userAddress.slice(-4)} at timestamp ${timestamp}`);
+        
+        const predictionKey = `${userAddress.toLowerCase()}-${timestamp}`;
+        const prediction = await getPrediction(predictionKey);
+        
+        console.log(`Prediction data:`, prediction);
+        
+        if (!prediction) {
+          console.log(`Prediction not found for key: ${predictionKey}`);
+          return res.status(404).json({
+            error: 'Prediction not found',
+            correct: false,
+            multiplier: 0
+          });
         }
-      });
+        
+        // Check if expired (allow 5 extra seconds grace period)
+        if (Date.now() > prediction.expiresAt + 5000) {
+          await deletePrediction(predictionKey);
+          return res.status(400).json({
+            error: 'Prediction expired',
+            correct: false,
+            multiplier: 0
+          });
+        }
+        
+        // Verify prediction
+        const priceChange = newPrice - prediction.currentPrice;
+        const predictedUp = prediction.prediction === 'up';
+        const actuallyWentUp = priceChange > 0;
+        
+        const correct = predictedUp === actuallyWentUp;
+        const multiplier = correct ? 2 : 0.5; // 2x for correct, 0.5x consolation prize for wrong
+        
+        // Update user stats
+        const stats = await getUserStats(userAddress);
+        
+        stats.totalPredictions++;
+        if (correct) {
+          stats.correctPredictions++;
+          stats.currentStreak = stats.lastPredictionCorrect ? stats.currentStreak + 1 : 1;
+          stats.bestStreak = Math.max(stats.bestStreak, stats.currentStreak);
+        } else {
+          stats.currentStreak = 0;
+        }
+        stats.lastPredictionCorrect = correct;
+        
+        await setUserStats(userAddress, stats);
+        
+        // Clean up
+        await deletePrediction(predictionKey);
+        
+        console.log(`${correct ? '✅' : '❌'} Prediction result:
+          User: ${userAddress.slice(0, 6)}...${userAddress.slice(-4)}
+          Start: $${prediction.currentPrice.toFixed(4)}
+          End: $${newPrice.toFixed(4)}
+          Change: ${priceChange > 0 ? '+' : ''}${priceChange.toFixed(4)} (${((priceChange / prediction.currentPrice) * 100).toFixed(2)}%)
+          Predicted: ${prediction.prediction.toUpperCase()}
+          Result: ${correct ? 'CORRECT' : 'WRONG'}
+          Multiplier: ${multiplier}x
+          Win Rate: ${((stats.correctPredictions / stats.totalPredictions) * 100).toFixed(1)}%
+          Streak: ${stats.currentStreak}
+        `);
+        
+        return res.status(200).json({
+          success: true,
+          correct,
+          prediction: prediction.prediction,
+          startPrice: prediction.currentPrice,
+          endPrice: newPrice,
+          priceChange: priceChange.toFixed(4),
+          priceChangePercent: ((priceChange / prediction.currentPrice) * 100).toFixed(2),
+          multiplier,
+          stats: {
+            totalPredictions: stats.totalPredictions,
+            correctPredictions: stats.correctPredictions,
+            currentStreak: stats.currentStreak,
+            bestStreak: stats.bestStreak,
+            winRate: ((stats.correctPredictions / stats.totalPredictions) * 100).toFixed(1)
+          }
+        });
+      } catch (verifyError) {
+        console.error('Error verifying prediction:', verifyError);
+        return res.status(500).json({
+          error: 'Failed to verify prediction',
+          message: verifyError.message
+        });
+      }
     }
     
     // Get user stats
