@@ -523,23 +523,26 @@ function showPredictionResultPopup(verifyResult, airdropResult) {
   const hasLucky = airdropResult.luckyMultiplier && airdropResult.luckyMultiplier > 1;
   const hasRarity = airdropResult.rarityMultiplier && airdropResult.rarityMultiplier > 1;
   const hasBonuses = hasLucky || hasRarity || airdropResult.bonusMessages;
+  const isSkipped = prediction === 'skipped' || !verifyResult.stats;
   
   content.innerHTML = `
     <div style="font-size: 3rem; margin-bottom: 10px;">
-      ${isCorrect ? '✅' : '🎲'}
+      ${isSkipped ? '🎁' : (isCorrect ? '✅' : '🎲')}
     </div>
     
-    <h2 style="color: ${isCorrect ? '#10b981' : '#f59e0b'}; margin: 0 0 8px 0; font-size: 1.4rem;">
-      ${isCorrect ? 'CORRECT PREDICTION!' : 'WRONG PREDICTION'}
+    <h2 style="color: ${isSkipped ? '#fbbf24' : (isCorrect ? '#10b981' : '#f59e0b')}; margin: 0 0 8px 0; font-size: 1.4rem;">
+      ${isSkipped ? 'BONUS AIRDROP!' : (isCorrect ? 'CORRECT PREDICTION!' : 'WRONG PREDICTION')}
     </h2>
     
-    <div style="color: #94a3b8; font-size: 0.85rem; margin-bottom: 14px;">
-      ${prediction.toUpperCase()}: $${startPrice.toFixed(4)} → $${endPrice.toFixed(4)}
-      <br>
-      <span style="color: ${priceChange > 0 ? '#10b981' : '#ef4444'}; font-weight: 600;">
-        ${priceChange > 0 ? '+' : ''}$${Math.abs(priceChange).toFixed(4)} (${priceChangePercent}%)
-      </span>
-    </div>
+    ${!isSkipped ? `
+      <div style="color: #94a3b8; font-size: 0.85rem; margin-bottom: 14px;">
+        ${prediction.toUpperCase()}: $${startPrice.toFixed(4)} → $${endPrice.toFixed(4)}
+        <br>
+        <span style="color: ${priceChange > 0 ? '#10b981' : '#ef4444'}; font-weight: 600;">
+          ${priceChange > 0 ? '+' : ''}$${Math.abs(priceChange).toFixed(4)} (${priceChangePercent}%)
+        </span>
+      </div>
+    ` : ''}
     
     <div style="background: rgba(15, 23, 42, 0.6); padding: 14px; border-radius: 10px; margin: 14px 0; border: 1px solid #334155;">
       <div style="color: #94a3b8; font-size: 0.85rem; margin-bottom: 8px;">💰 Airdrop Breakdown</div>
@@ -549,10 +552,12 @@ function showPredictionResultPopup(verifyResult, airdropResult) {
         <span style="color: #94a3b8; font-weight: bold;">${airdropResult.baseAmount || '0.01'} CELO</span>
       </div>
       
-      <div style="display: flex; justify-content: space-between; margin: 6px 0; color: #e2e8f0; font-size: 0.85rem;">
-        <span>Prediction ${isCorrect ? 'Bonus' : 'Penalty'}:</span>
-        <span style="color: ${isCorrect ? '#10b981' : '#f59e0b'}; font-weight: bold;">${multiplier}x</span>
-      </div>
+      ${!isSkipped ? `
+        <div style="display: flex; justify-content: space-between; margin: 6px 0; color: #e2e8f0; font-size: 0.85rem;">
+          <span>Prediction ${isCorrect ? 'Bonus' : 'Penalty'}:</span>
+          <span style="color: ${isCorrect ? '#10b981' : '#f59e0b'}; font-weight: bold;">${multiplier}x</span>
+        </div>
+      ` : ''}
       
       ${hasLucky ? `
         <div style="display: flex; justify-content: space-between; margin: 6px 0; color: #e2e8f0; font-size: 0.85rem;">
@@ -585,7 +590,7 @@ function showPredictionResultPopup(verifyResult, airdropResult) {
       </div>
     ` : ''}
     
-    ${verifyResult.stats ? `
+    ${verifyResult.stats && !isSkipped ? `
       <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 14px 0;">
         <div style="background: rgba(15, 23, 42, 0.4); padding: 8px; border-radius: 6px; border: 1px solid #334155;">
           <div style="font-size: 1.1rem; font-weight: bold; color: #49dfb5;">${verifyResult.stats.winRate}%</div>
@@ -2130,10 +2135,26 @@ mintBtn.addEventListener('click', async () => {
       setTimeout(async () => {
         const airdropResult = await claimAirdrop(actualTokenId, hash, 1);
         
-        // Show bonus popup only if user got bonuses (lucky/rarity)
+        console.log('Skip prediction - Airdrop result:', airdropResult);
+        
+        // Show bonus popup if user got lucky/rarity bonuses
         if (airdropResult && (airdropResult.luckyMultiplier > 1 || airdropResult.rarityMultiplier > 1 || airdropResult.bonusMessages)) {
           setTimeout(() => {
-            showBonusBreakdown(airdropResult);
+            // Create a fake verifyResult for skipped predictions
+            const fakeVerifyResult = {
+              success: true,
+              correct: null,
+              prediction: 'skipped',
+              startPrice: 0,
+              endPrice: 0,
+              priceChange: '0',
+              priceChangePercent: '0',
+              multiplier: 1,
+              stats: null
+            };
+            
+            console.log('Showing bonus popup for skip user');
+            showPredictionResultPopup(fakeVerifyResult, airdropResult);
           }, 2000);
         }
       }, 2000);
