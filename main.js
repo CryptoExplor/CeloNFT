@@ -494,14 +494,16 @@ function showPredictionResultPopup(verifyResult, airdropResult) {
   const content = document.createElement('div');
   content.style.cssText = `
     background: linear-gradient(135deg, ${isCorrect ? '#1e3a2f 0%, #0f1f1a 100%' : '#3a2e1e 0%, #1f1a0f 100%'});
-    padding: 30px;
-    border-radius: 16px;
-    max-width: 400px;
+    padding: 20px;
+    border-radius: 12px;
+    max-width: 380px;
     width: 90%;
     border: 3px solid ${isCorrect ? '#10b981' : '#f59e0b'};
     box-shadow: 0 0 40px ${isCorrect ? 'rgba(16, 185, 129, 0.5)' : 'rgba(245, 158, 11, 0.5)'};
     animation: popIn 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
     text-align: center;
+    max-height: 90vh;
+    overflow-y: auto;
   `;
   
   const startPrice = verifyResult.startPrice || 0;
@@ -509,16 +511,21 @@ function showPredictionResultPopup(verifyResult, airdropResult) {
   const prediction = verifyResult.prediction || 'unknown';
   const priceChangePercent = verifyResult.priceChangePercent || '0';
   
+  // Check if there are any bonuses
+  const hasLucky = airdropResult.luckyMultiplier && airdropResult.luckyMultiplier > 1;
+  const hasRarity = airdropResult.rarityMultiplier && airdropResult.rarityMultiplier > 1;
+  const hasBonuses = hasLucky || hasRarity || airdropResult.bonusMessages;
+  
   content.innerHTML = `
-    <div style="font-size: 4rem; margin-bottom: 15px;">
+    <div style="font-size: 3rem; margin-bottom: 10px;">
       ${isCorrect ? '✅' : '🎲'}
     </div>
     
-    <h2 style="color: ${isCorrect ? '#10b981' : '#f59e0b'}; margin: 0 0 10px 0; font-size: 1.8rem;">
+    <h2 style="color: ${isCorrect ? '#10b981' : '#f59e0b'}; margin: 0 0 8px 0; font-size: 1.4rem;">
       ${isCorrect ? 'CORRECT PREDICTION!' : 'WRONG PREDICTION'}
     </h2>
     
-    <div style="color: #94a3b8; font-size: 0.95rem; margin-bottom: 20px;">
+    <div style="color: #94a3b8; font-size: 0.85rem; margin-bottom: 14px;">
       ${prediction.toUpperCase()}: $${startPrice.toFixed(4)} → $${endPrice.toFixed(4)}
       <br>
       <span style="color: ${priceChange > 0 ? '#10b981' : '#ef4444'}; font-weight: 600;">
@@ -526,67 +533,81 @@ function showPredictionResultPopup(verifyResult, airdropResult) {
       </span>
     </div>
     
-    <div style="background: rgba(15, 23, 42, 0.6); padding: 20px; border-radius: 12px; margin: 20px 0; border: 1px solid #334155;">
-      <div style="color: #94a3b8; font-size: 0.9rem; margin-bottom: 10px;">Airdrop Breakdown</div>
+    <div style="background: rgba(15, 23, 42, 0.6); padding: 14px; border-radius: 10px; margin: 14px 0; border: 1px solid #334155;">
+      <div style="color: #94a3b8; font-size: 0.85rem; margin-bottom: 8px;">💰 Airdrop Breakdown</div>
       
-      <div style="display: flex; justify-content: space-between; margin: 8px 0; color: #e2e8f0; font-size: 0.9rem;">
-        <span>Prediction Multiplier:</span>
+      <div style="display: flex; justify-content: space-between; margin: 6px 0; color: #e2e8f0; font-size: 0.85rem;">
+        <span>Base Amount:</span>
+        <span style="color: #94a3b8; font-weight: bold;">${airdropResult.baseAmount || '0.01'} CELO</span>
+      </div>
+      
+      <div style="display: flex; justify-content: space-between; margin: 6px 0; color: #e2e8f0; font-size: 0.85rem;">
+        <span>Prediction ${isCorrect ? 'Bonus' : 'Penalty'}:</span>
         <span style="color: ${isCorrect ? '#10b981' : '#f59e0b'}; font-weight: bold;">${multiplier}x</span>
       </div>
       
-      ${airdropResult.luckyMultiplier && airdropResult.luckyMultiplier > 1 ? `
-        <div style="display: flex; justify-content: space-between; margin: 8px 0; color: #e2e8f0; font-size: 0.9rem;">
-          <span>Lucky Bonus:</span>
+      ${hasLucky ? `
+        <div style="display: flex; justify-content: space-between; margin: 6px 0; color: #e2e8f0; font-size: 0.85rem;">
+          <span>🍀 Lucky Bonus:</span>
           <span style="color: #fbbf24; font-weight: bold;">${airdropResult.luckyMultiplier}x</span>
         </div>
       ` : ''}
       
-      ${airdropResult.rarityMultiplier && airdropResult.rarityMultiplier > 1 ? `
-        <div style="display: flex; justify-content: space-between; margin: 8px 0; color: #e2e8f0; font-size: 0.9rem;">
-          <span>${airdropResult.rarity || 'Rarity'}:</span>
+      ${hasRarity ? `
+        <div style="display: flex; justify-content: space-between; margin: 6px 0; color: #e2e8f0; font-size: 0.85rem;">
+          <span>✨ ${airdropResult.rarity || 'Rarity'}:</span>
           <span style="color: #a855f7; font-weight: bold;">${airdropResult.rarityMultiplier}x</span>
         </div>
       ` : ''}
       
-      <div style="border-top: 2px solid #334155; margin: 12px 0; padding-top: 12px;">
-        <div style="font-size: 1.1rem; color: #94a3b8;">Total Airdrop</div>
-        <div style="font-size: 2.5rem; font-weight: bold; color: ${isCorrect ? '#10b981' : '#f59e0b'}; margin-top: 5px;">
+      <div style="border-top: 2px solid #334155; margin: 10px 0; padding-top: 10px;">
+        <div style="font-size: 0.95rem; color: #94a3b8;">Total Airdrop</div>
+        <div style="font-size: 2rem; font-weight: bold; color: ${hasBonuses ? '#fbbf24' : (isCorrect ? '#10b981' : '#f59e0b')}; margin-top: 4px;">
           ${airdropAmount} CELO
         </div>
       </div>
     </div>
     
+    ${hasBonuses && airdropResult.bonusMessages && airdropResult.bonusMessages.length > 0 ? `
+      <div style="background: rgba(251, 191, 36, 0.1); padding: 12px; border-radius: 8px; margin: 14px 0; border: 1px solid rgba(251, 191, 36, 0.3);">
+        <div style="color: #fbbf24; font-size: 0.85rem; font-weight: 600; margin-bottom: 8px;">🎯 Bonus Details:</div>
+        <div style="display: flex; flex-direction: column; gap: 4px; color: #e2e8f0; font-size: 0.75rem; text-align: left;">
+          ${airdropResult.bonusMessages.map(msg => `<div>✨ ${msg}</div>`).join('')}
+        </div>
+      </div>
+    ` : ''}
+    
     ${verifyResult.stats ? `
-      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 20px 0;">
-        <div style="background: rgba(15, 23, 42, 0.4); padding: 10px; border-radius: 8px; border: 1px solid #334155;">
-          <div style="font-size: 1.3rem; font-weight: bold; color: #49dfb5;">${verifyResult.stats.winRate}%</div>
-          <div style="font-size: 0.7rem; color: #94a3b8; text-transform: uppercase;">Win Rate</div>
+      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 14px 0;">
+        <div style="background: rgba(15, 23, 42, 0.4); padding: 8px; border-radius: 6px; border: 1px solid #334155;">
+          <div style="font-size: 1.1rem; font-weight: bold; color: #49dfb5;">${verifyResult.stats.winRate}%</div>
+          <div style="font-size: 0.65rem; color: #94a3b8; text-transform: uppercase;">Win Rate</div>
         </div>
-        <div style="background: rgba(15, 23, 42, 0.4); padding: 10px; border-radius: 8px; border: 1px solid #334155;">
-          <div style="font-size: 1.3rem; font-weight: bold; color: #49dfb5;">${verifyResult.stats.currentStreak}</div>
-          <div style="font-size: 0.7rem; color: #94a3b8; text-transform: uppercase;">Streak</div>
+        <div style="background: rgba(15, 23, 42, 0.4); padding: 8px; border-radius: 6px; border: 1px solid #334155;">
+          <div style="font-size: 1.1rem; font-weight: bold; color: #49dfb5;">${verifyResult.stats.currentStreak}</div>
+          <div style="font-size: 0.65rem; color: #94a3b8; text-transform: uppercase;">Streak</div>
         </div>
-        <div style="background: rgba(15, 23, 42, 0.4); padding: 10px; border-radius: 8px; border: 1px solid #334155;">
-          <div style="font-size: 1.3rem; font-weight: bold; color: #49dfb5;">${verifyResult.stats.totalPredictions}</div>
-          <div style="font-size: 0.7rem; color: #94a3b8; text-transform: uppercase;">Total</div>
+        <div style="background: rgba(15, 23, 42, 0.4); padding: 8px; border-radius: 6px; border: 1px solid #334155;">
+          <div style="font-size: 1.1rem; font-weight: bold; color: #49dfb5;">${verifyResult.stats.totalPredictions}</div>
+          <div style="font-size: 0.65rem; color: #94a3b8; text-transform: uppercase;">Total</div>
         </div>
       </div>
     ` : ''}
     
     <button id="closePredictionResult" style="
       width: 100%;
-      padding: 12px;
+      padding: 10px;
       background: linear-gradient(90deg, #49dfb5, #10b981);
       color: #0f0f0f;
       border: none;
       border-radius: 8px;
-      font-size: 1rem;
+      font-size: 0.95rem;
       font-weight: bold;
       cursor: pointer;
       font-family: 'Orbitron', sans-serif;
-      margin-top: 10px;
+      margin-top: 8px;
     ">
-      ${isCorrect ? '🎉 Awesome!' : '👍 Got It!'}
+      ${hasBonuses ? '🎉 Amazing!' : (isCorrect ? '🎉 Awesome!' : '👍 Got It!')}
     </button>
   `;
   
@@ -595,14 +616,16 @@ function showPredictionResultPopup(verifyResult, airdropResult) {
   
   console.log('Popup created and added to DOM');
   
-  // Trigger confetti for correct predictions
-  if (isCorrect) {
+  // Trigger confetti for correct predictions or bonuses
+  if (isCorrect || hasBonuses) {
     setTimeout(() => {
       confetti({
-        particleCount: 150,
-        spread: 120,
+        particleCount: hasBonuses ? 200 : 150,
+        spread: hasBonuses ? 140 : 120,
         origin: { y: 0.6 },
-        colors: ['#10b981', '#34d399', '#6ee7b7', '#fbbf24']
+        colors: hasBonuses 
+          ? ['#10b981', '#34d399', '#6ee7b7', '#fbbf24', '#f59e0b']
+          : ['#10b981', '#34d399', '#6ee7b7', '#fbbf24']
       });
     }, 300);
   }
@@ -935,10 +958,10 @@ async function claimAirdrop(tokenId, txHash, predictionMultiplier = 1) {
       
       if (isBonus) {
         // SUPER BONUS CELEBRATION! 🎉
-        setStatus(`💎 BONUS AIRDROP! ${amountReceived} CELO! 🎉`, 'success');
+        setStatus(`💸 BONUS AIRDROP! ${amountReceived} CELO! 🎉`, 'success');
         
-        // Show bonus breakdown
-        showBonusBreakdown(data);
+        // Don't show separate bonus popup - it's merged with prediction result
+        // showBonusBreakdown(data);
         
         // Epic confetti for bonuses
         launchBonusConfetti(parseFloat(amountReceived));
@@ -1016,13 +1039,15 @@ function showBonusBreakdown(data) {
   const content = document.createElement('div');
   content.style.cssText = `
     background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
-    padding: 30px;
-    border-radius: 16px;
-    max-width: 400px;
+    padding: 20px;
+    border-radius: 12px;
+    max-width: 380px;
     width: 90%;
     border: 3px solid #fbbf24;
     box-shadow: 0 0 30px rgba(251, 191, 36, 0.5);
     animation: popIn 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    max-height: 85vh;
+    overflow-y: auto;
   `;
   
   const bonusMessages = data.bonusMessages || [];
@@ -1030,15 +1055,15 @@ function showBonusBreakdown(data) {
   
   content.innerHTML = `
     <div style="text-align: center;">
-      <div style="font-size: 4rem; margin-bottom: 10px;">💎</div>
-      <h2 style="color: #fbbf24; margin: 0 0 10px 0; font-size: 1.8rem;">BONUS AIRDROP!</h2>
-      <div style="font-size: 2.5rem; font-weight: bold; color: #10b981; margin: 20px 0;">
+      <div style="font-size: 3rem; margin-bottom: 8px;">💎</div>
+      <h2 style="color: #fbbf24; margin: 0 0 8px 0; font-size: 1.4rem;">BONUS AIRDROP!</h2>
+      <div style="font-size: 2rem; font-weight: bold; color: #10b981; margin: 14px 0;">
         ${data.amount} CELO
       </div>
       
-      <div style="background: rgba(15, 23, 42, 0.6); padding: 16px; border-radius: 8px; margin: 20px 0; border: 1px solid #334155;">
-        <div style="color: #94a3b8; font-size: 0.9rem; margin-bottom: 8px;">Breakdown:</div>
-        <div style="color: #e2e8f0; font-size: 0.9rem; line-height: 1.6;">
+      <div style="background: rgba(15, 23, 42, 0.6); padding: 12px; border-radius: 8px; margin: 14px 0; border: 1px solid #334155;">
+        <div style="color: #94a3b8; font-size: 0.85rem; margin-bottom: 6px;">Breakdown:</div>
+        <div style="color: #e2e8f0; font-size: 0.85rem; line-height: 1.5;">
           ${data.baseAmount ? `<div>Base: ${data.baseAmount} CELO</div>` : ''}
           ${data.luckyMultiplier > 1 ? `<div>Lucky: ${data.luckyMultiplier}x</div>` : ''}
           ${data.rarityMultiplier > 1 ? `<div>${data.rarity}: ${data.rarityMultiplier}x</div>` : ''}
@@ -1046,9 +1071,9 @@ function showBonusBreakdown(data) {
       </div>
       
       ${bonusesHTML ? `
-        <div style="background: rgba(251, 191, 36, 0.1); padding: 16px; border-radius: 8px; margin: 20px 0; border: 1px solid rgba(251, 191, 36, 0.3);">
-          <div style="color: #fbbf24; font-size: 0.9rem; font-weight: 600; margin-bottom: 10px;">🎯 Your Bonuses:</div>
-          <div style="display: flex; flex-direction: column; gap: 8px; color: #e2e8f0; font-size: 0.85rem;">
+        <div style="background: rgba(251, 191, 36, 0.1); padding: 12px; border-radius: 8px; margin: 14px 0; border: 1px solid rgba(251, 191, 36, 0.3);">
+          <div style="color: #fbbf24; font-size: 0.85rem; font-weight: 600; margin-bottom: 8px;">🎯 Your Bonuses:</div>
+          <div style="display: flex; flex-direction: column; gap: 6px; color: #e2e8f0; font-size: 0.8rem;">
             ${bonusesHTML}
           </div>
         </div>
@@ -1058,12 +1083,12 @@ function showBonusBreakdown(data) {
         background: linear-gradient(90deg, #49dfb5, #10b981);
         color: #0f0f0f;
         border: none;
-        padding: 12px 30px;
+        padding: 10px 24px;
         border-radius: 8px;
-        font-size: 1rem;
+        font-size: 0.95rem;
         font-weight: bold;
         cursor: pointer;
-        margin-top: 20px;
+        margin-top: 14px;
         width: 100%;
         font-family: 'Orbitron', sans-serif;
       ">
@@ -2095,7 +2120,14 @@ mintBtn.addEventListener('click', async () => {
     if (predictionResult.skip) {
       // User skipped prediction - send standard airdrop immediately
       setTimeout(async () => {
-        await claimAirdrop(actualTokenId, hash, 1);
+        const airdropResult = await claimAirdrop(actualTokenId, hash, 1);
+        
+        // Show bonus popup only if user got bonuses (lucky/rarity)
+        if (airdropResult && (airdropResult.luckyMultiplier > 1 || airdropResult.rarityMultiplier > 1 || airdropResult.bonusMessages)) {
+          setTimeout(() => {
+            showBonusBreakdown(airdropResult);
+          }, 2000);
+        }
       }, 2000);
     } else {
       // User made a prediction - wait for verification
