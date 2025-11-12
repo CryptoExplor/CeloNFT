@@ -26,29 +26,60 @@ const MAX_PREDICTIONS_PER_HOUR = 10;
 // Helper functions for KV storage
 async function storePrediction(key, data) {
   if (useKV) {
-    // Store in Vercel KV with 2-minute expiration (prediction window + buffer)
-    // KV automatically handles JSON serialization
-    await kv.set(key, data, { ex: 120 }); // 120 seconds = 2 minutes
+    try {
+      // Store in Vercel KV with 2-minute expiration (prediction window + buffer)
+      // KV automatically handles JSON serialization
+      await kv.set(key, data, { ex: 120 }); // 120 seconds = 2 minutes
+      console.log(`✅ Stored prediction in KV: ${key}`);
+      
+      // Verify write by reading back immediately
+      const verify = await kv.get(key);
+      if (verify) {
+        console.log(`✅ Verified prediction stored correctly:`, { key, data: verify });
+      } else {
+        console.error(`❌ Failed to verify prediction write for key: ${key}`);
+      }
+    } catch (error) {
+      console.error(`❌ Error storing prediction in KV:`, error);
+      // Fallback to in-memory
+      predictions.set(key, data);
+      console.log(`⚠️ Fallback: Stored in memory instead`);
+    }
   } else {
     predictions.set(key, data);
+    console.log(`📝 Stored prediction in memory: ${key}`);
   }
 }
 
 async function getPrediction(key) {
   if (useKV) {
-    // KV automatically deserializes JSON
-    const data = await kv.get(key);
-    return data || null;
+    try {
+      // KV automatically deserializes JSON
+      const data = await kv.get(key);
+      console.log(`🔍 KV lookup for ${key}:`, data ? 'FOUND' : 'NOT FOUND');
+      return data || null;
+    } catch (error) {
+      console.error(`❌ Error reading from KV:`, error);
+      return predictions.get(key) || null;
+    }
   } else {
-    return predictions.get(key) || null;
+    const data = predictions.get(key) || null;
+    console.log(`🔍 Memory lookup for ${key}:`, data ? 'FOUND' : 'NOT FOUND');
+    return data;
   }
 }
 
 async function deletePrediction(key) {
   if (useKV) {
-    await kv.del(key);
+    try {
+      await kv.del(key);
+      console.log(`🗑️ Deleted prediction from KV: ${key}`);
+    } catch (error) {
+      console.error(`❌ Error deleting from KV:`, error);
+    }
   } else {
     predictions.delete(key);
+    console.log(`🗑️ Deleted prediction from memory: ${key}`);
   }
 }
 
@@ -140,22 +171,28 @@ export default async function handler(req, res) {
       
       // Store prediction
       const predictionKey = `${userAddress.toLowerCase()}-${timestamp}`;
-      await storePrediction(predictionKey, {
+      const predictionData = {
         userAddress: userAddress.toLowerCase(),
         currentPrice,
         prediction, // 'up' or 'down'
         timestamp,
-        expiresAt: timestamp + PREDICTION_WINDOW
-      });
+        expiresAt: timestamp + PREDICTION_WINDOW,
+        storedAt: Date.now() // Track when stored
+      };
+      
+      await storePrediction(predictionKey, predictionData);
       
       // Update history
       userHistory.push(timestamp);
       await setUserHistory(userAddress, userHistory);
       
+      const ttlSeconds = 120;
       console.log(`📊 Prediction recorded:
         User: ${userAddress.slice(0, 6)}...${userAddress.slice(-4)}
         Price: $${currentPrice}
         Prediction: ${prediction.toUpperCase()}
+        Key: ${predictionKey}
+        TTL: ${ttlSeconds} seconds (auto-delete after 2 minutes)
         Expires: ${new Date(timestamp + PREDICTION_WINDOW).toLocaleTimeString()}
       `);
       
@@ -171,9 +208,15 @@ export default async function handler(req, res) {
       try {
         const { userAddress, timestamp, newPrice } = req.body;
         
-        console.log(`Verifying prediction for ${userAddress.slice(0,6)}...${userAddress.slice(-4)} at timestamp ${timestamp}`);
+        const timeElapsed = Date.now() - timestamp;
+        console.log(`⏱️ Verifying prediction for ${userAddress.slice(0,6)}...${userAddress.slice(-4)}`);
+        console.log(`  Timestamp: ${timestamp}`);
+        console.log(`  Time elapsed since prediction: ${Math.floor(timeElapsed / 1000)}s`);
+        console.log(`  Expected TTL: 120s (should still exist if < 120s)`);
         
         const predictionKey = `${userAddress.toLowerCase()}-${timestamp}`;
+        console.log(`  Looking for key: ${predictionKey}`);
+        
         const prediction = await getPrediction(predictionKey);
         
         console.log(`Prediction data:`, prediction);
