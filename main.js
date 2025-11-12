@@ -614,24 +614,19 @@ async function showPredictionModal() {
           throw new Error(error.message || 'Failed to store prediction');
         }
         
-        // Show countdown
-        let secondsLeft = 60;
-        const timerElement = document.getElementById('timerSeconds');
-        const timerDisplay = document.getElementById('predictionTimer');
+        // Calculate remaining time
+        const elapsedTime = Date.now() - timestamp;
+        const remainingTime = Math.max(0, 60000 - elapsedTime);
         
-        timerInterval = setInterval(() => {
-          secondsLeft--;
-          timerElement.textContent = secondsLeft;
-          
-          if (secondsLeft <= 10) {
-            timerDisplay.classList.add('timer-urgent');
-          }
-          
-          if (secondsLeft <= 0) {
-            clearInterval(timerInterval);
-            verifyPrediction(prediction, currentPrice, timestamp, modal, cleanup, resolve);
-          }
-        }, 1000);
+        // Close modal and proceed to mint immediately
+        cleanup();
+        resolve({
+          skip: false,
+          prediction,
+          timestamp,
+          startPrice: currentPrice,
+          timeLeft: remainingTime
+        });
         
       } catch (error) {
         console.error('Prediction error:', error);
@@ -1861,7 +1856,7 @@ mintBtn.addEventListener('click', async () => {
 
     const { address, abi } = contractDetails;
 
-    // 🎲 STEP 2: MINT NFT
+    // 🎲 STEP 2: MINT NFT IMMEDIATELY
     const priceData = await fetchCeloPrice();
     const price = priceData.price;
     const priceForContract = Math.floor(price * 10000);
@@ -1940,18 +1935,54 @@ mintBtn.addEventListener('click', async () => {
       }
     }
 
-    // 🎯 STEP 3: CLAIM AIRDROP WITH PREDICTION MULTIPLIER
-    setTimeout(async () => {
-      const multiplier = predictionResult.skip ? 1 : (predictionResult.multiplier || 1);
+    // 🎯 STEP 3: HANDLE AIRDROP BASED ON PREDICTION
+    if (predictionResult.skip) {
+      // User skipped prediction - send standard airdrop immediately
+      setTimeout(async () => {
+        await claimAirdrop(actualTokenId, hash, 1);
+      }, 2000);
+    } else {
+      // User made a prediction - wait for verification
+      setStatus(`⏳ Waiting for price verification... (${predictionResult.timeLeft}s remaining)`, 'info');
       
-      if (!predictionResult.skip && predictionResult.correct) {
-        setStatus('🎯 Correct prediction! Claiming 2x airdrop...', 'success');
-      } else if (!predictionResult.skip && !predictionResult.correct) {
-        setStatus('🎲 Wrong prediction. Claiming 0.5x consolation airdrop...', 'info');
-      }
-      
-      await claimAirdrop(actualTokenId, hash, multiplier);
-    }, 2000);
+      // Schedule airdrop after remaining time
+      setTimeout(async () => {
+        try {
+          setStatus('🔍 Verifying prediction result...', 'info');
+          
+          // Verify prediction with backend
+          const priceData = await fetchCeloPrice();
+          const verifyResponse = await fetch('/api/prediction', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'verify',
+              userAddress,
+              timestamp: predictionResult.timestamp,
+              newPrice: priceData.price
+            })
+          });
+          
+          const verifyResult = await verifyResponse.json();
+          const multiplier = verifyResult.multiplier || 1;
+          
+          if (verifyResult.correct) {
+            setStatus('🎯 Correct prediction! Claiming 2x airdrop...', 'success');
+          } else {
+            setStatus('🎲 Wrong prediction. Claiming 0.5x consolation airdrop...', 'info');
+          }
+          
+          // Claim airdrop with verified multiplier
+          await claimAirdrop(actualTokenId, hash, multiplier);
+          
+        } catch (error) {
+          console.error('Prediction verification failed:', error);
+          // Fallback to standard airdrop if verification fails
+          setStatus('⚠️ Verification failed. Sending standard airdrop...', 'warning');
+          await claimAirdrop(actualTokenId, hash, 1);
+        }
+      }, predictionResult.timeLeft || 2000);
+    }
 
   } catch (e) {
     const errorMsg = getImprovedErrorMessage(e);
