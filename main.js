@@ -219,7 +219,7 @@ function showConnectButton() {
 
 async function fetchCeloPrice() {
   try {
-    const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=celo&vs_currencies=usd');
+    const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=celo&vs_currencies=usd&include_24hr_change=true');
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
@@ -227,7 +227,10 @@ async function fetchCeloPrice() {
     if (!data || !data.celo || !data.celo.usd) {
       throw new Error("Invalid response structure from CoinGecko.");
     }
-    return data.celo.usd;
+    return {
+      price: data.celo.usd,
+      change24h: data.celo.usd_24h_change || 0
+    };
   } catch (e) {
     console.error("Failed to fetch CELO price:", e);
     throw new Error("Failed to fetch CELO price. Please try again.");
@@ -461,8 +464,279 @@ async function getTokenIdFromReceipt(receipt) {
   }
 }
 
+// ===== PRICE PREDICTION GAME =====
+
+// Show prediction modal and return user's choice
+async function showPredictionModal() {
+  return new Promise((resolve) => {
+    const modal = document.createElement('div');
+    modal.className = 'prediction-modal';
+    modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.95); display: flex; justify-content: center; align-items: center; z-index: 9999;';
+    
+    const content = document.createElement('div');
+    content.className = 'prediction-content';
+    content.innerHTML = `
+      <div class="timer-display" id="predictionTimer">
+        ⏱️ <span id="timerSeconds">60</span>s
+      </div>
+      
+      <div class="prediction-header">
+        <div class="prediction-icon">📈</div>
+        <h2 class="prediction-title">Price Prediction Game</h2>
+        <p class="prediction-subtitle">Predict CELO price in 1 minute for 2x airdrop!</p>
+      </div>
+      
+      <div class="current-price-box" id="currentPriceBox">
+        <div class="price-label">Current CELO Price</div>
+        <div class="price-value" id="currentPrice">
+          <span class="spinner" style="width: 30px; height: 30px;"></span>
+        </div>
+      </div>
+      
+      <div class="prediction-info">
+        <div class="info-item">
+          <span class="info-label">✅ Correct Prediction:</span>
+          <span class="info-value" style="color: #10b981;">2x Airdrop!</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">❌ Wrong Prediction:</span>
+          <span class="info-value" style="color: #f59e0b;">0.5x Consolation</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">⏭️ Skip:</span>
+          <span class="info-value" style="color: #94a3b8;">Standard Airdrop</span>
+        </div>
+      </div>
+      
+      <div class="prediction-buttons">
+        <button class="predict-btn predict-up" id="predictUp" disabled>
+          📈 UP
+        </button>
+        <button class="predict-btn predict-down" id="predictDown" disabled>
+          📉 DOWN
+        </button>
+      </div>
+      
+      <button class="skip-btn" id="skipPrediction">
+        ⏭️ Skip Prediction (Get Standard Airdrop)
+      </button>
+      
+      <div class="user-stats" id="userStatsBox" style="display: none;">
+        <div class="stat-box">
+          <div class="stat-number" id="statWinRate">--%</div>
+          <div class="stat-label">Win Rate</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-number" id="statStreak">0</div>
+          <div class="stat-label">Streak</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-number" id="statTotal">0</div>
+          <div class="stat-label">Total</div>
+        </div>
+      </div>
+    `;
+    
+    modal.appendChild(content);
+    document.body.appendChild(modal);
+    
+    let currentPrice = null;
+    let timestamp = null;
+    let timerInterval = null;
+    
+    // Fetch current price
+    (async () => {
+      try {
+        const priceData = await fetchCeloPrice();
+        currentPrice = priceData.price;
+        timestamp = Date.now();
+        
+        const priceElement = document.getElementById('currentPrice');
+        priceElement.innerHTML = `$${currentPrice.toFixed(4)}`;
+        
+        // Enable buttons
+        document.getElementById('predictUp').disabled = false;
+        document.getElementById('predictDown').disabled = false;
+        
+        // Fetch user stats
+        if (userAddress) {
+          try {
+            const response = await fetch(`/api/prediction?userAddress=${userAddress}`);
+            if (response.ok) {
+              const stats = await response.json();
+              document.getElementById('statWinRate').textContent = `${stats.winRate || 0}%`;
+              document.getElementById('statStreak').textContent = stats.currentStreak || 0;
+              document.getElementById('statTotal').textContent = stats.totalPredictions || 0;
+              document.getElementById('userStatsBox').style.display = 'grid';
+            }
+          } catch (e) {
+            console.log('Could not fetch user stats:', e);
+          }
+        }
+        
+      } catch (error) {
+        console.error('Failed to fetch price:', error);
+        document.getElementById('currentPrice').innerHTML = '<span style="color: #ef4444; font-size: 1rem;">Failed to load</span>';
+        document.getElementById('skipPrediction').textContent = '❌ Close';
+      }
+    })();
+    
+    // Cleanup function
+    const cleanup = () => {
+      if (timerInterval) clearInterval(timerInterval);
+      modal.remove();
+    };
+    
+    // Handle prediction
+    const handlePrediction = async (prediction) => {
+      if (!currentPrice || !timestamp) return;
+      
+      document.getElementById('predictUp').disabled = true;
+      document.getElementById('predictDown').disabled = true;
+      document.getElementById('skipPrediction').disabled = true;
+      
+      try {
+        // Store prediction
+        const response = await fetch('/api/prediction', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'predict',
+            userAddress,
+            currentPrice,
+            prediction,
+            timestamp
+          })
+        });
+        
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.message || 'Failed to store prediction');
+        }
+        
+        // Show countdown
+        let secondsLeft = 60;
+        const timerElement = document.getElementById('timerSeconds');
+        const timerDisplay = document.getElementById('predictionTimer');
+        
+        timerInterval = setInterval(() => {
+          secondsLeft--;
+          timerElement.textContent = secondsLeft;
+          
+          if (secondsLeft <= 10) {
+            timerDisplay.classList.add('timer-urgent');
+          }
+          
+          if (secondsLeft <= 0) {
+            clearInterval(timerInterval);
+            verifyPrediction(prediction, currentPrice, timestamp, modal, cleanup, resolve);
+          }
+        }, 1000);
+        
+      } catch (error) {
+        console.error('Prediction error:', error);
+        setStatus('Prediction failed: ' + error.message, 'error');
+        cleanup();
+        resolve({ skip: true });
+      }
+    };
+    
+    // Event listeners
+    document.getElementById('predictUp').onclick = () => handlePrediction('up');
+    document.getElementById('predictDown').onclick = () => handlePrediction('down');
+    document.getElementById('skipPrediction').onclick = () => {
+      cleanup();
+      resolve({ skip: true });
+    };
+  });
+}
+
+// Verify prediction after 60 seconds
+async function verifyPrediction(prediction, startPrice, timestamp, modal, cleanup, resolve) {
+  try {
+    // Fetch new price
+    const priceData = await fetchCeloPrice();
+    const newPrice = priceData.price;
+    
+    // Verify with backend
+    const response = await fetch('/api/prediction', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'verify',
+        userAddress,
+        timestamp,
+        newPrice
+      })
+    });
+    
+    const result = await response.json();
+    
+    // Show result
+    const content = modal.querySelector('.prediction-content');
+    const isCorrect = result.correct;
+    const priceChange = parseFloat(result.priceChange);
+    
+    content.innerHTML = `
+      <div class="prediction-result ${isCorrect ? 'result-correct' : 'result-wrong'}">
+        <div class="result-icon">${isCorrect ? '✅' : '❌'}</div>
+        <div class="result-text">${isCorrect ? 'CORRECT!' : 'WRONG!'}</div>
+        <div class="result-details">
+          ${prediction.toUpperCase()}: $${startPrice.toFixed(4)} → $${newPrice.toFixed(4)}
+          <br>
+          <span style="color: ${priceChange > 0 ? '#10b981' : '#ef4444'};">
+            ${priceChange > 0 ? '+' : ''}${priceChange} (${result.priceChangePercent}%)
+          </span>
+        </div>
+      </div>
+      
+      <div class="prediction-info">
+        <div class="info-item">
+          <span class="info-label">Airdrop Multiplier:</span>
+          <span class="info-value" style="color: ${isCorrect ? '#10b981' : '#ef4444'};">
+            ${result.multiplier}x
+          </span>
+        </div>
+        ${result.stats ? `
+          <div class="info-item">
+            <span class="info-label">Win Rate:</span>
+            <span class="info-value">${result.stats.winRate}%</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">Current Streak:</span>
+            <span class="info-value">${result.stats.currentStreak}</span>
+          </div>
+        ` : ''}
+      </div>
+      
+      <button class="action-button" id="continueBtn" style="width: 100%; margin-top: 20px;">
+        ${isCorrect ? '🎉 Claim 2x Airdrop!' : '😔 Continue to Mint'}
+      </button>
+    `;
+    
+    document.getElementById('continueBtn').onclick = () => {
+      cleanup();
+      resolve({
+        skip: false,
+        prediction,
+        multiplier: result.multiplier,
+        correct: isCorrect,
+        timestamp,
+        startPrice,
+        endPrice: newPrice
+      });
+    };
+    
+  } catch (error) {
+    console.error('Verification error:', error);
+    setStatus('Prediction verification failed', 'error');
+    cleanup();
+    resolve({ skip: true });
+  }
+}
+
 // ⭐ AIRDROP CLAIMING FUNCTION ⭐
-async function claimAirdrop(tokenId, txHash) {
+async function claimAirdrop(tokenId, txHash, predictionMultiplier = 1) {
   try {
     setStatus('Calculating your airdrop bonus...', 'info');
     
@@ -474,7 +748,8 @@ async function claimAirdrop(tokenId, txHash) {
       body: JSON.stringify({
         tokenId: tokenId,
         userAddress: userAddress,
-        mintTxHash: txHash
+        mintTxHash: txHash,
+        predictionMultiplier: predictionMultiplier
       })
     });
     
@@ -1526,7 +1801,7 @@ connectBtn.addEventListener('click', async () => {
   }
 });
 
-// ⭐ MINT BUTTON WITH AUTOMATIC AIRDROP ⭐
+// ⭐ MINT BUTTON WITH PREDICTION GAME & AUTOMATIC AIRDROP ⭐
 mintBtn.addEventListener('click', async () => {
   try {
     if (!contractDetails) {
@@ -1548,6 +1823,12 @@ mintBtn.addEventListener('click', async () => {
       return;
     }
     
+    // 🎯 STEP 1: SHOW PREDICTION MODAL
+    setStatus('Ready to predict? 📈', 'info');
+    const predictionResult = await showPredictionModal();
+    
+    console.log('Prediction result:', predictionResult);
+    
     statusBox.innerHTML = '';
     statusBox.className = 'status-box';
 
@@ -1564,7 +1845,9 @@ mintBtn.addEventListener('click', async () => {
 
     const { address, abi } = contractDetails;
 
-    const price = await fetchCeloPrice();
+    // 🎲 STEP 2: MINT NFT
+    const priceData = await fetchCeloPrice();
+    const price = priceData.price;
     const priceForContract = Math.floor(price * 10000);
 
     const hash = await writeContract(wagmiConfig, {
@@ -1641,9 +1924,17 @@ mintBtn.addEventListener('click', async () => {
       }
     }
 
-    // ⭐ AUTOMATIC AIRDROP CLAIM ⭐
+    // 🎯 STEP 3: CLAIM AIRDROP WITH PREDICTION MULTIPLIER
     setTimeout(async () => {
-      await claimAirdrop(actualTokenId, hash);
+      const multiplier = predictionResult.skip ? 1 : (predictionResult.multiplier || 1);
+      
+      if (!predictionResult.skip && predictionResult.correct) {
+        setStatus('🎯 Correct prediction! Claiming 2x airdrop...', 'success');
+      } else if (!predictionResult.skip && !predictionResult.correct) {
+        setStatus('🎲 Wrong prediction. Claiming 0.5x consolation airdrop...', 'info');
+      }
+      
+      await claimAirdrop(actualTokenId, hash, multiplier);
     }, 2000);
 
   } catch (e) {
