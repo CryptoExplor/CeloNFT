@@ -468,12 +468,25 @@ async function getTokenIdFromReceipt(receipt) {
 
 // Show prediction result popup after airdrop
 function showPredictionResultPopup(verifyResult, airdropResult) {
-  const isCorrect = verifyResult.correct;
+  console.log('showPredictionResultPopup called with:', { verifyResult, airdropResult });
+  
+  // Validate required data
+  if (!verifyResult || !airdropResult) {
+    console.error('Missing required data for popup:', { verifyResult, airdropResult });
+    return;
+  }
+  
+  const isCorrect = verifyResult.correct || false;
   const priceChange = parseFloat(verifyResult.priceChange || 0);
   const multiplier = verifyResult.multiplier || 1;
   const airdropAmount = airdropResult.amount || '0';
   
-  console.log('Creating popup with:', { verifyResult, airdropResult });
+  const startPrice = parseFloat(verifyResult.startPrice) || 0;
+  const endPrice = parseFloat(verifyResult.endPrice) || 0;
+  const prediction = verifyResult.prediction || 'unknown';
+  const priceChangePercent = verifyResult.priceChangePercent || '0';
+  
+  console.log('Popup data parsed:', { isCorrect, priceChange, multiplier, airdropAmount, startPrice, endPrice, prediction, priceChangePercent });
   
   const modal = document.createElement('div');
   modal.className = 'prediction-result-modal';
@@ -505,11 +518,6 @@ function showPredictionResultPopup(verifyResult, airdropResult) {
     max-height: 90vh;
     overflow-y: auto;
   `;
-  
-  const startPrice = verifyResult.startPrice || 0;
-  const endPrice = verifyResult.endPrice || 0;
-  const prediction = verifyResult.prediction || 'unknown';
-  const priceChangePercent = verifyResult.priceChangePercent || '0';
   
   // Check if there are any bonuses
   const hasLucky = airdropResult.luckyMultiplier && airdropResult.luckyMultiplier > 1;
@@ -2141,6 +2149,8 @@ mintBtn.addEventListener('click', async () => {
           
           // Verify prediction with backend
           const priceData = await fetchCeloPrice();
+          console.log('Current price for verification:', priceData.price);
+          
           const verifyResponse = await fetch('/api/prediction', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -2152,7 +2162,17 @@ mintBtn.addEventListener('click', async () => {
             })
           });
           
+          if (!verifyResponse.ok) {
+            throw new Error(`Verification failed: ${verifyResponse.status}`);
+          }
+          
           const verifyResult = await verifyResponse.json();
+          
+          // Ensure all required fields exist
+          if (!verifyResult.success) {
+            throw new Error(verifyResult.error || 'Verification failed');
+          }
+          
           const multiplier = verifyResult.multiplier || 1;
           
           console.log('Prediction verification result:', verifyResult);
