@@ -1286,9 +1286,11 @@ async function downloadSVGFile() {
         setStatus('SVG downloaded!', 'success');
         return;
       } catch (e) {
-        if (e.name !== 'AbortError') {
-          console.log('File picker failed, using fallback:', e);
+        if (e.name === 'AbortError') {
+          // User cancelled - silently return without error
+          return;
         }
+        console.log('File picker failed, using fallback:', e);
       }
     }
     
@@ -1359,7 +1361,10 @@ async function downloadPNGFile() {
                 resolve();
                 return;
               } catch (e) {
-                if (e.name !== 'AbortError') {
+                if (e.name === 'AbortError') {
+                  // User cancelled - just use fallback
+                  // Don't return, let it continue to fallback download
+                } else {
                   console.log('File picker failed, using fallback:', e);
                 }
               }
@@ -1964,6 +1969,14 @@ watchAccount(wagmiConfig, {
 
         } else if (!account.isConnected && userAddress) {
           console.log('Wallet disconnected');
+          
+          // Clean up intervals to prevent memory leaks
+          stopRecentMintsPolling();
+          if (leaderboardInterval) {
+            clearInterval(leaderboardInterval);
+            leaderboardInterval = null;
+          }
+          
           userAddress = null;
           userAddrBox.classList.add('hidden');
           showConnectButton();
@@ -2163,6 +2176,9 @@ mintBtn.addEventListener('click', async () => {
       const remainingSeconds = Math.ceil(predictionResult.timeLeft / 1000);
       setStatus(`⏳ Waiting for price verification... (${remainingSeconds}s remaining)`, 'info');
       
+      // Fix race condition: ensure minimum delay of 1 second
+      const safeDelay = Math.max(predictionResult.timeLeft || 0, 1000);
+      
       // Schedule airdrop after remaining time
       setTimeout(async () => {
         try {
@@ -2261,6 +2277,12 @@ mintBtn.addEventListener('click', async () => {
           
           console.log('Airdrop result:', airdropResult);
           
+          // Add validation before showing popup
+          if (!verifyResult || !airdropResult) {
+            console.error('Missing required data for popup:', { verifyResult, airdropResult });
+            return; // Early exit
+          }
+          
           // Show prediction result popup after airdrop is sent
           if (airdropResult && verifyResult) {
             console.log('Showing prediction result popup...');
@@ -2277,7 +2299,7 @@ mintBtn.addEventListener('click', async () => {
           setStatus('⚠️ Verification failed. Sending standard airdrop...', 'warning');
           await claimAirdrop(actualTokenId, hash, 1);
         }
-      }, predictionResult.timeLeft || 2000);
+      }, safeDelay);
     }
 
   } catch (e) {
@@ -2503,7 +2525,7 @@ window.addEventListener('beforeunload', () => {
 // ===== LEADERBOARD SYSTEM =====
 let leaderboardCache = null;
 let leaderboardLastFetch = 0;
-const LEADERBOARD_CACHE_TTL = 60000; // 1 minute
+const LEADERBOARD_CACHE_TTL = 120000; // 2 minutes (matches polling interval)
 
 async function fetchLeaderboard() {
   try {
@@ -2520,8 +2542,8 @@ async function fetchLeaderboard() {
     
     console.log('Fetching leaderboard data from Celoscan API...');
     
-    // Use Celoscan API to get all NFT transfers
-    const apiUrl = `https://api.celoscan.io/api?module=account&action=tokennfttx&contractaddress=${contractDetails.address}&page=1&offset=10000&sort=desc&apikey=X83R8MW5FKH3VM4DR5DY659VZRSTCGHYI5`;
+    // Use Celoscan API proxy to get all NFT transfers (keeps API key secure)
+    const apiUrl = `/api/celoscan?module=account&action=tokennfttx&contractaddress=${contractDetails.address}&page=1&offset=10000&sort=desc`;
     
     try {
       const response = await fetch(apiUrl);
@@ -2827,7 +2849,8 @@ async function updateWalletBalance() {
     // Get CELO price if not already fetched
     if (celoPrice === 0) {
       try {
-        celoPrice = await fetchCeloPrice();
+        const priceData = await fetchCeloPrice();
+        celoPrice = priceData.price; // Extract price from object
       } catch (e) {
         console.log('Could not fetch CELO price for USD conversion');
       }
