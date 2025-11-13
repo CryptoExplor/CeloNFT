@@ -12,6 +12,11 @@ try {
   console.log('✅ Vercel KV enabled');
 } catch (e) {
   console.log('⚠️ Vercel KV not available, using in-memory storage (predictions will be lost on restart)');
+  console.log('⚠️ For production use, please configure Vercel KV environment variables:');
+  console.log('   - KV_URL');
+  console.log('   - KV_REST_API_URL');
+  console.log('   - KV_REST_API_TOKEN');
+  console.log('   - KV_REST_API_READ_ONLY_TOKEN');
   useKV = false;
 }
 

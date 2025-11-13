@@ -267,8 +267,10 @@ async function sendAirdrop(recipientAddress, tokenId, predictionMultiplier = 1) 
   try {
     // Initialize wallet from private key (stored in env)
     const privateKey = process.env.AIRDROP_WALLET_PRIVATE_KEY;
-    if (!privateKey) {
-      throw new Error('Airdrop wallet not configured');
+    
+    // Validate private key configuration
+    if (!privateKey || privateKey === '0x...your_private_key_here...') {
+      throw new Error('AIRDROP_WALLET_PRIVATE_KEY not configured properly. Please set it in environment variables.');
     }
     
     const account = privateKeyToAccount(privateKey);
