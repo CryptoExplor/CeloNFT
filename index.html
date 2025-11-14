@@ -748,7 +748,7 @@
     /* Wallet Balance Box */
     .wallet-balance-box {
       background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
-      padding: 16px;
+      padding: 12px 16px;
       border-radius: 12px;
       width: 90%;
       max-width: 390px;
@@ -761,19 +761,27 @@
     .balance-label {
       font-size: 0.9rem;
       color: #9ca3af;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
+    }
+
+    .balance-content {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.9rem;
+      color: #49dfb5;
+      font-family: 'Orbitron', sans-serif;
     }
 
     .balance-amount {
-      font-size: 2rem;
       font-weight: bold;
+      margin: 0;
       color: #49dfb5;
-      font-family: 'Orbitron', sans-serif;
-      margin-bottom: 4px;
     }
 
     .balance-usd {
-      font-size: 1rem;
+      margin: 0;
       color: #6ee7b7;
     }
     
@@ -1538,8 +1546,10 @@
   <!-- Wallet Balance Display -->
   <div id="walletBalanceBox" class="wallet-balance-box hidden">
     <div class="balance-label">💰 Wallet Balance</div>
-    <div class="balance-amount" id="celoBalance">-- CELO</div>
-    <div class="balance-usd" id="celoBalanceUSD">$--</div>
+    <div class="balance-content">
+      <div class="balance-amount" id="celoBalance">-- CELO</div>
+      <div class="balance-usd" id="celoBalanceUSD">$--</div>
+    </div>
   </div>
 
   <!-- User Address -->
