@@ -1,66 +1,70 @@
-// Celoscan API Proxy
-// Keeps API key secure on backend
-
-const API_KEY = process.env.CELOSCAN_API_KEY || 'X83R8MW5FKH3VM4DR5DY659VZRSTCGHYI5';
-const BASE_URL = 'https://api.celoscan.io/api';
-
-export default async function handler(req, res) {
-  // CORS headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-  
-  if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-  
-  try {
-    const { module, action, contractaddress, page, offset, sort } = req.query;
+// api/celoscan.js - Proxy endpoint for Celoscan API
+export default {
+  async fetch(request, env) {
+    // Get the URL parameters
+    const url = new URL(request.url);
+    const queryParams = url.searchParams;
     
-    // Validate required params
-    if (!module || !action) {
-      return res.status(400).json({
-        error: 'Missing required parameters: module, action'
+    // Get the API key from environment variables
+    const apiKey = env.CELOSCAN_API_KEY;
+    
+    if (!apiKey) {
+      return new Response(
+        JSON.stringify({ error: 'API key not configured' }),
+        {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' }
+        }
+      );
+    }
+    
+    // Build the Celoscan API URL
+    const celoscanBaseUrl = 'https://api.celoscan.io/api';
+    const celoscanUrl = new URL(celoscanBaseUrl);
+    
+    // Copy all query parameters to the Celoscan URL
+    for (const [key, value] of queryParams.entries()) {
+      celoscanUrl.searchParams.append(key, value);
+    }
+    
+    // Add the API key
+    celoscanUrl.searchParams.append('apikey', apiKey);
+    
+    try {
+      // Make the request to Celoscan API
+      const response = await fetch(celoscanUrl.toString());
+      
+      // Clone the response to avoid issues with reading the body twice
+      const responseBody = await response.text();
+      
+      // Return the response with appropriate CORS headers
+      return new Response(responseBody, {
+        status: response.status,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type',
+        }
       });
+    } catch (error) {
+      return new Response(
+        JSON.stringify({ error: 'Failed to fetch from Celoscan API', details: error.message }),
+        {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' }
+        }
+      );
     }
-    
-    // Build API URL
-    const params = new URLSearchParams({
-      module,
-      action,
-      apikey: API_KEY
-    });
-    
-    // Add optional params
-    if (contractaddress) params.append('contractaddress', contractaddress);
-    if (page) params.append('page', page);
-    if (offset) params.append('offset', offset);
-    if (sort) params.append('sort', sort);
-    
-    const apiUrl = `${BASE_URL}?${params.toString()}`;
-    
-    console.log('Proxying Celoscan API request:', { module, action, contractaddress });
-    
-    // Fetch from Celoscan
-    const response = await fetch(apiUrl);
-    const data = await response.json();
-    
-    if (!response.ok) {
-      throw new Error(`Celoscan API error: ${response.status}`);
-    }
-    
-    // Return the data
-    return res.status(200).json(data);
-    
-  } catch (error) {
-    console.error('Celoscan proxy error:', error);
-    return res.status(500).json({
-      error: 'Failed to fetch from Celoscan',
-      message: error.message
+  },
+  
+  async options() {
+    return new Response(null, {
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type',
+      }
     });
   }
-}
+};
