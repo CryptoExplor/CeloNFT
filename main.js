@@ -562,7 +562,8 @@ async function handleMint() {
         try {
           setStatus('🔍 Verifying...', 'info');
           const verifyResult = await predictionManager.verifyPrediction(
-            account.address, predictionResult.timestamp,
+            account.address,
+            predictionResult,
             apiClient.fetchCeloPrice.bind(apiClient)
           );
 
@@ -739,11 +740,37 @@ function showTransactionLinks(tokenId, txHash) {
   txLinksContainer.classList.remove('hidden');
 }
 
+// Track last preview details for Farcaster casts (mirrors main.old.js behavior)
+let lastCastInfo = { tokenId: null, rarityText: null, priceText: null };
+
 // Handle cast
 window.handleCastClick = async function(tokenId) {
   try {
-    const text = `Just minted CeloNFT #${tokenId}! 🎨\n\nMint yours at celo-nft-phi.vercel.app`;
-    await createCast(text, `https://celo-nft-phi.vercel.app/?token=${tokenId}`, isFarcasterEnvironment, setStatus);
+    // Prefer detailed info from the last preview
+    const useDetails = lastCastInfo.tokenId === tokenId;
+    const rarityText = useDetails && lastCastInfo.rarityText ? lastCastInfo.rarityText : 'NFT';
+    const priceText = useDetails && lastCastInfo.priceText ? lastCastInfo.priceText : null;
+
+    let text;
+    if (lastAirdropAmount) {
+      const airdropFormatted = parseFloat(lastAirdropAmount).toFixed(4);
+      if (priceText) {
+        text = `I just minted CELO NFT #${tokenId} (${rarityText}) at $${priceText} and received ${airdropFormatted} CELO airdrop! 🎨✨💰\n\nMint yours now:`;
+      } else {
+        text = `I just minted CELO NFT #${tokenId} and received ${airdropFormatted} CELO airdrop! 🎨✨💰\n\nMint yours now:`;
+      }
+    } else if (priceText) {
+      text = `I just minted CELO NFT #${tokenId} (${rarityText}) at $${priceText}! 🎨✨\n\nMint yours now:`;
+    } else {
+      text = `I just minted CELO NFT #${tokenId}! 🎨✨\n\nMint yours now:`;
+    }
+
+    await createCast(
+      text,
+      `${MINIAPP_URL}`,
+      isFarcasterEnvironment,
+      setStatus
+    );
   } catch (error) {
     console.error('Cast failed:', error);
   }
@@ -809,6 +836,13 @@ async function previewNft(tokenId, showContainer = false) {
       const priceText = (traits.priceSnapshot / 10000).toFixed(4);
       const rarityText = rarity.charAt(0).toUpperCase() + rarity.slice(1);
       previewBtn.innerText = `Preview NFT #${tokenId} (${rarityText} / ${priceText})`;
+
+      // Store details for Farcaster cast text (mirrors main.old.js behavior)
+      lastCastInfo = {
+        tokenId,
+        rarityText,
+        priceText,
+      };
     }
     
     setStatus(`NFT #${tokenId} loaded!`, 'success');
