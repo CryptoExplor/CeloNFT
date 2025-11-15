@@ -1,22 +1,22 @@
 // Price Prediction Game API with Vercel KV (Redis) support
 // Falls back to in-memory storage if KV is not available
 
+import { kv as vercelKv } from '@vercel/kv';
+
 let kv = null;
 let useKV = false;
 
-// Try to import Vercel KV
+// Configure Vercel KV usage (static import + env guard)
 try {
-  const kvModule = await import('@vercel/kv');
-  kv = kvModule.kv;
-  useKV = true;
-  console.log('✅ Vercel KV enabled');
+  if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
+    kv = vercelKv;
+    useKV = true;
+    console.log('✅ Vercel KV enabled');
+  } else {
+    console.log('⚠️ KV env vars missing, using in-memory storage (predictions will be lost on restart)');
+  }
 } catch (e) {
-  console.log('⚠️ Vercel KV not available, using in-memory storage (predictions will be lost on restart)');
-  console.log('⚠️ For production use, please configure Vercel KV environment variables:');
-  console.log('   - KV_URL');
-  console.log('   - KV_REST_API_URL');
-  console.log('   - KV_REST_API_TOKEN');
-  console.log('   - KV_REST_API_READ_ONLY_TOKEN');
+  console.log('⚠️ Vercel KV not available, using in-memory storage');
   useKV = false;
 }
 
