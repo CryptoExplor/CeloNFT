@@ -144,7 +144,7 @@
       transform: scale(0.98);
     }
     
-    /* Enhanced External Banner */
+    /* Enhanced External Banner - FIXED */
     .external-banner-link {
       background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
       padding: 14px 20px;
@@ -152,7 +152,7 @@
       margin-bottom: 16px;
       width: 90%;
       max-width: 390px;
-      display: none; /* Hidden by default */
+      display: flex !important; /* Changed from none */
       align-items: center;
       justify-content: center;
       gap: 10px;
@@ -166,11 +166,17 @@
       cursor: pointer;
       position: relative;
       overflow: hidden;
+      visibility: hidden; /* Use visibility instead */
     }
     
-    /* Show class - IMPORTANT! */
+    /* Show class */
     .external-banner-link.show {
-      display: flex !important;
+      visibility: visible !important;
+    }
+    
+    /* Hidden class */
+    .external-banner-link.hidden {
+      visibility: hidden !important;
     }
     
     /* Shine effect */
@@ -1716,6 +1722,6 @@
     </a>
   </footer>
   
-  <script type="module" src="/lib/main.js"></script>
+  <script type="module" src="/main.js"></script>
 </body>
 </html>
