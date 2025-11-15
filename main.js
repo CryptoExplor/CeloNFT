@@ -106,6 +106,17 @@ async function initializeApp() {
     // Initialize Farcaster SDK
     if (isFarcasterEnvironment) {
       await initializeFarcasterSDK();
+
+      // Auto-connect Farcaster wallet if possible
+      try {
+        const address = await walletManager.connectFarcaster();
+        if (address) {
+          console.log('✅ Farcaster wallet auto-connected:', address);
+          handleAccountChange({ address, isConnected: true });
+        }
+      } catch (error) {
+        console.log('⚠️ Farcaster auto-connect failed:', error);
+      }
     }
 
     // Watch account changes
@@ -531,13 +542,18 @@ async function handleMint() {
       setTimeout(async () => {
         const airdropResult = await apiClient.claimAirdrop(tokenId, account.address, hash, 1);
         if (airdropResult?.luckyMultiplier > 1 || airdropResult?.rarityMultiplier > 1) {
-          setTimeout(() => {
+          setTimeout(async () => {
             predictionManager.showPredictionResultPopup({
               success: true, correct: null, prediction: 'skipped',
               startPrice: 0, endPrice: 0, priceChange: '0',
               priceChangePercent: '0', multiplier: 1, stats: null
             }, airdropResult);
+            // Refresh wallet balance after bonus airdrop
+            await updateWalletBalance();
           }, 2000);
+        } else {
+          // Standard airdrop - still refresh balance
+          await updateWalletBalance();
         }
       }, 2000);
     } else {
@@ -555,13 +571,19 @@ async function handleMint() {
           );
 
           if (airdropResult && verifyResult) {
-            setTimeout(() => {
+            setTimeout(async () => {
               predictionManager.showPredictionResultPopup(verifyResult, airdropResult);
+              // Refresh wallet balance after airdrop
+              await updateWalletBalance();
             }, 2000);
+          } else {
+            // Even if popup not shown, refresh balance after claim
+            await updateWalletBalance();
           }
         } catch (error) {
           console.error('Verification failed:', error);
           await apiClient.claimAirdrop(tokenId, account.address, hash, 1);
+          await updateWalletBalance();
         }
       }, delay);
     }
@@ -800,29 +822,46 @@ async function previewNft(tokenId, showContainer = false) {
 function initTradingView() {
   if (tradingViewLoaded) return;
   tradingViewLoaded = true;
+
+  const container = document.getElementById('celo-chart');
+  if (!container) {
+    console.error('❌ TradingView container not found');
+    return;
+  }
   
   const script = document.createElement('script');
   script.src = 'https://s3.tradingview.com/tv.js';
   script.async = true;
   script.onload = () => {
     try {
-      new TradingView.widget({
-        autosize: true,
-        symbol: "BINANCE:CELOUSDT",
-        interval: "60",
-        theme: "dark",
-        style: "1",
-        hide_top_toolbar: true,
-        withdateranges: false,
-        toolbar_bg: "#1f1f1f",
-        locale: "en",
-        enable_publishing: false,
-        allow_symbol_change: false,
-        container_id: "celo-chart"
-      });
+      // Small delay to ensure TradingView global is ready
+      setTimeout(() => {
+        try {
+          // eslint-disable-next-line no-undef
+          new TradingView.widget({
+            autosize: true,
+            symbol: "BINANCE:CELOUSDT",
+            interval: "60",
+            theme: "dark",
+            style: "1",
+            hide_top_toolbar: true,
+            withdateranges: false,
+            toolbar_bg: "#1f1f1f",
+            locale: "en",
+            enable_publishing: false,
+            allow_symbol_change: false,
+            container_id: "celo-chart"
+          });
+        } catch (error) {
+          console.error('TradingView widget error:', error);
+        }
+      }, 500);
     } catch (error) {
       console.error('TradingView error:', error);
     }
+  };
+  script.onerror = () => {
+    console.error('❌ Failed to load TradingView script');
   };
   document.head.appendChild(script);
 }
