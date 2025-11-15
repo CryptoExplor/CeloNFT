@@ -1,29 +1,28 @@
-/**
- * Main Application Entry Point - FINAL FIXED VERSION
- * ✅ Banner detection and display FIXED
- * ✅ All critical issues resolved
- */
-
 // Buffer polyfill for WalletConnect
 import { Buffer } from 'buffer';
 window.Buffer = Buffer;
 window.global = window.global || window;
 window.process = window.process || { env: {} };
 
-import { WalletManager, safeLocalStorage } from './lib/wallet.js';
-import { MintingManager, celebrateMint, getImprovedErrorMessage, getTokenIdFromReceipt, loadLastMintedNFT, saveMintToHistory as saveMintToHistoryHelper } from './lib/minting.js';
-import { PredictionManager } from './lib/predictions.js';
-import { GalleryManager } from './lib/gallery.js';
-import { AchievementsManager } from './lib/achievements.js';
-import { apiClient } from './lib/api-client.js';
-import { isFarcasterEmbed, initializeFarcasterSDK, createCast, promptAddMiniApp } from './lib/farcaster.js';
-import { getTimeAgo, animateCounter, sanitizeSVG, adjustInjectedSvg, setStatus } from './lib/utils.js';
-import DownloadManager from './lib/downloads.js';
-import TabManager from './lib/tabs.js';
-import FeedManager from './lib/feeds.js';
-import GiftManager from './lib/gift.js';
+import { sdk } from '@farcaster/miniapp-sdk';
+import {
+  createConfig,
+  connect,
+  getAccount,
+  watchAccount,
+  writeContract,
+  readContract,
+  waitForTransactionReceipt,
+  http
+} from '@wagmi/core';
+import { celo } from '@wagmi/core/chains';
+import { farcasterMiniApp } from '@farcaster/miniapp-wagmi-connector';
+import { createAppKit } from '@reown/appkit';
+import { WagmiAdapter } from '@reown/appkit-adapter-wagmi';
+import confetti from 'canvas-confetti';
 
 // Configuration
+const MAX_SUPPLY_FUNCTION_NAME = 'maxSupply';
 const PROJECT_ID = 'e0dd881bad824ac3418617434a79f917';
 const MINIAPP_URL = 'https://farcaster.xyz/miniapps/Tip8ngTAKnHC/celo-nft';
 
@@ -38,491 +37,1990 @@ const externalBanner = document.getElementById('externalBanner');
 const externalBannerText = document.getElementById('externalBannerText');
 const txLinksContainer = document.getElementById('txLinksContainer');
 const nftActions = document.getElementById('nftActions');
+const downloadSVG = document.getElementById('downloadSVG');
+const downloadGIF = document.getElementById('downloadGIF');
+const giftBtn = document.getElementById('giftBtn');
 const totalMintedStat = document.getElementById('totalMintedStat');
 const yourMintsStat = document.getElementById('yourMintsStat');
 const remainingStat = document.getElementById('remainingStat');
+const ALL_RARITY_CLASSES = ["common", "rare", "legendary", "mythic"];
 
-// Global state
-let walletManager = null;
-let mintingManager = null;
-let predictionManager = null;
-let galleryManager = null;
-let achievementsManager = null;
-let downloadManager = null;
-let tabManager = null;
-let feedManager = null;
-let giftManager = null;
-let contractDetails = null;
-let isFarcasterEnvironment = false;
+let MAX_SUPPLY = 0;
 let lastMintedTokenId = null;
-let lastAirdropAmount = null;
+let contractAddress = null;
+let mintPriceWei = 0n;
+let userAddress = null;
+let contractDetails = null;
+let modal = null;
+let isFarcasterEnvironment = false;
+let wagmiConfig = null;
 let userMintCount = 0;
 let currentNFTData = null;
-let tradingViewLoaded = false;
 let accountChangeTimeout = null;
+let tradingViewLoaded = false;
+let lastAirdropAmount = null; // Store last airdrop amount for cast
 
-// Initialize application
-async function initializeApp() {
+// Safe LocalStorage wrapper
+const safeLocalStorage = {
+  setItem: (key, value) => {
+    try {
+      localStorage.setItem(key, value);
+      return true;
+    } catch (e) {
+      console.warn('Failed to save to localStorage:', e);
+      return false;
+    }
+  },
+  getItem: (key) => {
+    try {
+      return localStorage.getItem(key);
+    } catch (e) {
+      console.warn('Failed to read from localStorage:', e);
+      return null;
+    }
+  },
+  removeItem: (key) => {
+    try {
+      localStorage.removeItem(key);
+      return true;
+    } catch (e) {
+      console.warn('Failed to remove from localStorage:', e);
+      return false;
+    }
+  }
+};
+
+// Improved Farcaster detection with timeout
+async function isFarcasterEmbed() {
+  return Promise.race([
+    (async () => {
+      const isIframe = window.self !== window.top;
+      const hasSDK = typeof sdk !== 'undefined';
+      
+      if (!isIframe || !hasSDK) return false;
+      
+      await new Promise(resolve => setTimeout(resolve, 100));
+      const isSdkReady = sdk.context !== undefined && sdk.context !== null;
+      
+      const checks = {
+        isIframe,
+        hasSDK,
+        isSdkReady,
+        hasValidContext: hasSDK && sdk.context?.user?.fid !== undefined
+      };
+
+      console.log('Farcaster Detection Checks:', checks);
+      
+      return isIframe && hasSDK && isSdkReady;
+    })(),
+    new Promise(resolve => setTimeout(() => resolve(false), 500))
+  ]);
+}
+
+// Helper Functions
+function celebrateMint() {
+  confetti({
+    particleCount: 100,
+    spread: 70,
+    origin: { y: 0.6 },
+    colors: ['#49dfb5', '#7dd3fc', '#fcd34d']
+  });
+  
+  setTimeout(() => {
+    confetti({
+      particleCount: 50,
+      angle: 60,
+      spread: 55,
+      origin: { x: 0 },
+      colors: ['#49dfb5', '#7dd3fc']
+    });
+    confetti({
+      particleCount: 50,
+      angle: 120,
+      spread: 55,
+      origin: { x: 1 },
+      colors: ['#fcd34d', '#f97316']
+    });
+  }, 200);
+}
+
+function animateCounter(element, start, end, duration = 1000) {
+  if (!element) return;
+  const range = end - start;
+  const increment = range / (duration / 16);
+  let current = start;
+  
+  const timer = setInterval(() => {
+    current += increment;
+    if ((increment > 0 && current >= end) || (increment < 0 && current <= end)) {
+      element.textContent = end;
+      clearInterval(timer);
+    } else {
+      element.textContent = Math.floor(current);
+    }
+  }, 16);
+}
+
+function setStatus(msg, type = 'info') {
+  statusBox.innerHTML = '';
+  let icon = '';
+  if (type === 'success') icon = '✅ ';
+  else if (type === 'error') icon = '❌ ';
+  else if (type === 'warning') icon = '⚠️ ';
+  else if (type === 'info') icon = 'ℹ️ ';
+  
+  statusBox.className = `status-box status-${type}`;
+  statusBox.insertAdjacentText('afterbegin', icon + msg);
+}
+
+function getImprovedErrorMessage(error) {
+  const msg = error.message || error.shortMessage || '';
+  
+  if (msg.includes('insufficient funds') || msg.includes('insufficient balance')) {
+    return 'Not enough CELO in your wallet. Please add funds and try again.';
+  } else if (msg.includes('gas')) {
+    return 'Transaction failed due to gas issues. Try increasing your gas limit.';
+  } else if (msg.includes('User rejected') || msg.includes('user rejected')) {
+    return 'Transaction was rejected in your wallet.';
+  } else if (msg.includes('network') || msg.includes('Network')) {
+    return 'Network connection issue. Please check your connection and try again.';
+  } else if (msg.includes('nonce')) {
+    return 'Transaction ordering issue. Please try again in a moment.';
+  } else if (msg.includes('already minted') || msg.includes('already claimed')) {
+    return 'You have already minted this NFT.';
+  } else if (msg.includes('Invalid parameters') || msg.includes('RPC')) {
+    return 'Connection error. Please reload/refresh and try again.';
+  } else if (error.shortMessage) {
+    return error.shortMessage;
+  }
+  
+  return 'Mint failed. Please try again or contact support if the issue persists.';
+}
+
+function showAddress(addr) {
+  const shortAddr = `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+  userAddrBox.innerHTML = `<span style="cursor: pointer;" title="Click to change wallet">Your address: ${shortAddr}</span>`;
+  userAddrBox.classList.remove('hidden');
+  connectBtn.classList.add('hidden');
+  mintBtn.classList.remove('hidden');
+  
+  userAddrBox.onclick = () => {
+    if (modal) {
+      modal.open();
+    }
+  };
+}
+
+function showConnectButton() {
+  connectBtn.classList.remove('hidden');
+  mintBtn.classList.add('hidden');
+  userAddrBox.classList.add('hidden');
+}
+
+async function fetchCeloPrice() {
   try {
-    console.log('🚀 Initializing CeloNFT App...');
+    const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=celo&vs_currencies=usd&include_24hr_change=true');
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    const data = await response.json();
+    if (!data || !data.celo || !data.celo.usd) {
+      throw new Error("Invalid response structure from CoinGecko.");
+    }
+    return {
+      price: data.celo.usd,
+      change24h: data.celo.usd_24h_change || 0
+    };
+  } catch (e) {
+    console.error("Failed to fetch CELO price:", e);
+    throw new Error("Failed to fetch CELO price. Please try again.");
+  }
+}
+
+// Enhanced SVG sanitization
+function sanitizeSVG(svgString) {
+  return svgString
+    .replace(/<script.*?>.*?<\/script>/gi, '')
+    .replace(/<iframe.*?>.*?<\/iframe>/gi, '')
+    .replace(/on\w+\s*=\s*["'][^"']*["']/gi, '')
+    .replace(/javascript:/gi, '')
+    .replace(/data:text\/html/gi, '');
+}
+
+function adjustInjectedSvg(container) {
+  const svg = container.querySelector('svg');
+  if (svg) {
+    if (!svg.hasAttribute('viewBox')) {
+      const w = svg.getAttribute('width');
+      const h = svg.getAttribute('height');
+      if (w && h) {
+        const W = parseFloat(w);
+        const H = parseFloat(h);
+        if (!isNaN(W) && !isNaN(H) && W > 0 && H > 0) {
+          svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+        }
+      }
+    }
+    svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+    svg.removeAttribute('width');
+    svg.removeAttribute('height');
+    svg.style.width = '100%';
+    svg.style.height = 'auto';
+    svg.style.maxHeight = '60vh';
+    svg.style.display = 'block';
+  } else {
+    const img = container.querySelector('img');
+    if (img) {
+      img.style.width = '100%';
+      img.style.height = 'auto';
+      img.style.maxHeight = '60vh';
+      img.style.display = 'block';
+    }
+  }
+  container.style.maxHeight = '60vh';
+}
+
+async function updateSupply(initialLoad = false) {
+  try {
+    if (!contractDetails) return 0;
+
+    const total = await readContract(wagmiConfig, {
+      address: contractDetails.address,
+      abi: contractDetails.abi,
+      functionName: 'totalSupply'
+    });
+
+    const totalNumber = Number(total);
+
+    if (totalMintedStat) {
+      const current = parseInt(totalMintedStat.textContent) || 0;
+      if (current !== totalNumber) {
+        animateCounter(totalMintedStat, current, totalNumber, 800);
+      }
+    }
     
-    // ✅ FIX: Detect Farcaster environment FIRST (before anything else)
-    isFarcasterEnvironment = await isFarcasterEmbed();
-    console.log('🔍 Farcaster environment detected:', isFarcasterEnvironment);
+    if (remainingStat && MAX_SUPPLY > 0) {
+      const remaining = MAX_SUPPLY - totalNumber;
+      remainingStat.textContent = remaining > 0 ? remaining : '0';
+    } else if (remainingStat) {
+      remainingStat.textContent = '∞';
+    }
+
+    if (MAX_SUPPLY > 0 && totalNumber >= MAX_SUPPLY) {
+      mintBtn.disabled = true;
+      mintBtn.innerText = "SOLD OUT";
+      mintBtn.title = "The maximum supply has been reached.";
+      
+      if (!initialLoad) {
+        setStatus(`All ${MAX_SUPPLY} NFTs have been minted!`, "warning");
+      }
+    } else if (!initialLoad && mintBtn.innerText !== "SOLD OUT") {
+      mintBtn.disabled = false;
+      const celoPrice = Number(mintPriceWei) / 1e18;
+      mintBtn.innerText = mintPriceWei > 0n ? `MINT (${celoPrice.toFixed(4)} CELO)` : 'MINT';
+      mintBtn.title = '';
+    }
+
+    return total;
+  } catch (e) {
+    if (totalMintedStat) totalMintedStat.textContent = '--';
+    if (remainingStat) remainingStat.textContent = '--';
+    console.error('Error updating supply:', e);
+    return 0;
+  }
+}
+
+function updateUserMintCount() {
+  if (!userAddress || !contractDetails) {
+    if (yourMintsStat) yourMintsStat.textContent = '--';
+    return;
+  }
+  
+  readContract(wagmiConfig, {
+    address: contractDetails.address,
+    abi: contractDetails.abi,
+    functionName: 'balanceOf',
+    args: [userAddress]
+  }).then(balance => {
+    userMintCount = Number(balance);
+    if (yourMintsStat) {
+      yourMintsStat.textContent = userMintCount;
+    }
     
-    // ✅ FIX: Show external banner IMMEDIATELY after detection
-    if (externalBanner && externalBannerText) {
-      console.log('📍 Configuring banner...');
+    if (userMintCount > 0 && !lastMintedTokenId) {
+      loadLastMintedNFT();
+    }
+  }).catch(err => {
+    console.error('Error fetching user balance:', err);
+    const history = JSON.parse(safeLocalStorage.getItem('mintHistory') || '[]');
+    const userMints = history.filter(m => m.address === userAddress);
+    userMintCount = userMints.length;
+    if (yourMintsStat) {
+      yourMintsStat.textContent = userMintCount;
+    }
+  });
+}
+
+async function loadLastMintedNFT() {
+  if (!userAddress || !contractDetails) return;
+  
+  try {
+    setStatus('Loading your NFTs... 🔍', 'info');
+    
+    const totalSupply = await readContract(wagmiConfig, {
+      address: contractDetails.address,
+      abi: contractDetails.abi,
+      functionName: 'totalSupply'
+    });
+    
+    const total = Number(totalSupply);
+    if (total === 0) {
+      setStatus('No NFTs minted yet', 'info');
+      return;
+    }
+    
+    const searchLimit = Math.min(50, total);
+    let foundTokenId = null;
+    
+    for (let i = total; i > total - searchLimit && i > 0; i--) {
+      try {
+        const owner = await readContract(wagmiConfig, {
+          address: contractDetails.address,
+          abi: contractDetails.abi,
+          functionName: 'ownerOf',
+          args: [BigInt(i)]
+        });
+        
+        if (owner.toLowerCase() === userAddress.toLowerCase()) {
+          foundTokenId = i;
+          break;
+        }
+      } catch (e) {
+        console.log(`Token ${i} check failed:`, e.message);
+      }
+    }
+    
+    if (foundTokenId) {
+      lastMintedTokenId = foundTokenId;
+      safeLocalStorage.setItem('lastMintedTokenId', foundTokenId.toString());
       
-      // Remove hidden class first
-      externalBanner.classList.remove('hidden');
+      previewBtn.innerText = `Preview NFT #${foundTokenId}`;
+      previewBtn.classList.remove('hidden');
       
-      if (isFarcasterEnvironment) {
-        externalBanner.href = window.location.origin;
-        externalBannerText.textContent = 'Open in Browser';
-        console.log('✅ Banner: "Open in Browser"');
+      setStatus(`Found your NFT #${foundTokenId}! 🎉`, 'success');
+      
+      setTimeout(() => {
+        previewNft(foundTokenId);
+      }, 500);
+    } else {
+      setStatus('No recent NFTs found for your wallet', 'info');
+    }
+  } catch (e) {
+    console.error('Error loading last minted NFT:', e);
+    setStatus('Could not load your NFTs', 'warning');
+  }
+}
+
+function saveMintToHistory(tokenId, txHash) {
+  const history = JSON.parse(safeLocalStorage.getItem('mintHistory') || '[]');
+  history.unshift({ 
+    tokenId, 
+    txHash, 
+    timestamp: Date.now(), 
+    address: userAddress 
+  });
+  
+  if (history.length > 20) history.pop();
+  
+  safeLocalStorage.setItem('mintHistory', JSON.stringify(history));
+  updateUserMintCount();
+}
+
+// Get actual minted token ID from transaction receipt
+async function getTokenIdFromReceipt(receipt) {
+  try {
+    const transferEvent = receipt.logs.find(log => {
+      try {
+        return log.topics[0] === '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
+      } catch (e) {
+        return false;
+      }
+    });
+    
+    if (transferEvent && transferEvent.topics[3]) {
+      const tokenId = BigInt(transferEvent.topics[3]);
+      return Number(tokenId);
+    }
+    
+    const totalSupply = await readContract(wagmiConfig, {
+      address: contractDetails.address,
+      abi: contractDetails.abi,
+      functionName: 'totalSupply'
+    });
+    return Number(totalSupply);
+  } catch (e) {
+    console.error('Error extracting token ID:', e);
+    return null;
+  }
+}
+
+// ===== PRICE PREDICTION GAME =====
+
+// Show prediction result popup after airdrop
+function showPredictionResultPopup(verifyResult, airdropResult) {
+  console.log('showPredictionResultPopup called with:', { verifyResult, airdropResult });
+  
+  // Validate required data
+  if (!verifyResult || !airdropResult) {
+    console.error('Missing required data for popup:', { verifyResult, airdropResult });
+    return;
+  }
+  
+  const isCorrect = verifyResult.correct || false;
+  const priceChange = parseFloat(verifyResult.priceChange || 0);
+  const multiplier = verifyResult.multiplier || 1;
+  const airdropAmount = airdropResult.amount || '0';
+  
+  const startPrice = parseFloat(verifyResult.startPrice) || 0;
+  const endPrice = parseFloat(verifyResult.endPrice) || 0;
+  const prediction = verifyResult.prediction || 'unknown';
+  const priceChangePercent = verifyResult.priceChangePercent || '0';
+  
+  console.log('Popup data parsed:', { isCorrect, priceChange, multiplier, airdropAmount, startPrice, endPrice, prediction, priceChangePercent });
+  
+  const modal = document.createElement('div');
+  modal.className = 'prediction-result-modal';
+  modal.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.9);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 10000;
+    animation: fadeIn 0.3s;
+  `;
+  
+  const content = document.createElement('div');
+  content.style.cssText = `
+    background: linear-gradient(135deg, ${isCorrect ? '#1e3a2f 0%, #0f1f1a 100%' : '#3a2e1e 0%, #1f1a0f 100%'});
+    padding: 20px;
+    border-radius: 12px;
+    max-width: 380px;
+    width: 90%;
+    border: 3px solid ${isCorrect ? '#10b981' : '#f59e0b'};
+    box-shadow: 0 0 40px ${isCorrect ? 'rgba(16, 185, 129, 0.5)' : 'rgba(245, 158, 11, 0.5)'};
+    animation: popIn 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    text-align: center;
+    max-height: 90vh;
+    overflow-y: auto;
+  `;
+  
+  // Check if there are any bonuses
+  const hasLucky = airdropResult.luckyMultiplier && airdropResult.luckyMultiplier > 1;
+  const hasRarity = airdropResult.rarityMultiplier && airdropResult.rarityMultiplier > 1;
+  const hasBonuses = hasLucky || hasRarity || airdropResult.bonusMessages;
+  const isSkipped = prediction === 'skipped' || !verifyResult.stats;
+  
+  content.innerHTML = `
+    <div style="font-size: 3rem; margin-bottom: 10px;">
+      ${isSkipped ? '🎁' : (isCorrect ? '✅' : '🎲')}
+    </div>
+    
+    <h2 style="color: ${isSkipped ? '#fbbf24' : (isCorrect ? '#10b981' : '#f59e0b')}; margin: 0 0 8px 0; font-size: 1.4rem;">
+      ${isSkipped ? 'BONUS AIRDROP!' : (isCorrect ? 'CORRECT PREDICTION!' : 'WRONG PREDICTION')}
+    </h2>
+    
+    ${!isSkipped ? `
+      <div style="color: #94a3b8; font-size: 0.85rem; margin-bottom: 14px;">
+        ${prediction.toUpperCase()}: $${startPrice.toFixed(4)} → $${endPrice.toFixed(4)}
+        <br>
+        <span style="color: ${priceChange > 0 ? '#10b981' : '#ef4444'}; font-weight: 600;">
+          ${priceChange > 0 ? '+' : ''}$${Math.abs(priceChange).toFixed(4)} (${priceChangePercent}%)
+        </span>
+      </div>
+    ` : ''}
+    
+    <div style="background: rgba(15, 23, 42, 0.6); padding: 14px; border-radius: 10px; margin: 14px 0; border: 1px solid #334155;">
+      <div style="color: #94a3b8; font-size: 0.85rem; margin-bottom: 8px;">💰 Airdrop Breakdown</div>
+      
+      <div style="display: flex; justify-content: space-between; margin: 6px 0; color: #e2e8f0; font-size: 0.85rem;">
+        <span>Base Amount:</span>
+        <span style="color: #94a3b8; font-weight: bold;">${airdropResult.baseAmount || '0.01'} CELO</span>
+      </div>
+      
+      ${!isSkipped ? `
+        <div style="display: flex; justify-content: space-between; margin: 6px 0; color: #e2e8f0; font-size: 0.85rem;">
+          <span>Prediction ${isCorrect ? 'Bonus' : 'Penalty'}:</span>
+          <span style="color: ${isCorrect ? '#10b981' : '#f59e0b'}; font-weight: bold;">${multiplier}x</span>
+        </div>
+      ` : ''}
+      
+      ${hasLucky ? `
+        <div style="display: flex; justify-content: space-between; margin: 6px 0; color: #e2e8f0; font-size: 0.85rem;">
+          <span>🍀 Lucky Bonus:</span>
+          <span style="color: #fbbf24; font-weight: bold;">${airdropResult.luckyMultiplier}x</span>
+        </div>
+      ` : ''}
+      
+      ${hasRarity ? `
+        <div style="display: flex; justify-content: space-between; margin: 6px 0; color: #e2e8f0; font-size: 0.85rem;">
+          <span>✨ ${airdropResult.rarity || 'Rarity'}:</span>
+          <span style="color: #a855f7; font-weight: bold;">${airdropResult.rarityMultiplier}x</span>
+        </div>
+      ` : ''}
+      
+      <div style="border-top: 2px solid #334155; margin: 10px 0; padding-top: 10px;">
+        <div style="font-size: 0.95rem; color: #94a3b8;">Total Airdrop</div>
+        <div style="font-size: 2rem; font-weight: bold; color: ${hasBonuses ? '#fbbf24' : (isCorrect ? '#10b981' : '#f59e0b')}; margin-top: 4px;">
+          ${airdropAmount} CELO
+        </div>
+      </div>
+    </div>
+    
+    ${hasBonuses && airdropResult.bonusMessages && airdropResult.bonusMessages.length > 0 ? `
+      <div style="background: rgba(251, 191, 36, 0.1); padding: 12px; border-radius: 8px; margin: 14px 0; border: 1px solid rgba(251, 191, 36, 0.3);">
+        <div style="color: #fbbf24; font-size: 0.85rem; font-weight: 600; margin-bottom: 8px;">🎯 Bonus Details:</div>
+        <div style="display: flex; flex-direction: column; gap: 4px; color: #e2e8f0; font-size: 0.75rem; text-align: left;">
+          ${airdropResult.bonusMessages.map(msg => `<div>✨ ${msg}</div>`).join('')}
+        </div>
+      </div>
+    ` : ''}
+    
+    ${verifyResult.stats && !isSkipped ? `
+      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 14px 0;">
+        <div style="background: rgba(15, 23, 42, 0.4); padding: 8px; border-radius: 6px; border: 1px solid #334155;">
+          <div style="font-size: 1.1rem; font-weight: bold; color: #49dfb5;">${verifyResult.stats.winRate}%</div>
+          <div style="font-size: 0.65rem; color: #94a3b8; text-transform: uppercase;">Win Rate</div>
+        </div>
+        <div style="background: rgba(15, 23, 42, 0.4); padding: 8px; border-radius: 6px; border: 1px solid #334155;">
+          <div style="font-size: 1.1rem; font-weight: bold; color: #49dfb5;">${verifyResult.stats.currentStreak}</div>
+          <div style="font-size: 0.65rem; color: #94a3b8; text-transform: uppercase;">Streak</div>
+        </div>
+        <div style="background: rgba(15, 23, 42, 0.4); padding: 8px; border-radius: 6px; border: 1px solid #334155;">
+          <div style="font-size: 1.1rem; font-weight: bold; color: #49dfb5;">${verifyResult.stats.totalPredictions}</div>
+          <div style="font-size: 0.65rem; color: #94a3b8; text-transform: uppercase;">Total</div>
+        </div>
+      </div>
+    ` : ''}
+    
+    <button id="closePredictionResult" style="
+      width: 100%;
+      padding: 10px;
+      background: linear-gradient(90deg, #49dfb5, #10b981);
+      color: #0f0f0f;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      font-weight: bold;
+      cursor: pointer;
+      font-family: 'Orbitron', sans-serif;
+      margin-top: 8px;
+    ">
+      ${hasBonuses ? '🎉 Amazing!' : (isCorrect ? '🎉 Awesome!' : '👍 Got It!')}
+    </button>
+  `;
+  
+  modal.appendChild(content);
+  document.body.appendChild(modal);
+  
+  console.log('Popup created and added to DOM');
+  
+  // Trigger confetti for correct predictions or bonuses
+  if (isCorrect || hasBonuses) {
+    setTimeout(() => {
+      confetti({
+        particleCount: hasBonuses ? 200 : 150,
+        spread: hasBonuses ? 140 : 120,
+        origin: { y: 0.6 },
+        colors: hasBonuses 
+          ? ['#10b981', '#34d399', '#6ee7b7', '#fbbf24', '#f59e0b']
+          : ['#10b981', '#34d399', '#6ee7b7', '#fbbf24']
+      });
+    }, 300);
+  }
+  
+  // Close button
+  document.getElementById('closePredictionResult').onclick = () => {
+    modal.style.animation = 'fadeOut 0.3s';
+    setTimeout(() => modal.remove(), 300);
+  };
+  
+  // Click outside to close
+  modal.onclick = (e) => {
+    if (e.target === modal) {
+      modal.style.animation = 'fadeOut 0.3s';
+      setTimeout(() => modal.remove(), 300);
+    }
+  };
+}
+
+// Show prediction modal and return user's choice
+async function showPredictionModal() {
+  return new Promise((resolve) => {
+    const modal = document.createElement('div');
+    modal.className = 'prediction-modal';
+    modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.95); display: flex; justify-content: center; align-items: center; z-index: 9999;';
+    
+    const content = document.createElement('div');
+    content.className = 'prediction-content';
+    content.innerHTML = `
+      <div class="timer-display" id="predictionTimer">
+        ⏱️ <span id="timerSeconds">60</span>s
+      </div>
+      
+      <div class="prediction-header">
+        <div class="prediction-icon">📈</div>
+        <h2 class="prediction-title">Price Prediction Game</h2>
+        <p class="prediction-subtitle">Predict CELO price in 1 minute for 2x airdrop!</p>
+      </div>
+      
+      <div class="current-price-box" id="currentPriceBox">
+        <div class="price-label">Current CELO Price</div>
+        <div class="price-value" id="currentPrice">
+          <span class="spinner" style="width: 30px; height: 30px;"></span>
+        </div>
+      </div>
+      
+      <div class="prediction-info">
+        <div class="info-item">
+          <span class="info-label">✅ Correct Prediction:</span>
+          <span class="info-value" style="color: #10b981;">2x Airdrop!</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">❌ Wrong Prediction:</span>
+          <span class="info-value" style="color: #f59e0b;">0.5x Consolation</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">⏭️ Skip:</span>
+          <span class="info-value" style="color: #94a3b8;">Standard Airdrop</span>
+        </div>
+      </div>
+      
+      <div class="prediction-buttons">
+        <button class="predict-btn predict-up" id="predictUp" disabled>
+          📈 UP
+        </button>
+        <button class="predict-btn predict-down" id="predictDown" disabled>
+          📉 DOWN
+        </button>
+      </div>
+      
+      <button class="skip-btn" id="skipPrediction">
+        ⏭️ Skip Prediction (Get Standard Airdrop)
+      </button>
+      
+      <div class="user-stats" id="userStatsBox" style="display: none;">
+        <div class="stat-box">
+          <div class="stat-number" id="statWinRate">--%</div>
+          <div class="stat-label">Win Rate</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-number" id="statStreak">0</div>
+          <div class="stat-label">Streak</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-number" id="statTotal">0</div>
+          <div class="stat-label">Total</div>
+        </div>
+      </div>
+    `;
+    
+    modal.appendChild(content);
+    document.body.appendChild(modal);
+    
+    let currentPrice = null;
+    let timestamp = null;
+    let timerInterval = null;
+    
+    // Fetch current price
+    (async () => {
+      try {
+        const priceData = await fetchCeloPrice();
+        currentPrice = priceData.price;
+        timestamp = Date.now();
+        
+        const priceElement = document.getElementById('currentPrice');
+        priceElement.innerHTML = `$${currentPrice.toFixed(4)}`;
+        
+        // Enable buttons
+        document.getElementById('predictUp').disabled = false;
+        document.getElementById('predictDown').disabled = false;
+        
+        // Fetch user stats
+        if (userAddress) {
+          try {
+            const response = await fetch(`/api/prediction?userAddress=${userAddress}`);
+            if (response.ok) {
+              const stats = await response.json();
+              document.getElementById('statWinRate').textContent = `${stats.winRate || 0}%`;
+              document.getElementById('statStreak').textContent = stats.currentStreak || 0;
+              document.getElementById('statTotal').textContent = stats.totalPredictions || 0;
+              document.getElementById('userStatsBox').style.display = 'grid';
+            }
+          } catch (e) {
+            console.log('Could not fetch user stats:', e);
+          }
+        }
+        
+      } catch (error) {
+        console.error('Failed to fetch price:', error);
+        document.getElementById('currentPrice').innerHTML = '<span style="color: #ef4444; font-size: 1rem;">Failed to load</span>';
+        document.getElementById('skipPrediction').textContent = '❌ Close';
+      }
+    })();
+    
+    // Cleanup function
+    const cleanup = () => {
+      if (timerInterval) clearInterval(timerInterval);
+      modal.remove();
+    };
+    
+    // Handle prediction
+    const handlePrediction = async (prediction) => {
+      if (!currentPrice || !timestamp) return;
+      
+      document.getElementById('predictUp').disabled = true;
+      document.getElementById('predictDown').disabled = true;
+      document.getElementById('skipPrediction').disabled = true;
+      
+      try {
+        // Store prediction
+        const response = await fetch('/api/prediction', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'predict',
+            userAddress,
+            currentPrice,
+            prediction,
+            timestamp
+          })
+        });
+        
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.message || 'Failed to store prediction');
+        }
+        
+        // Calculate remaining time
+        const elapsedTime = Date.now() - timestamp;
+        const remainingTime = Math.max(0, 60000 - elapsedTime);
+        
+        // Close modal and proceed to mint immediately
+        cleanup();
+        resolve({
+          skip: false,
+          prediction,
+          timestamp,
+          startPrice: currentPrice,
+          timeLeft: remainingTime
+        });
+        
+      } catch (error) {
+        console.error('Prediction error:', error);
+        setStatus('Prediction failed: ' + error.message, 'error');
+        cleanup();
+        resolve({ skip: true });
+      }
+    };
+    
+    // Event listeners
+    document.getElementById('predictUp').onclick = () => handlePrediction('up');
+    document.getElementById('predictDown').onclick = () => handlePrediction('down');
+    document.getElementById('skipPrediction').onclick = () => {
+      cleanup();
+      resolve({ skip: true });
+    };
+    
+    // Click outside to close (only on modal background, not content)
+    modal.onclick = (e) => {
+      if (e.target === modal) {
+        cleanup();
+        resolve({ skip: true });
+      }
+    };
+  });
+}
+
+// Verify prediction after 60 seconds
+async function verifyPrediction(prediction, startPrice, timestamp, modal, cleanup, resolve) {
+  try {
+    // Fetch new price
+    const priceData = await fetchCeloPrice();
+    const newPrice = priceData.price;
+    
+    // Verify with backend
+    const response = await fetch('/api/prediction', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'verify',
+        userAddress,
+        timestamp,
+        newPrice
+      })
+    });
+    
+    const result = await response.json();
+    
+    // Show result
+    const content = modal.querySelector('.prediction-content');
+    const isCorrect = result.correct;
+    const priceChange = parseFloat(result.priceChange);
+    
+    content.innerHTML = `
+      <div class="prediction-result ${isCorrect ? 'result-correct' : 'result-wrong'}">
+        <div class="result-icon">${isCorrect ? '✅' : '❌'}</div>
+        <div class="result-text">${isCorrect ? 'CORRECT!' : 'WRONG!'}</div>
+        <div class="result-details">
+          ${prediction.toUpperCase()}: $${startPrice.toFixed(4)} → $${newPrice.toFixed(4)}
+          <br>
+          <span style="color: ${priceChange > 0 ? '#10b981' : '#ef4444'};">
+            ${priceChange > 0 ? '+' : ''}${priceChange} (${result.priceChangePercent}%)
+          </span>
+        </div>
+      </div>
+      
+      <div class="prediction-info">
+        <div class="info-item">
+          <span class="info-label">Airdrop Multiplier:</span>
+          <span class="info-value" style="color: ${isCorrect ? '#10b981' : '#f59e0b'};">
+            ${result.multiplier}x
+          </span>
+        </div>
+        ${result.stats ? `
+          <div class="info-item">
+            <span class="info-label">Win Rate:</span>
+            <span class="info-value">${result.stats.winRate}%</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">Current Streak:</span>
+            <span class="info-value">${result.stats.currentStreak}</span>
+          </div>
+        ` : ''}
+      </div>
+      
+      <button class="action-button" id="continueBtn" style="width: 100%; margin-top: 20px;">
+        ${isCorrect ? '🎉 Claim 2x Airdrop!' : '🎲 Claim 0.5x Consolation'}
+      </button>
+      <button class="skip-btn" id="cancelPrediction" style="margin-top: 10px;">
+        ❌ Cancel & Start Over
+      </button>
+    `;
+    
+    document.getElementById('continueBtn').onclick = () => {
+      cleanup();
+      resolve({
+        skip: false,
+        prediction,
+        multiplier: result.multiplier,
+        correct: isCorrect,
+        timestamp,
+        startPrice,
+        endPrice: newPrice
+      });
+    };
+    
+    document.getElementById('cancelPrediction').onclick = () => {
+      cleanup();
+      resolve({ skip: true });
+    };
+    
+  } catch (error) {
+    console.error('Verification error:', error);
+    setStatus('Prediction verification failed', 'error');
+    cleanup();
+    resolve({ skip: true });
+  }
+}
+
+// ⭐ AIRDROP CLAIMING FUNCTION ⭐
+async function claimAirdrop(tokenId, txHash, predictionMultiplier = 1) {
+  try {
+    setStatus('Calculating your airdrop bonus...', 'info');
+    
+    const response = await fetch('/api/airdrop', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        tokenId: tokenId,
+        userAddress: userAddress,
+        mintTxHash: txHash,
+        predictionMultiplier: predictionMultiplier
+      })
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.error || 'Airdrop claim failed');
+    }
+    
+    if (data.success) {
+      const amountReceived = data.amount || '0.01';
+      lastAirdropAmount = amountReceived;
+      
+      // Check if this was a bonus airdrop
+      const isBonus = data.isBonus || (data.bonusMessages && data.bonusMessages.length > 0);
+      
+      if (isBonus) {
+        // SUPER BONUS CELEBRATION! 🎉
+        setStatus(`💸 BONUS AIRDROP! ${amountReceived} CELO! 🎉`, 'success');
+        
+        // Don't show separate bonus popup - it's merged with prediction result
+        // showBonusBreakdown(data);
+        
+        // Epic confetti for bonuses
+        launchBonusConfetti(parseFloat(amountReceived));
+        
+        // Play bonus sound (if you add sounds)
+        if (typeof playSound === 'function') {
+          playSound('bonus');
+        }
       } else {
-        externalBanner.href = MINIAPP_URL;
-        externalBannerText.textContent = 'Open in Farcaster';
-        externalBanner.classList.add('pulse');
-        console.log('✅ Banner: "Open in Farcaster"');
+        setStatus(`Airdrop received! ${amountReceived} CELO sent to your wallet! 🎉`, 'success');
+        
+        // Normal confetti
+        confetti({
+          particleCount: 150,
+          spread: 100,
+          origin: { y: 0.7 },
+          colors: ['#10b981', '#34d399', '#6ee7b7']
+        });
       }
       
-      // Show banner with slight delay for animation
-      setTimeout(() => {
-        externalBanner.classList.add('show');
-      }, 100);
+      // Add airdrop link to transaction container
+      if (data.txHash) {
+        const airdropLink = document.createElement('a');
+        airdropLink.href = data.explorerUrl || `https://celoscan.io/tx/${data.txHash}`;
+        airdropLink.target = '_blank';
+        airdropLink.rel = 'noopener noreferrer';
+        airdropLink.className = 'tx-link';
+        airdropLink.textContent = isBonus 
+          ? `💎 View Bonus (${amountReceived} CELO)` 
+          : `View Airdrop (${amountReceived} CELO)`;
+        airdropLink.style.background = isBonus 
+          ? 'linear-gradient(135deg, #fbbf24, #f59e0b)' 
+          : 'linear-gradient(135deg, #10b981, #059669)';
+        
+        txLinksContainer.appendChild(airdropLink);
+      }
       
-      console.log('📊 Banner classes:', externalBanner.className);
+      return data;
+    }
+  } catch (error) {
+    console.error('Airdrop claim error:', error);
+    
+    const errorMsg = error.message || 'Airdrop claim failed';
+    
+    if (errorMsg.includes('Rate limit')) {
+      setStatus(errorMsg, 'warning');
+    } else if (errorMsg.includes('already claimed')) {
+      setStatus('Airdrop already claimed for this mint', 'info');
     } else {
-      console.warn('⚠️ Banner elements not found in DOM');
+      setStatus('Airdrop claim failed: ' + errorMsg, 'warning');
     }
     
-    // Initialize managers
-    walletManager = new WalletManager({
-      projectId: PROJECT_ID,
-      appName: 'Celo NFT Mint',
-      appDescription: 'Mint a free Celo NFT that shows the live CELO price!',
-      appUrl: 'https://celo-nft-phi.vercel.app/',
-      appIcon: 'https://celo-nft-phi.vercel.app/icon.png',
+    return null;
+  }
+}
+
+// Show bonus breakdown modal
+function showBonusBreakdown(data) {
+  const modal = document.createElement('div');
+  modal.className = 'bonus-modal';
+  modal.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.9);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 10000;
+    animation: fadeIn 0.3s;
+  `;
+  
+  const content = document.createElement('div');
+  content.style.cssText = `
+    background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+    padding: 20px;
+    border-radius: 12px;
+    max-width: 380px;
+    width: 90%;
+    border: 3px solid #fbbf24;
+    box-shadow: 0 0 30px rgba(251, 191, 36, 0.5);
+    animation: popIn 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    max-height: 85vh;
+    overflow-y: auto;
+  `;
+  
+  const bonusMessages = data.bonusMessages || [];
+  const bonusesHTML = bonusMessages.map(msg => `<div class="bonus-item">✨ ${msg}</div>`).join('');
+  
+  content.innerHTML = `
+    <div style="text-align: center;">
+      <div style="font-size: 3rem; margin-bottom: 8px;">💎</div>
+      <h2 style="color: #fbbf24; margin: 0 0 8px 0; font-size: 1.4rem;">BONUS AIRDROP!</h2>
+      <div style="font-size: 2rem; font-weight: bold; color: #10b981; margin: 14px 0;">
+        ${data.amount} CELO
+      </div>
+      
+      <div style="background: rgba(15, 23, 42, 0.6); padding: 12px; border-radius: 8px; margin: 14px 0; border: 1px solid #334155;">
+        <div style="color: #94a3b8; font-size: 0.85rem; margin-bottom: 6px;">Breakdown:</div>
+        <div style="color: #e2e8f0; font-size: 0.85rem; line-height: 1.5;">
+          ${data.baseAmount ? `<div>Base: ${data.baseAmount} CELO</div>` : ''}
+          ${data.luckyMultiplier > 1 ? `<div>Lucky: ${data.luckyMultiplier}x</div>` : ''}
+          ${data.rarityMultiplier > 1 ? `<div>${data.rarity}: ${data.rarityMultiplier}x</div>` : ''}
+        </div>
+      </div>
+      
+      ${bonusesHTML ? `
+        <div style="background: rgba(251, 191, 36, 0.1); padding: 12px; border-radius: 8px; margin: 14px 0; border: 1px solid rgba(251, 191, 36, 0.3);">
+          <div style="color: #fbbf24; font-size: 0.85rem; font-weight: 600; margin-bottom: 8px;">🎯 Your Bonuses:</div>
+          <div style="display: flex; flex-direction: column; gap: 6px; color: #e2e8f0; font-size: 0.8rem;">
+            ${bonusesHTML}
+          </div>
+        </div>
+      ` : ''}
+      
+      <button id="closeBonusModal" style="
+        background: linear-gradient(90deg, #49dfb5, #10b981);
+        color: #0f0f0f;
+        border: none;
+        padding: 10px 24px;
+        border-radius: 8px;
+        font-size: 0.95rem;
+        font-weight: bold;
+        cursor: pointer;
+        margin-top: 14px;
+        width: 100%;
+        font-family: 'Orbitron', sans-serif;
+      ">
+        Awesome! 🎉
+      </button>
+    </div>
+  `;
+  
+  modal.appendChild(content);
+  document.body.appendChild(modal);
+  
+  // Close modal
+  document.getElementById('closeBonusModal').onclick = () => {
+    modal.style.animation = 'fadeOut 0.3s';
+    setTimeout(() => modal.remove(), 300);
+  };
+  
+  // Click outside to close
+  modal.onclick = (e) => {
+    if (e.target === modal) {
+      modal.style.animation = 'fadeOut 0.3s';
+      setTimeout(() => modal.remove(), 300);
+    }
+  };
+}
+
+// Epic confetti for bonuses
+function launchBonusConfetti(amount) {
+  const duration = 5000;
+  const end = Date.now() + duration;
+  
+  // Determine confetti intensity based on amount
+  const intensity = amount > 0.1 ? 'mega' : amount > 0.05 ? 'super' : 'normal';
+  
+  const colors = intensity === 'mega' 
+    ? ['#fbbf24', '#f59e0b', '#ec4899', '#a855f7', '#10b981']
+    : intensity === 'super'
+    ? ['#fbbf24', '#f59e0b', '#10b981', '#3b82f6']
+    : ['#10b981', '#34d399', '#6ee7b7'];
+  
+  const frame = () => {
+    confetti({
+      particleCount: intensity === 'mega' ? 15 : intensity === 'super' ? 10 : 5,
+      angle: 60,
+      spread: 55,
+      origin: { x: 0, y: 0.6 },
+      colors: colors
+    });
+    
+    confetti({
+      particleCount: intensity === 'mega' ? 15 : intensity === 'super' ? 10 : 5,
+      angle: 120,
+      spread: 55,
+      origin: { x: 1, y: 0.6 },
+      colors: colors
+    });
+    
+    if (Date.now() < end) {
+      requestAnimationFrame(frame);
+    }
+  };
+  
+  frame();
+  
+  // Final burst
+  setTimeout(() => {
+    confetti({
+      particleCount: intensity === 'mega' ? 300 : intensity === 'super' ? 200 : 150,
+      spread: 180,
+      origin: { y: 0.5 },
+      colors: colors,
+      ticks: 400
+    });
+  }, duration - 500);
+}
+
+// Add CSS animations for bonus modal
+const bonusStyle = document.createElement('style');
+bonusStyle.textContent = `
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  
+  @keyframes fadeOut {
+    from { opacity: 1; }
+    to { opacity: 0; }
+  }
+  
+  @keyframes popIn {
+    0% {
+      transform: scale(0.8);
+      opacity: 0;
+    }
+    50% {
+      transform: scale(1.05);
+    }
+    100% {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+  
+  .bonus-item {
+    padding: 6px 12px;
+    background: rgba(251, 191, 36, 0.1);
+    border-radius: 6px;
+    border: 1px solid rgba(251, 191, 36, 0.3);
+  }
+`;
+document.head.appendChild(bonusStyle);
+
+async function castToFarcaster(tokenId, rarity, price, airdropAmount = null) {
+  let text;
+  
+  if (airdropAmount) {
+    // Format airdrop amount nicely
+    const airdropFormatted = parseFloat(airdropAmount).toFixed(4);
+    text = `I just minted CELO NFT #${tokenId} (${rarity}) at ${price} and received ${airdropFormatted} CELO airdrop! 🎨✨💰\n\nMint yours now:`;
+  } else {
+    text = `I just minted CELO NFT #${tokenId} (${rarity}) at ${price}! 🎨✨\n\nMint yours now:`;
+  }
+  
+  const embedUrl = MINIAPP_URL;
+  
+  if (isFarcasterEnvironment && sdk?.actions?.composeCast) {
+    try {
+      setStatus('Opening cast composer... 📝', 'info');
+      
+      const result = await sdk.actions.composeCast({
+        text: text,
+        embeds: [embedUrl]
+      });
+      
+      if (result?.cast) {
+        setStatus(`✅ Cast posted! Hash: ${result.cast.hash.slice(0, 10)}...`, 'success');
+        console.log('Cast hash:', result.cast.hash);
+        if (result.cast.channelKey) {
+          console.log('Posted to channel:', result.cast.channelKey);
+        }
+      } else {
+        setStatus('Cast cancelled', 'info');
+      }
+    } catch (e) {
+      console.error('Cast failed:', e);
+      setStatus('Failed to create cast. Please try again.', 'error');
+    }
+  } else {
+    const warpcastUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(text)}&embeds[]=${encodeURIComponent(embedUrl)}`;
+    const popup = window.open(warpcastUrl, '_blank', 'width=600,height=700');
+    
+    if (popup) {
+      setStatus('Opening Warpcast composer...', 'success');
+    } else {
+      setStatus('Please allow popups to share on Warpcast', 'warning');
+    }
+  }
+}
+
+async function downloadSVGFile() {
+  if (!currentNFTData || !currentNFTData.svg) {
+    setStatus('No NFT data available for download', 'error');
+    return;
+  }
+  
+  try {
+    const svgData = currentNFTData.svg;
+    const blob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+    
+    if (window.showSaveFilePicker) {
+      try {
+        const handle = await window.showSaveFilePicker({
+          suggestedName: `celo-nft-${lastMintedTokenId}.svg`,
+          types: [{
+            description: 'SVG Image',
+            accept: { 'image/svg+xml': ['.svg'] }
+          }]
+        });
+        const writable = await handle.createWritable();
+        await writable.write(blob);
+        await writable.close();
+        setStatus('SVG downloaded!', 'success');
+        return;
+      } catch (e) {
+        if (e.name === 'AbortError') {
+          // User cancelled - silently return without error
+          return;
+        }
+        console.log('File picker failed, using fallback:', e);
+      }
+    }
+    
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.style.display = 'none';
+    a.href = url;
+    a.download = `celo-nft-${lastMintedTokenId}.svg`;
+    document.body.appendChild(a);
+    a.click();
+    
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 100);
+    
+    setStatus('SVG downloaded!', 'success');
+  } catch (e) {
+    console.error('SVG download failed:', e);
+    setStatus('Failed to download SVG: ' + e.message, 'error');
+  }
+}
+
+async function downloadPNGFile() {
+  if (!currentNFTData || !currentNFTData.svg) {
+    setStatus('No NFT data available for download', 'error');
+    return;
+  }
+  
+  const canvas = document.createElement('canvas');
+  canvas.width = 400;
+  canvas.height = 400;
+  const ctx = canvas.getContext('2d');
+  
+  const img = new Image();
+  const svgBlob = new Blob([currentNFTData.svg], { type: 'image/svg+xml;charset=utf-8' });
+  const url = URL.createObjectURL(svgBlob);
+  
+  try {
+    setStatus('Generating PNG... ⏳', 'info');
+    
+    await new Promise((resolve, reject) => {
+      img.onload = async () => {
+        try {
+          ctx.fillStyle = '#000000';
+          ctx.fillRect(0, 0, 400, 400);
+          ctx.drawImage(img, 0, 0, 400, 400);
+          
+          canvas.toBlob(async (blob) => {
+            if (!blob) {
+              reject(new Error('Failed to generate PNG blob'));
+              return;
+            }
+            
+            if (window.showSaveFilePicker) {
+              try {
+                const handle = await window.showSaveFilePicker({
+                  suggestedName: `celo-nft-${lastMintedTokenId}.png`,
+                  types: [{
+                    description: 'PNG Image',
+                    accept: { 'image/png': ['.png'] }
+                  }]
+                });
+                const writable = await handle.createWritable();
+                await writable.write(blob);
+                await writable.close();
+                setStatus('PNG downloaded!', 'success');
+                resolve();
+                return;
+              } catch (e) {
+                if (e.name === 'AbortError') {
+                  // User cancelled - just use fallback
+                  // Don't return, let it continue to fallback download
+                } else {
+                  console.log('File picker failed, using fallback:', e);
+                }
+              }
+            }
+            
+            const downloadUrl = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = downloadUrl;
+            a.download = `celo-nft-${lastMintedTokenId}.png`;
+            document.body.appendChild(a);
+            a.click();
+            
+            setTimeout(() => {
+              document.body.removeChild(a);
+              URL.revokeObjectURL(downloadUrl);
+            }, 100);
+            
+            setStatus('PNG downloaded!', 'success');
+            resolve();
+          }, 'image/png', 1.0);
+        } catch (e) {
+          reject(e);
+        }
+      };
+      
+      img.onerror = (e) => {
+        console.error('Image load failed:', e);
+        reject(new Error('Failed to load SVG image'));
+      };
+      
+      img.src = url;
+    });
+  } catch (e) {
+    console.error('PNG download failed:', e);
+    setStatus('Failed to generate PNG: ' + e.message, 'error');
+  } finally {
+    URL.revokeObjectURL(url);
+    canvas.width = 0;
+    canvas.height = 0;
+  }
+}
+
+async function copyImageToClipboard() {
+  if (!currentNFTData || !currentNFTData.svg) {
+    setStatus('No NFT data available', 'error');
+    return;
+  }
+  
+  if (!navigator.clipboard || typeof ClipboardItem === 'undefined') {
+    setStatus('Copy not supported in this browser', 'warning');
+    return;
+  }
+  
+  const canvas = document.createElement('canvas');
+  canvas.width = 400;
+  canvas.height = 400;
+  const ctx = canvas.getContext('2d');
+  
+  const img = new Image();
+  const svgBlob = new Blob([currentNFTData.svg], { type: 'image/svg+xml;charset=utf-8' });
+  const url = URL.createObjectURL(svgBlob);
+  
+  try {
+    setStatus('Copying to clipboard... ⏳', 'info');
+    
+    await new Promise((resolve, reject) => {
+      img.onload = async () => {
+        try {
+          ctx.fillStyle = '#000000';
+          ctx.fillRect(0, 0, 400, 400);
+          ctx.drawImage(img, 0, 0, 400, 400);
+          
+          canvas.toBlob(async (blob) => {
+            if (!blob) {
+              reject(new Error('Failed to generate image'));
+              return;
+            }
+            
+            try {
+              await navigator.clipboard.write([
+                new ClipboardItem({ 'image/png': blob })
+              ]);
+              setStatus('Image copied to clipboard!', 'success');
+              resolve();
+            } catch (e) {
+              console.error('Clipboard write failed:', e);
+              reject(e);
+            }
+          }, 'image/png');
+        } catch (e) {
+          reject(e);
+        }
+      };
+      
+      img.onerror = () => {
+        reject(new Error('Failed to load image'));
+      };
+      
+      img.src = url;
+    });
+  } catch (e) {
+    console.error('Copy failed:', e);
+    setStatus('Failed to copy: ' + e.message, 'error');
+  } finally {
+    URL.revokeObjectURL(url);
+    canvas.width = 0;
+    canvas.height = 0;
+  }
+}
+
+function shareToTwitter() {
+  let text = `I just minted a CELO NFT with live price snapshot! 🎨✨`;
+  
+  // Add airdrop info if available
+  if (lastAirdropAmount) {
+    const airdropFormatted = parseFloat(lastAirdropAmount).toFixed(4);
+    text = `I just minted a CELO NFT and received ${airdropFormatted} CELO airdrop! 🎨✨💰`;
+  }
+  
+  text += `\n\nMint yours:`;
+  
+  const appUrl = 'https://celo-nft-phi.vercel.app/';
+  const twitterUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(appUrl)}&hashtags=CeloNFT,Celo`;
+  
+  window.open(twitterUrl, '_blank', 'width=550,height=420');
+  setStatus('Opening Twitter...', 'info');
+}
+
+function showGiftModal() {
+  if (!lastMintedTokenId) {
+    setStatus('No NFT to gift. Please mint first!', 'warning');
+    return;
+  }
+  
+  const modal = document.createElement('div');
+  modal.className = 'gift-modal';
+  modal.innerHTML = `
+    <div class="gift-modal-content">
+      <button class="close-modal" onclick="this.parentElement.parentElement.remove()">✕</button>
+      <h2>🎁 Gift NFT #${lastMintedTokenId}</h2>
+      <p style="color: #9ca3af; margin-bottom: 20px;">Send this NFT to another address</p>
+      <input type="text" id="recipientAddress" placeholder="Recipient address (0x...)" />
+      <textarea id="giftMessage" placeholder="Optional message (for display only)" rows="3"></textarea>
+      <button id="sendGiftBtn" class="action-button" style="width: 100%; margin-top: 16px;">Send Gift</button>
+    </div>
+  `;
+  
+  document.body.appendChild(modal);
+  
+  document.getElementById('sendGiftBtn').onclick = async () => {
+    const recipient = document.getElementById('recipientAddress').value.trim();
+    const message = document.getElementById('giftMessage').value.trim();
+    
+    if (!recipient || !recipient.startsWith('0x') || recipient.length !== 42) {
+      setStatus('Please enter a valid Celo address', 'error');
+      return;
+    }
+    
+    await giftNFT(lastMintedTokenId, recipient, message);
+    modal.remove();
+  };
+}
+
+async function giftNFT(tokenId, recipient, message) {
+  try {
+    setStatus('Sending gift... 🎁', 'info');
+    
+    const hash = await writeContract(wagmiConfig, {
+      address: contractDetails.address,
+      abi: contractDetails.abi,
+      functionName: 'transferFrom',
+      args: [userAddress, recipient, BigInt(tokenId)]
+    });
+    
+    setStatus('Confirming transfer...', 'info');
+    const receipt = await waitForTransactionReceipt(wagmiConfig, { hash });
+    
+    if (receipt.status === 'reverted') {
+      throw new Error('Transfer was reverted.');
+    }
+    
+    setStatus(`✅ NFT #${tokenId} gifted successfully!`, 'success');
+    
+    const gifts = JSON.parse(safeLocalStorage.getItem('giftHistory') || '[]');
+    gifts.unshift({
+      tokenId,
+      recipient,
+      message,
+      timestamp: Date.now(),
+      txHash: hash
+    });
+    safeLocalStorage.setItem('giftHistory', JSON.stringify(gifts));
+    
+    const celoscanUrl = `https://celoscan.io/tx/${hash}`;
+    setTimeout(() => {
+      setStatus(`Gift sent! View transaction: ${celoscanUrl}`, 'success');
+    }, 2000);
+    
+    updateUserMintCount();
+  } catch (e) {
+    const errorMsg = getImprovedErrorMessage(e);
+    setStatus(errorMsg, 'error');
+    console.error('Gift Error:', e);
+  }
+}
+
+let lastMintedInfo = { tokenId: null, txHash: null, rarity: null, price: null };
+
+async function previewNft(tokenId, isNewMint = false) {
+  if (!contractDetails) return;
+
+  statusBox.innerHTML = '';
+  statusBox.className = 'status-box';
+  
+  previewContainer.innerHTML = '<div style="display: flex; justify-content: center; align-items: center; height: 200px;"><span class="spinner" style="width: 40px; height: 40px; border-width: 4px;"></span></div>';
+  previewContainer.classList.remove('hidden');
+  
+  previewBtn.disabled = true;
+  previewBtn.innerHTML = '<span class="spinner"></span> Loading Preview…';
+  previewContainer.classList.remove("sparkles", ...ALL_RARITY_CLASSES);
+  nftActions.classList.add('hidden');
+  
+  if (!isNewMint) {
+    txLinksContainer.classList.add('hidden');
+  }
+  
+  const nftActionsRow2 = document.getElementById('nftActionsRow2');
+  if (nftActionsRow2) nftActionsRow2.classList.add('hidden');
+
+  try {
+    const tokenURI = await readContract(wagmiConfig, {
+      address: contractAddress,
+      abi: contractDetails.abi,
+      functionName: 'tokenURI',
+      args: [BigInt(tokenId)] 
     });
 
-    console.log('✅ WalletManager created');
-    await walletManager.initialize();
-    console.log('✅ WalletManager initialized');
+    const base64Json = tokenURI.split(',')[1];
+    if (!base64Json) throw new Error("Invalid tokenURI format.");
 
-    // Initialize Farcaster SDK if in Farcaster
+    const jsonString = atob(decodeURIComponent(base64Json));
+    const metadata = JSON.parse(jsonString);
+    
+    const base64Svg = metadata.image.split(',')[1];
+    if (!base64Svg) throw new Error("Invalid image data format.");
+
+    let svgString = atob(decodeURIComponent(base64Svg));
+    const safeSvg = sanitizeSVG(svgString);
+
+    currentNFTData = {
+      svg: safeSvg,
+      metadata: metadata,
+      tokenId: tokenId
+    };
+
+    previewContainer.innerHTML = safeSvg;
+    adjustInjectedSvg(previewContainer);
+    
+    let rarityText = "Common";
+    let priceText = "N/A";
+
+    if (metadata.attributes) {
+      const rarityAttr = metadata.attributes.find(attr => attr.trait_type === 'Rarity');
+      const priceAttr = metadata.attributes.find(attr => attr.trait_type === 'CELO Price Snapshot');
+      
+      if (rarityAttr) rarityText = rarityAttr.value;
+      if (priceAttr) priceText = priceAttr.value;
+    }
+    
+    previewContainer.classList.add("sparkles");
+    const rarityClassLower = rarityText.toLowerCase();
+    previewContainer.classList.add(rarityClassLower);
+
+    const buttonLabel = `Preview NFT #${tokenId} (${rarityText} / ${priceText})`;
+    previewBtn.innerText = buttonLabel;
+    
+    nftActions.classList.remove('hidden');
+    if (nftActionsRow2) nftActionsRow2.classList.remove('hidden');
+    
     if (isFarcasterEnvironment) {
-      await initializeFarcasterSDK();
-      console.log('✅ Farcaster SDK initialized');
+      if (downloadSVG) downloadSVG.style.display = 'none';
+      if (downloadGIF) downloadGIF.style.display = 'none';
+    }
+    
+    if (!isNewMint && contractAddress) {
+      const celoscanTokenUrl = `https://celoscan.io/token/${contractAddress}?a=${tokenId}`;
+
+      txLinksContainer.innerHTML = `
+        <a href="${celoscanTokenUrl}" target="_blank" rel="noopener noreferrer">View on Celoscan</a>
+      `;
+      
+      const castBtnElement = document.createElement('button');
+      castBtnElement.id = 'castBtn';
+      castBtnElement.className = 'tx-link cast-link';
+      castBtnElement.innerHTML = '📣 Cast';
+      castBtnElement.onclick = async () => {
+        // Use stored airdrop amount if available
+        await castToFarcaster(tokenId, rarityText, priceText, lastAirdropAmount);
+      };
+      txLinksContainer.appendChild(castBtnElement);
+      
+      txLinksContainer.classList.remove('hidden');
     }
 
-    // Set up account watching
-    walletManager.watchAccountChanges(handleAccountChange);
-    console.log('✅ Account watching enabled');
+  } catch (e) {
+    setStatus("Failed to load NFT preview. Check console for details.", 'error'); 
+    previewBtn.innerText = 'Preview NFT Error';
+    console.error(`NFT Preview Error for token ID ${tokenId}:`, e);
+    previewContainer.classList.add('hidden');
+    nftActions.classList.add('hidden');
+    if (nftActionsRow2) nftActionsRow2.classList.add('hidden');
+    txLinksContainer.classList.add('hidden');
+  } finally {
+    previewBtn.disabled = false;
+  }
+}
 
-    // Load contract details
-    contractDetails = await loadContractDetails();
-    console.log('✅ Contract details loaded:', contractDetails.address);
-    
-    // Initialize other managers
-    mintingManager = new MintingManager(walletManager.wagmiConfig, contractDetails);
-    
-    // Load contract config
-    await mintingManager.loadContractConfig();
-    console.log('✅ Contract config loaded:', {
-      mintPrice: mintingManager.mintPrice.toString(),
-      maxSupply: mintingManager.maxSupply
+function initTradingView() {
+  if (tradingViewLoaded) return;
+  tradingViewLoaded = true;
+  
+  const script = document.createElement('script');
+  script.src = 'https://s3.tradingview.com/tv.js';
+  script.onload = () => {
+    new TradingView.widget({
+      autosize: true,
+      symbol: "BINANCE:CELOUSDT",
+      interval: "60",
+      theme: "dark",
+      style: "1",
+      hide_top_toolbar: true,
+      withdateranges: false,
+      toolbar_bg: "#1f1f1f",
+      locale: "en",
+      enable_publishing: false,
+      allow_symbol_change: false,
+      container_id: "celo-chart"
     });
-    
-    predictionManager = new PredictionManager();
-    galleryManager = new GalleryManager(walletManager.wagmiConfig, contractDetails);
-    achievementsManager = new AchievementsManager(walletManager.wagmiConfig, contractDetails);
-    downloadManager = new DownloadManager();
-    tabManager = new TabManager();
-    feedManager = new FeedManager(walletManager.wagmiConfig, contractDetails);
-    giftManager = new GiftManager(mintingManager, safeLocalStorage);
-    console.log('✅ All managers initialized');
+  };
+  document.head.appendChild(script);
+}
 
-    // Load initial state
-    lastMintedTokenId = safeLocalStorage.getItem('lastMintedTokenId');
+if ('IntersectionObserver' in window) {
+  const observer = new IntersectionObserver((entries) => {
+    if (entries[0].isIntersecting) {
+      initTradingView();
+      observer.disconnect();
+    }
+  }, { threshold: 0.1 });
+  
+  const chartContainer = document.querySelector('.tradingview-widget-container');
+  if (chartContainer) {
+    observer.observe(chartContainer);
+  }
+} else {
+  initTradingView();
+}
+
+(async () => {
+  try {
+    await sdk.actions.ready({ disableNativeGestures: true });
+    console.log('Farcaster SDK initialized successfully');
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    await sdk.actions.addMiniApp();
+  } catch (e) {
+    console.log('Farcaster SDK not available or failed to initialize:', e);
+  }
+})();
+
+const wagmiAdapter = new WagmiAdapter({
+  networks: [celo],
+  projectId: PROJECT_ID,
+  ssr: false
+});
+
+wagmiConfig = wagmiAdapter.wagmiConfig;
+
+(async () => {
+  try {
+    lastMintedTokenId = safeLocalStorage.getItem("lastMintedTokenId");
     if (lastMintedTokenId) {
       previewBtn.innerText = `Preview NFT #${lastMintedTokenId}`;
       previewBtn.classList.remove('hidden');
     }
 
-    // Set up UI event listeners
-    setupEventListeners();
-    setupFilterListeners();
-    setupSectionToggles();
-    tabManager.initializeTabs();
-    console.log('✅ Event listeners set up');
-
-    // Initialize TradingView chart
-    initTradingView();
-    console.log('✅ TradingView initialized');
-
-    // Start polling for recent mints and leaderboard
-    await updateSupply(true);
-
-    // Start feed polling with delay
-    setTimeout(() => {
-      loadRecentMints();
-      loadLeaderboard();
-    }, 2000);
-
-    // Set up periodic refresh for recent mints
-    setInterval(() => {
-      if (document.getElementById('recentMintsSection')?.style.display !== 'none') {
-        loadRecentMints();
-      }
-    }, 15000); // Every 15 seconds
-
-    // Set up periodic refresh for leaderboard
-    setInterval(() => {
-      if (document.getElementById('leaderboardSection')?.style.display !== 'none') {
-        loadLeaderboard();
-      }
-    }, 120000); // Every 2 minutes
+    isFarcasterEnvironment = await isFarcasterEmbed();
     
-    console.log('✅ App initialized successfully');
-    setStatus('Ready to mint! Connect your wallet to get started.', 'info');
+    console.log('=== ENVIRONMENT DETECTION ===');
+    console.log('Detected as Farcaster:', isFarcasterEnvironment);
+    console.log('Window location:', window.location.href);
+    console.log('Is iframe:', window.self !== window.top);
+    console.log('Has SDK:', typeof sdk !== 'undefined');
+    console.log('SDK Context:', sdk?.context);
+    console.log('============================');
+    
+    if (isFarcasterEnvironment) {
+      externalBanner.href = 'https://celo-nft-phi.vercel.app/';
+      externalBannerText.textContent = 'Open in Browser';
+      externalBanner.classList.remove('hidden');
+    } else {
+      externalBanner.href = MINIAPP_URL;
+      externalBannerText.textContent = 'Open in Farcaster';
+      externalBanner.classList.remove('hidden');
+    }
+
+    let connected = false;
+    if (isFarcasterEnvironment) {
+      try {
+        const farcasterConnector = wagmiConfig.connectors.find(c => c.id === 'farcasterMiniApp');
+        if (farcasterConnector) {
+          const conn = await connect(wagmiConfig, { connector: farcasterConnector });
+          userAddress = conn.accounts[0];
+          showAddress(userAddress);
+          connected = true;
+          console.log('Connected via Farcaster:', userAddress);
+          
+          const hasPromptedAddApp = safeLocalStorage.getItem('hasPromptedAddApp');
+          if (!hasPromptedAddApp && sdk?.actions?.addMiniApp) {
+            try {
+              await sdk.actions.addMiniApp();
+              safeLocalStorage.setItem('hasPromptedAddApp', 'true');
+            } catch(e) {
+              console.log('Add mini app prompt declined or failed:', e);
+            }
+          }
+        }
+      } catch (e) {
+        console.log('Farcaster connection failed:', e);
+      }
+    }
+
+    modal = createAppKit({
+      adapters: [wagmiAdapter],
+      networks: [celo],
+      projectId: PROJECT_ID,
+      metadata: {
+        name: 'Celo NFT Mint',
+        description: 'Mint a free Celo NFT that shows the live CELO price!',
+        url: 'https://celo-nft-phi.vercel.app/',
+        icons: ['https://celo-nft-phi.vercel.app/icon.png']
+      },
+      features: {
+        analytics: true,
+        connectMethodsOrder: ["wallet"],
+      },
+      allWallets: 'SHOW',
+      themeMode: 'dark',
+      themeVariables: {
+        '--w3m-accent': '#49dfb5',
+        '--w3m-border-radius-master': '8px'
+      }
+    });
+
+    if (!connected) {
+      const currentAccount = getAccount(wagmiConfig);
+      if (currentAccount.isConnected && currentAccount.address) {
+        userAddress = currentAccount.address;
+        showAddress(userAddress);
+        connected = true;
+        console.log('Already connected:', userAddress);
+      } else {
+        showConnectButton();
+        setStatus('Connect your wallet to mint NFTs', 'info');
+      }
+    }
+
+    try {
+      let response;
+      try {
+        response = await fetch('./contract.json');
+      } catch {
+        response = await fetch('/contract.json');
+      }
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      contractDetails = await response.json();
+      contractAddress = contractDetails.address;
+      console.log('Contract loaded:', contractAddress);
+    } catch (e) { 
+      setStatus("Missing contract details.", 'error'); 
+      console.error('Contract load error:', e);
+      
+      const retryBtn = document.createElement('button');
+      retryBtn.className = 'action-button';
+      retryBtn.style.cssText = 'background: linear-gradient(90deg, #f59e0b, #f97316); padding: 0.8rem 1.5rem; font-size: 1rem; margin-top: 12px;';
+      retryBtn.innerText = '🔄 Retry Load';
+      retryBtn.onclick = () => window.location.reload();
+      
+      statusBox.appendChild(document.createElement('br'));
+      statusBox.appendChild(retryBtn);
+      
+      mintBtn.disabled = true; 
+      return;
+    }
+
+    if (!contractDetails) {
+      mintBtn.disabled = true;
+      return;
+    }
+
+    const currentAccount = getAccount(wagmiConfig);
+    const chainId = currentAccount.chainId;
+
+    if (chainId && chainId !== celo.id) {
+      setStatus("Please switch to Celo Mainnet.", 'warning');
+      mintBtn.disabled = true;
+      mintBtn.title = "Switch to Celo Mainnet to mint.";
+      return;
+    } else {
+      mintBtn.title = ""; 
+    }
+    
+    try {
+      const price = await readContract(wagmiConfig, {
+        address: contractDetails.address,
+        abi: contractDetails.abi,
+        functionName: 'mintPrice'
+      });
+      
+      mintPriceWei = BigInt(price);
+      
+      if (mintPriceWei > 0n) {
+        const celoPrice = Number(mintPriceWei) / 1e18;
+        mintBtn.innerText = `MINT (${celoPrice.toFixed(4)} CELO)`;
+      }
+
+      console.log('Contract settings:', { mintPriceWei: mintPriceWei.toString() });
+
+    } catch (e) {
+      setStatus(`Could not read contract settings. Assuming free mint.`, 'warning');
+      mintPriceWei = 0n;
+      console.warn(`Failed to read contract settings.`, e);
+    }
+
+    try {
+      const maxSupply = await readContract(wagmiConfig, {
+        address: contractDetails.address,
+        abi: contractDetails.abi,
+        functionName: MAX_SUPPLY_FUNCTION_NAME
+      });
+      MAX_SUPPLY = Number(maxSupply);
+      console.log('Max supply:', MAX_SUPPLY);
+    } catch (e) {
+      console.log('No max supply set - unlimited minting');
+      MAX_SUPPLY = 0;
+    }
+
+    if (connected) {
+      await updateSupply(true);
+      updateUserMintCount();
+      
+      // Show tabs and balance on initial connection
+      const tabNav = document.getElementById('tabNavigation');
+      if (tabNav) tabNav.classList.remove('hidden');
+      updateWalletBalance();
+      
+      // Load achievements in bottom section
+      setTimeout(() => loadAchievementsBottom(), 1500);
+    }
   } catch (error) {
-    console.error('❌ Failed to initialize app:', error);
+    console.error('Initialization error:', error);
     setStatus('Failed to initialize. Please refresh the page.', 'error');
   }
-}
+})();
 
-// Handle account changes
-function handleAccountChange(account) {
-  clearTimeout(accountChangeTimeout);
-  accountChangeTimeout = setTimeout(async () => {
-    try {
-      if (account.address && account.isConnected) {
-        console.log('✅ Account connected:', account.address);
-        showAddress(account.address);
-        setStatus('Wallet connected successfully!', 'success');
-        mintBtn.disabled = false;
+watchAccount(wagmiConfig, {
+  onChange(account) {
+    clearTimeout(accountChangeTimeout);
+    accountChangeTimeout = setTimeout(() => {
+      try {
+        if (account.address && account.isConnected) {
+          console.log('Account changed to:', account.address);
+          userAddress = account.address;
+          showAddress(userAddress);
+          setStatus('Wallet connected successfully!', 'success');
+          mintBtn.disabled = false;
+          
+          updateSupply(true);
+          updateUserMintCount();
+          
+          // Show tab navigation and update balance
+          const tabNav = document.getElementById('tabNavigation');
+          if (tabNav) tabNav.classList.remove('hidden');
+          updateWalletBalance();
+          
+          // Load achievements in bottom section
+          setTimeout(() => loadAchievementsBottom(), 1000);
+          
+          previewBtn.classList.add('hidden');
+          previewContainer.classList.add('hidden');
+          nftActions.classList.add('hidden');
+          const nftActionsRow2 = document.getElementById('nftActionsRow2');
+          if (nftActionsRow2) nftActionsRow2.classList.add('hidden');
+          
+          lastMintedTokenId = null;
+          lastAirdropAmount = null;
+          sessionStorage.removeItem('lastMintedTokenId');
 
-        // Update stats
-        await updateSupply(true);
-        await updateUserMintCount();
-        await updateWalletBalance();
-        
-        // Load gallery
-        await loadUserGallery(account.address);
-
-        // Show tab navigation
-        const tabNav = document.getElementById('tabNavigation');
-        if (tabNav) tabNav.classList.remove('hidden');
-
-        // Load achievements
-        setTimeout(() => loadAchievementsBottom(), 1500);
-
-        previewBtn.classList.add('hidden');
-        previewContainer.classList.add('hidden');
-        nftActions.classList.add('hidden');
-
-        lastMintedTokenId = null;
-        lastAirdropAmount = null;
-        safeLocalStorage.removeItem('lastMintedTokenId');
-      } else if (!account.isConnected) {
-        console.log('🔌 Wallet disconnected');
-        userAddrBox.classList.add('hidden');
-        showConnectButton();
-        setStatus('Wallet disconnected. Please connect again.', 'warning');
-        mintBtn.disabled = true;
-
-        // Hide tabs and balance
-        const tabNav = document.getElementById('tabNavigation');
-        if (tabNav) tabNav.classList.add('hidden');
-        const balanceBox = document.getElementById('walletBalanceBox');
-        if (balanceBox) balanceBox.classList.add('hidden');
-
-        previewBtn.classList.add('hidden');
-        previewContainer.classList.add('hidden');
-        nftActions.classList.add('hidden');
-        if (totalMintedStat) totalMintedStat.textContent = '--';
-        if (yourMintsStat) yourMintsStat.textContent = '--';
-        if (remainingStat) remainingStat.textContent = '--';
-        safeLocalStorage.removeItem('lastMintedTokenId');
-        lastMintedTokenId = null;
-        lastAirdropAmount = null;
+        } else if (!account.isConnected && userAddress) {
+          console.log('Wallet disconnected');
+          
+          // Clean up intervals to prevent memory leaks
+          stopRecentMintsPolling();
+          if (leaderboardInterval) {
+            clearInterval(leaderboardInterval);
+            leaderboardInterval = null;
+          }
+          
+          userAddress = null;
+          userAddrBox.classList.add('hidden');
+          showConnectButton();
+          setStatus('Wallet disconnected. Please connect again.', 'warning');
+          mintBtn.disabled = true;
+          
+          // Hide tabs and balance
+          const tabNav = document.getElementById('tabNavigation');
+          if (tabNav) tabNav.classList.add('hidden');
+          const balanceBox = document.getElementById('walletBalanceBox');
+          if (balanceBox) balanceBox.classList.add('hidden');
+          
+          previewBtn.classList.add('hidden');
+          previewContainer.classList.add('hidden');
+          nftActions.classList.add('hidden');
+          const nftActionsRow2 = document.getElementById('nftActionsRow2');
+          if (nftActionsRow2) nftActionsRow2.classList.add('hidden');
+          if (totalMintedStat) totalMintedStat.textContent = '--';
+          if (yourMintsStat) yourMintsStat.textContent = '--';
+          if (remainingStat) remainingStat.textContent = '--';
+          sessionStorage.removeItem('lastMintedTokenId');
+          lastMintedTokenId = null;
+          lastAirdropAmount = null;
+        }
+      } catch (error) {
+        console.error('Account change error:', error);
       }
-    } catch (error) {
-      console.error('❌ Account change error:', error);
-    }
-  }, 300);
-}
+    }, 300);
+  },
+});
 
-// Load contract details
-async function loadContractDetails() {
+connectBtn.addEventListener('click', async () => {
   try {
-    let response;
-    try {
-      response = await fetch('./contract.json');
-    } catch {
-      response = await fetch('/contract.json');
+    if (modal) {
+      modal.open();
     }
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const details = await response.json();
-    console.log('Contract loaded:', details.address);
-    return details;
   } catch (error) {
-    setStatus('Missing contract details.', 'error');
-    console.error('Contract load error:', error);
+    console.error('Connect button error:', error);
+    setStatus('Failed to open wallet modal.', 'error');
+  }
+});
 
-    const retryBtn = document.createElement('button');
-    retryBtn.className = 'action-button';
-    retryBtn.style.cssText =
-      'background: linear-gradient(90deg, #f59e0b, #f97316); padding: 0.8rem 1.5rem; font-size: 1rem; margin-top: 12px;';
-    retryBtn.innerText = '🔄 Retry Load';
-    retryBtn.onclick = () => window.location.reload();
-
-    statusBox.appendChild(document.createElement('br'));
-    statusBox.appendChild(retryBtn);
-
-    mintBtn.disabled = true;
-    throw error;
-  }
-}
-
-// Set up event listeners
-function setupEventListeners() {
-  connectBtn.addEventListener('click', () => {
-    walletManager.openModal();
-  });
-
-  mintBtn.addEventListener('click', handleMint);
-  previewBtn.addEventListener('click', () => previewNft(lastMintedTokenId, true));
-  
-  // Download button event listeners
-  const downloadSVG = document.getElementById('downloadSVG');
-  const downloadGIF = document.getElementById('downloadGIF');
-  const copyImageBtn = document.getElementById('copyImageBtn');
-  const twitterBtn = document.getElementById('twitterBtn');
-  const giftBtn = document.getElementById('giftBtn');
-  
-  if (downloadSVG) {
-    downloadSVG.addEventListener('click', async () => {
-      try {
-        setStatus('Downloading SVG...', 'info');
-        await downloadManager.downloadSVGFile(lastMintedTokenId);
-        setStatus('SVG downloaded!', 'success');
-      } catch (error) {
-        setStatus(error.message, 'error');
-      }
-    });
-  }
-  
-  if (downloadGIF) {
-    downloadGIF.addEventListener('click', async () => {
-      try {
-        setStatus('Generating PNG...', 'info');
-        await downloadManager.downloadPNGFile(lastMintedTokenId);
-        setStatus('PNG downloaded!', 'success');
-      } catch (error) {
-        setStatus(error.message, 'error');
-      }
-    });
-  }
-  
-  if (copyImageBtn) {
-    copyImageBtn.addEventListener('click', async () => {
-      try {
-        await downloadManager.copyImageToClipboard();
-        setStatus('Image copied to clipboard!', 'success');
-      } catch (error) {
-        setStatus(error.message, 'error');
-      }
-    });
-  }
-  
-  if (twitterBtn) {
-    twitterBtn.addEventListener('click', () => {
-      try {
-        downloadManager.shareToTwitter(lastAirdropAmount);
-        setStatus('Opening Twitter...', 'info');
-      } catch (error) {
-        setStatus(error.message, 'error');
-      }
-    });
-  }
-  
-  if (giftBtn) {
-    giftBtn.addEventListener('click', () => {
-      try {
-        giftManager.showGiftModal(lastMintedTokenId);
-      } catch (error) {
-        setStatus(error.message, 'error');
-      }
-    });
-  }
-}
-
-// Setup section toggle listeners
-function setupSectionToggles() {
-  const toggleRecentBtn = document.getElementById('toggleRecentBtn');
-  const toggleLeaderboardBtn = document.getElementById('toggleLeaderboardBtn');
-  const toggleAchievementsBtn = document.getElementById('toggleAchievementsBtn');
-  
-  const recentMintsSection = document.getElementById('recentMintsSection');
-  const leaderboardSection = document.getElementById('leaderboardSection');
-  const achievementsSection = document.getElementById('achievementsSection');
-  
-  if (toggleRecentBtn) {
-    toggleRecentBtn.addEventListener('click', () => {
-      console.log('🔥 Showing Recent Mints');
-      document.querySelectorAll('.toggle-btn').forEach(btn => btn.classList.remove('active'));
-      toggleRecentBtn.classList.add('active');
-      
-      if (recentMintsSection) recentMintsSection.style.display = 'block';
-      if (leaderboardSection) leaderboardSection.style.display = 'none';
-      if (achievementsSection) achievementsSection.style.display = 'none';
-    });
-  }
-  
-  if (toggleLeaderboardBtn) {
-    toggleLeaderboardBtn.addEventListener('click', () => {
-      console.log('🏆 Showing Leaderboard');
-      document.querySelectorAll('.toggle-btn').forEach(btn => btn.classList.remove('active'));
-      toggleLeaderboardBtn.classList.add('active');
-      
-      if (recentMintsSection) recentMintsSection.style.display = 'none';
-      if (leaderboardSection) leaderboardSection.style.display = 'block';
-      if (achievementsSection) achievementsSection.style.display = 'none';
-      
-      loadLeaderboard();
-    });
-  }
-  
-  if (toggleAchievementsBtn) {
-    toggleAchievementsBtn.addEventListener('click', () => {
-      console.log('🏅 Showing Achievements');
-      document.querySelectorAll('.toggle-btn').forEach(btn => btn.classList.remove('active'));
-      toggleAchievementsBtn.classList.add('active');
-      
-      if (recentMintsSection) recentMintsSection.style.display = 'none';
-      if (leaderboardSection) leaderboardSection.style.display = 'none';
-      if (achievementsSection) achievementsSection.style.display = 'block';
-      
-      loadAchievementsBottom();
-    });
-  }
-}
-
-// Load recent mints
-async function loadRecentMints() {
-  const container = document.getElementById('recentMintsContainer');
-  if (!container || !galleryManager) return;
-  
-  try {
-    container.innerHTML = '<div class="empty-state">Loading recent mints... ⏳</div>';
-    const mints = await galleryManager.fetchRecentMints(5);
-    
-    if (!mints || mints.length === 0) {
-      container.innerHTML = '<div class="empty-state">No mints yet. Be the first! 🚀</div>';
-      return;
-    }
-    
-    const userAddress = walletManager.getAddress()?.toLowerCase();
-    
-    container.innerHTML = mints.map(mint => `
-      <div class="mint-item ${mint.owner.toLowerCase() === userAddress ? 'your-mint' : ''}">
-        <div class="mint-info">
-          <span class="token-id">#${mint.tokenId}</span>
-          <span class="rarity-badge" style="color: ${mint.rarityColor}; border-color: ${mint.rarityColor};">
-            ${mint.rarity}
-          </span>
-        </div>
-        <div class="mint-meta">
-          <span class="owner">${mint.ownerShort}</span>
-          <span class="time">${getTimeAgo(Date.now() - mint.timestamp)}</span>
-        </div>
-      </div>
-    `).join('');
-  } catch (error) {
-    console.error('Failed to load recent mints:', error);
-    container.innerHTML = '<div class="empty-state">Failed to load. Retrying... 🔄</div>';
-  }
-}
-
-// Load leaderboard
-async function loadLeaderboard() {
-  const container = document.getElementById('leaderboardContainer');
-  if (!container || !galleryManager) {
-    console.error('❌ Leaderboard container or galleryManager missing');
-    return;
-  }
-  
-  try {
-    console.log('📊 Loading leaderboard...');
-    container.innerHTML = '<div class="empty-state">Loading leaderboard... ⏳</div>';
-    
-    const leaderboard = await galleryManager.fetchLeaderboard();
-    console.log('📊 Leaderboard data:', leaderboard);
-    
-    if (!leaderboard || leaderboard.length === 0) {
-      container.innerHTML = '<div class="empty-state">No data yet. Start minting! 🚀</div>';
-      return;
-    }
-    
-    const userAddress = walletManager.getAddress()?.toLowerCase();
-    
-    container.innerHTML = leaderboard.map((holder, index) => `
-      <div class="leaderboard-item ${holder.address?.toLowerCase() === userAddress ? 'your-rank' : ''}">
-        <div class="rank-badge">${index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `#${index + 1}`}</div>
-        <div class="holder-info">
-          <div class="holder-address">
-            ${holder.address?.toLowerCase() === userAddress ? '👑 You' : holder.shortAddress}
-          </div>
-          <div class="holder-rarities">
-            ${holder.rarities?.mythic > 0 ? `<span class="rarity-count mythic">${holder.rarities.mythic} Mythic</span>` : ''}
-            ${holder.rarities?.legendary > 0 ? `<span class="rarity-count legendary">${holder.rarities.legendary} Legendary</span>` : ''}
-            ${holder.rarities?.rare > 0 ? `<span class="rarity-count rare">${holder.rarities.rare} Rare</span>` : ''}
-          </div>
-        </div>
-        <div class="holder-count">${holder.count} NFTs</div>
-      </div>
-    `).join('');
-    
-    console.log('✅ Leaderboard loaded successfully');
-  } catch (error) {
-    console.error('❌ Failed to load leaderboard:', error);
-    container.innerHTML = `
-      <div class="empty-state">
-        Failed to load leaderboard<br>
-        <small style="color: #f59e0b;">${error.message}</small><br>
-        <button onclick="window.location.reload()" style="margin-top: 10px; padding: 8px 16px; background: #3b82f6; border: none; border-radius: 6px; color: white; cursor: pointer;">
-          🔄 Reload Page
-        </button>
-      </div>
-    `;
-  }
-}
-
-// Load achievements in bottom section
-async function loadAchievementsBottom() {
-  if (achievementsManager && walletManager) {
-    const address = walletManager.getAddress();
-    if (address && contractDetails) {
-      try {
-        const balance = await mintingManager.getUserBalance(address);
-        const userMintCount = Number(balance);
-        await achievementsManager.loadAchievementsBottom(address, contractDetails, userMintCount);
-      } catch (error) {
-        console.error('Failed to load achievements:', error);
-      }
-    }
-  }
-}
-
-// Handle mint process
-async function handleMint() {
+// ⭐ MINT BUTTON WITH PREDICTION GAME & AUTOMATIC AIRDROP ⭐
+mintBtn.addEventListener('click', async () => {
   try {
     if (!contractDetails) {
       setStatus("Contract details are missing. Cannot mint.", "error");
@@ -533,91 +2031,129 @@ async function handleMint() {
       setStatus("This NFT drop is sold out.", "warning");
       return;
     }
-
-    const account = walletManager.getAccount();
-    if (account.chainId !== 42220) {
+    
+    const currentAccount = getAccount(wagmiConfig);
+    if (currentAccount.chainId !== celo.id) {
       setStatus("⚠️ Please switch to Celo Mainnet", "error");
-      walletManager.openModal('Networks');
+      if (modal) {
+        modal.open({ view: 'Networks' });
+      }
       return;
     }
-
-    // Show prediction modal
+    
+    // 🎯 STEP 1: SHOW PREDICTION MODAL
     setStatus('Ready to predict? 📈', 'info');
-    const predictionResult = await predictionManager.showPredictionModal(
-      account.address,
-      apiClient.fetchCeloPrice.bind(apiClient)
-    );
-
+    const predictionResult = await showPredictionModal();
+    
     console.log('Prediction result:', predictionResult);
-
+    
     statusBox.innerHTML = '';
     statusBox.className = 'status-box';
 
-    // Hide UI elements
     previewBtn.classList.add('hidden');
     previewContainer.classList.add('hidden');
+    previewContainer.classList.remove('sparkles', ...ALL_RARITY_CLASSES);
     txLinksContainer.classList.add('hidden');
     nftActions.classList.add('hidden');
 
     mintBtn.disabled = true;
     mintBtn.innerHTML = '<span class="spinner"></span> Minting...';
     lastMintedTokenId = null;
-    lastAirdropAmount = null;
+    lastAirdropAmount = null; // Reset airdrop amount
 
-    // Mint NFT
-    const priceData = await apiClient.fetchCeloPrice();
+    const { address, abi } = contractDetails;
+
+    // 🎲 STEP 2: MINT NFT IMMEDIATELY
+    const priceData = await fetchCeloPrice();
     const price = priceData.price;
     const priceForContract = Math.floor(price * 10000);
 
-    const { hash } = await mintingManager.mint(priceForContract);
+    const hash = await writeContract(wagmiConfig, {
+      address,
+      abi,
+      functionName: 'mint',
+      args: [priceForContract],
+      value: mintPriceWei 
+    });
+    
     setStatus("Confirming transaction...", "info");
-    const receipt = await mintingManager.waitForMint(hash, 30000);
+    const receipt = await waitForTransactionReceipt(wagmiConfig, { hash, timeout: 30_000});
 
-    const actualTokenId = getTokenIdFromReceipt(receipt);
+    if (receipt.status === 'reverted') {
+      throw new Error('Transaction was reverted.');
+    }
+
+    const actualTokenId = await getTokenIdFromReceipt(receipt);
+    
     if (!actualTokenId) {
       throw new Error('Failed to get token ID from receipt');
     }
 
     safeLocalStorage.setItem('lastMintedTokenId', actualTokenId.toString());
+    
     celebrateMint();
-
+    
     setStatus("🎉 Mint Successful!", "success");
+    
+    const priceText = (price).toFixed(4);
+    lastMintedInfo = { tokenId: actualTokenId, txHash: hash, price: priceText, rarity: null };
+    
+    if (contractAddress) {
+      const celoscanTokenUrl = `https://celoscan.io/token/${contractAddress}?a=${actualTokenId}`;
 
-    const priceText = price.toFixed(4);
+      txLinksContainer.innerHTML = `
+        <a href="${celoscanTokenUrl}" target="_blank" rel="noopener noreferrer">View on Celoscan</a>
+      `;
+      
+      const castBtnElement = document.createElement('button');
+      castBtnElement.id = 'castBtn';
+      castBtnElement.className = 'tx-link cast-link';
+      castBtnElement.innerHTML = '📣 Cast';
+      castBtnElement.onclick = async () => {
+        if (lastMintedInfo.tokenId) {
+          await castToFarcaster(
+            lastMintedInfo.tokenId, 
+            lastMintedInfo.rarity || 'Common', 
+            lastMintedInfo.price,
+            lastAirdropAmount // Include airdrop amount
+          );
+        }
+      };
+      txLinksContainer.appendChild(castBtnElement);
+      
+      txLinksContainer.classList.remove('hidden');
+    }
+
     lastMintedTokenId = actualTokenId;
     saveMintToHistory(actualTokenId, hash);
 
-    // Show transaction links
-    showTransactionLinks(actualTokenId, hash);
-
     await updateSupply();
-    await updateUserMintCount();
     previewBtn.classList.remove('hidden');
     previewBtn.innerText = `Preview NFT #${actualTokenId}`;
     await previewNft(lastMintedTokenId, true);
+    
+    // Update wallet balance after mint
+    updateWalletBalance();
+    
+    if (currentNFTData && currentNFTData.metadata) {
+      const rarityAttr = currentNFTData.metadata.attributes?.find(attr => attr.trait_type === 'Rarity');
+      if (rarityAttr) {
+        lastMintedInfo.rarity = rarityAttr.value;
+      }
+    }
 
-    // Update wallet balance and reload data
-    await updateWalletBalance();
-    loadRecentMints();
-    loadLeaderboard();
-
-    // Handle airdrop based on prediction
+    // 🎯 STEP 3: HANDLE AIRDROP BASED ON PREDICTION
     if (predictionResult.skip) {
+      // User skipped prediction - send standard airdrop immediately
       setTimeout(async () => {
-        const airdropResult = await apiClient.claimAirdrop(
-          actualTokenId,
-          account.address,
-          hash,
-          1
-        );
-
-        if (
-          airdropResult &&
-          (airdropResult.luckyMultiplier > 1 ||
-            airdropResult.rarityMultiplier > 1 ||
-            airdropResult.bonusMessages)
-        ) {
+        const airdropResult = await claimAirdrop(actualTokenId, hash, 1);
+        
+        console.log('Skip prediction - Airdrop result:', airdropResult);
+        
+        // Show bonus popup if user got lucky/rarity bonuses
+        if (airdropResult && (airdropResult.luckyMultiplier > 1 || airdropResult.rarityMultiplier > 1 || airdropResult.bonusMessages)) {
           setTimeout(() => {
+            // Create a fake verifyResult for skipped predictions
             const fakeVerifyResult = {
               success: true,
               correct: null,
@@ -627,433 +2163,1113 @@ async function handleMint() {
               priceChange: '0',
               priceChangePercent: '0',
               multiplier: 1,
-              stats: null,
+              stats: null
             };
-            predictionManager.showPredictionResultPopup(fakeVerifyResult, airdropResult);
+            
+            console.log('Showing bonus popup for skip user');
+            showPredictionResultPopup(fakeVerifyResult, airdropResult);
           }, 2000);
         }
       }, 2000);
     } else {
+      // User made a prediction - wait for verification
       const remainingSeconds = Math.ceil(predictionResult.timeLeft / 1000);
       setStatus(`⏳ Waiting for price verification... (${remainingSeconds}s remaining)`, 'info');
+      
+      // Fix race condition: ensure minimum delay of 1 second
       const safeDelay = Math.max(predictionResult.timeLeft || 0, 1000);
-
+      
+      // Schedule airdrop after remaining time
       setTimeout(async () => {
         try {
           setStatus('🔍 Verifying prediction result...', 'info');
-          const verifyResult = await predictionManager.verifyPrediction(
-            account.address,
-            predictionResult.timestamp,
-            apiClient.fetchCeloPrice.bind(apiClient)
-          );
-
+          
+          // Verify prediction with backend
+          const priceData = await fetchCeloPrice();
+          console.log('Current price for verification:', priceData.price);
+          console.log('Verifying prediction with params:', {
+            userAddress,
+            timestamp: predictionResult.timestamp,
+            newPrice: priceData.price
+          });
+          
+          let verifyResult = null;
+          let useClientSideVerification = false;
+          
+          // Try server-side verification first
+          try {
+            const verifyResponse = await fetch('/api/prediction', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                action: 'verify',
+                userAddress,
+                timestamp: predictionResult.timestamp,
+                newPrice: priceData.price
+              })
+            });
+            
+            console.log('Verify response status:', verifyResponse.status);
+            
+            if (!verifyResponse.ok) {
+              const errorData = await verifyResponse.json();
+              console.error('Verification API error:', errorData);
+              console.log('⚠️ API verification failed, using client-side verification');
+              useClientSideVerification = true;
+            } else {
+              verifyResult = await verifyResponse.json();
+              
+              // Ensure all required fields exist
+              if (!verifyResult.success) {
+                console.log('⚠️ API returned unsuccessful, using client-side verification');
+                useClientSideVerification = true;
+              }
+            }
+          } catch (apiError) {
+            console.error('API verification error:', apiError);
+            console.log('⚠️ API error, using client-side verification');
+            useClientSideVerification = true;
+          }
+          
+          // Fallback to client-side verification
+          if (useClientSideVerification) {
+            const priceChange = priceData.price - predictionResult.startPrice;
+            const predictedUp = predictionResult.prediction === 'up';
+            const actuallyWentUp = priceChange > 0;
+            const correct = predictedUp === actuallyWentUp;
+            const multiplier = correct ? 2 : 0.5;
+            
+            console.log('Client-side verification:', {
+              startPrice: predictionResult.startPrice,
+              endPrice: priceData.price,
+              priceChange,
+              predictedUp,
+              actuallyWentUp,
+              correct,
+              multiplier
+            });
+            
+            verifyResult = {
+              success: true,
+              correct,
+              prediction: predictionResult.prediction,
+              startPrice: predictionResult.startPrice,
+              endPrice: priceData.price,
+              priceChange: priceChange.toFixed(4),
+              priceChangePercent: ((priceChange / predictionResult.startPrice) * 100).toFixed(2),
+              multiplier,
+              stats: null // No stats in client-side mode
+            };
+          }
+          
           const multiplier = verifyResult.multiplier || 1;
-
+          
+          console.log('Prediction verification result:', verifyResult);
+          
           if (verifyResult.correct) {
             setStatus('🎯 Correct prediction! Claiming 2x airdrop...', 'success');
           } else {
             setStatus('🎲 Wrong prediction. Claiming 0.5x consolation airdrop...', 'info');
           }
-
-          const airdropResult = await apiClient.claimAirdrop(
-            actualTokenId,
-            account.address,
-            hash,
-            multiplier
-          );
-
-          if (airdropResult && verifyResult) {
-            setTimeout(() => {
-              predictionManager.showPredictionResultPopup(verifyResult, airdropResult);
-            }, 2000);
+          
+          // Claim airdrop with verified multiplier
+          const airdropResult = await claimAirdrop(actualTokenId, hash, multiplier);
+          
+          console.log('Airdrop result:', airdropResult);
+          
+          // Add validation before showing popup
+          if (!verifyResult || !airdropResult) {
+            console.error('Missing required data for popup:', { verifyResult, airdropResult });
+            return; // Early exit
           }
+          
+          // Show prediction result popup after airdrop is sent
+          if (airdropResult && verifyResult) {
+            console.log('Showing prediction result popup...');
+            setTimeout(() => {
+              showPredictionResultPopup(verifyResult, airdropResult);
+            }, 2000);
+          } else {
+            console.log('Popup not shown - missing data:', { airdropResult, verifyResult });
+          }
+          
         } catch (error) {
           console.error('Prediction verification failed:', error);
+          // Fallback to standard airdrop if verification fails
           setStatus('⚠️ Verification failed. Sending standard airdrop...', 'warning');
-          await apiClient.claimAirdrop(actualTokenId, account.address, hash, 1);
+          await claimAirdrop(actualTokenId, hash, 1);
         }
       }, safeDelay);
     }
-  } catch (error) {
-    const errorMsg = getImprovedErrorMessage(error);
-    setStatus(errorMsg, "error");
-    console.error('Mint Error:', error);
 
+  } catch (e) {
+    const errorMsg = getImprovedErrorMessage(e);
+    setStatus(errorMsg, "error");
+    console.error('Mint Error:', e);
+    
     if (!errorMsg.includes('rejected') && !errorMsg.includes('already minted')) {
       const retryBtn = document.createElement('button');
       retryBtn.className = 'action-button';
-      retryBtn.style.cssText =
-        'background: linear-gradient(90deg, #f59e0b, #f97316); padding: 0.6rem 1.2rem; font-size: 0.9rem; margin-top: 12px;';
+      retryBtn.style.cssText = 'background: linear-gradient(90deg, #f59e0b, #f97316); padding: 0.6rem 1.2rem; font-size: 0.9rem; margin-top: 12px;';
       retryBtn.innerHTML = '🔄 Retry Mint';
       retryBtn.onclick = () => mintBtn.click();
-
+      
       statusBox.appendChild(document.createElement('br'));
       statusBox.appendChild(retryBtn);
     }
-
+    
     previewBtn.classList.add('hidden');
     previewContainer.classList.add('hidden');
+    previewContainer.classList.remove('sparkles', ...ALL_RARITY_CLASSES);
     nftActions.classList.add('hidden');
-    safeLocalStorage.removeItem('lastMintedTokenId');
+    sessionStorage.removeItem('lastMintedTokenId');
     lastMintedTokenId = null;
     lastAirdropAmount = null;
+    lastMintedInfo = { tokenId: null, txHash: null, rarity: null, price: null };
   } finally {
-    mintBtn.disabled = false;
-    const celoPrice = Number(mintingManager.mintPrice) / 1e18;
-    mintBtn.innerText = mintingManager.mintPrice > 0n ? `MINT (${celoPrice.toFixed(4)} CELO)` : 'MINT';
-  }
-}
-
-// Update supply counters
-async function updateSupply(initialLoad = false) {
-  try {
-    if (!contractDetails || !mintingManager) return 0;
-
-    const total = await mintingManager.getTotalSupply();
-
-    if (totalMintedStat) {
-      const current = parseInt(totalMintedStat.textContent) || 0;
-      if (current !== total) {
-        animateCounter(totalMintedStat, current, total, 800);
-      }
-    }
-
-    if (remainingStat) {
-      const remaining = mintingManager.maxSupply - total;
-      remainingStat.textContent = remaining > 0 ? remaining : '∞';
-    }
-
-    if (mintingManager.maxSupply > 0 && total >= mintingManager.maxSupply) {
-      mintBtn.disabled = true;
-      mintBtn.innerText = "SOLD OUT";
-      mintBtn.title = "The maximum supply has been reached.";
-
-      if (!initialLoad) {
-        setStatus(`All ${mintingManager.maxSupply} NFTs have been minted!`, "warning");
-      }
-    } else if (!initialLoad && mintBtn.innerText !== "SOLD OUT") {
+    if (mintBtn.innerText !== "SOLD OUT") {
       mintBtn.disabled = false;
-      const celoPrice = Number(mintingManager.mintPrice) / 1e18;
-      mintBtn.innerText = mintingManager.mintPrice > 0n ? `MINT (${celoPrice.toFixed(4)} CELO)` : 'MINT';
-      mintBtn.title = '';
+      const celoPrice = Number(mintPriceWei) / 1e18;
+      mintBtn.innerText = mintPriceWei > 0n ? `MINT (${celoPrice.toFixed(4)} CELO)` : 'MINT';
     }
-
-    return total;
-  } catch (error) {
-    if (totalMintedStat) totalMintedStat.textContent = '--';
-    if (remainingStat) remainingStat.textContent = '--';
-    console.error('Error updating supply:', error);
-    return 0;
   }
+});
+
+previewBtn.addEventListener('click', async () => {
+  try {
+    if (lastMintedTokenId !== null) {
+      await previewNft(lastMintedTokenId);
+    } else {
+      setStatus("No token ID to preview. Please mint first.", 'warning');
+    }
+  } catch (error) {
+    console.error('Preview error:', error);
+    setStatus('Failed to load preview.', 'error');
+  }
+});
+
+downloadSVG.addEventListener('click', downloadSVGFile);
+downloadGIF.addEventListener('click', downloadPNGFile);
+giftBtn.addEventListener('click', showGiftModal);
+
+const copyImageBtn = document.getElementById('copyImageBtn');
+if (copyImageBtn) {
+  copyImageBtn.addEventListener('click', copyImageToClipboard);
 }
 
-// Update user mint count
-async function updateUserMintCount() {
-  const address = walletManager.getAddress();
-  if (!address || !contractDetails) {
-    if (yourMintsStat) yourMintsStat.textContent = '--';
-    return;
-  }
+const twitterBtn = document.getElementById('twitterBtn');
+if (twitterBtn) {
+  twitterBtn.addEventListener('click', shareToTwitter);
+}
 
+// ===== RECENT MINTS FEED =====
+
+let recentMintsInterval = null;
+
+async function fetchRecentMints(limit = 5) {
   try {
-    const balance = await mintingManager.getUserBalance(address);
-    userMintCount = balance;
-    if (yourMintsStat) {
-      yourMintsStat.textContent = userMintCount;
+    if (!contractDetails || !wagmiConfig) {
+      console.log('Contract details or wagmi config not ready');
+      return [];
     }
     
-    if (userMintCount > 0 && !lastMintedTokenId) {
-      const lastToken = await loadLastMintedNFT(walletManager.wagmiConfig, contractDetails, address);
-      if (lastToken) {
-        lastMintedTokenId = lastToken;
-        previewBtn.innerText = `Preview NFT #${lastToken}`;
-        previewBtn.classList.remove('hidden');
+    const totalSupply = await readContract(wagmiConfig, {
+      address: contractDetails.address,
+      abi: contractDetails.abi,
+      functionName: 'totalSupply'
+    });
+    
+    const total = Number(totalSupply);
+    if (total === 0) return [];
+    
+    const start = Math.max(1, total - limit + 1);
+    const mints = [];
+    
+    // Batch all requests together for better performance
+    const tokenIds = [];
+    for (let i = total; i >= start; i--) {
+      tokenIds.push(i);
+    }
+    
+    const promises = tokenIds.map(tokenId => 
+      Promise.all([
+        readContract(wagmiConfig, {
+          address: contractDetails.address,
+          abi: contractDetails.abi,
+          functionName: 'ownerOf',
+          args: [BigInt(tokenId)]
+        }),
+        readContract(wagmiConfig, {
+          address: contractDetails.address,
+          abi: contractDetails.abi,
+          functionName: 'tokenTraits',
+          args: [BigInt(tokenId)]
+        })
+      ]).then(([owner, traits]) => ({
+        tokenId,
+        owner,
+        traits
+      })).catch(e => {
+        console.log(`Failed to fetch token #${tokenId}:`, e.message);
+        return null;
+      })
+    );
+    
+    const results = await Promise.all(promises);
+    
+    const rarityLabels = ['Common', 'Rare', 'Legendary', 'Mythic'];
+    const rarityColors = ['#9ca3af', '#3b82f6', '#f59e0b', '#ec4899'];
+    
+    results.forEach(result => {
+      if (result) {
+        const rarity = Number(result.traits[1]);
+        mints.push({
+          tokenId: result.tokenId,
+          owner: result.owner,
+          ownerShort: `${result.owner.slice(0, 6)}...${result.owner.slice(-4)}`,
+          rarity: rarityLabels[rarity] || 'Common',
+          rarityColor: rarityColors[rarity] || '#9ca3af',
+          timestamp: Number(result.traits[2]) * 1000
+        });
       }
-    }
-  } catch (error) {
-    console.error('Error fetching user balance:', error);
-    const history = JSON.parse(safeLocalStorage.getItem('mintHistory') || '[]');
-    const userMints = history.filter(m => m.address === address);
-    userMintCount = userMints.length;
-    if (yourMintsStat) {
-      yourMintsStat.textContent = userMintCount;
-    }
+    });
+    
+    return mints;
+  } catch (e) {
+    console.error('Failed to fetch recent mints:', e);
+    return [];
   }
 }
 
-// Update wallet balance
+function renderRecentMints(mints) {
+  const container = document.getElementById('recentMintsContainer');
+  if (!container) return;
+  
+  if (mints.length === 0) {
+    if (!contractDetails) {
+      container.innerHTML = '<div class="empty-state">Loading... ⏳</div>';
+    } else {
+      container.innerHTML = '<div class="empty-state">No mints yet. Be the first! 🚀</div>';
+    }
+    return;
+  }
+  
+  const now = Date.now();
+  
+  container.innerHTML = mints.map(mint => {
+    const timeAgo = getTimeAgo(now - mint.timestamp);
+    const isYours = userAddress && mint.owner.toLowerCase() === userAddress.toLowerCase();
+    
+    return `
+      <div class="mint-item ${isYours ? 'your-mint' : ''}" style="animation: slideIn 0.3s ease-out;">
+        <div class="mint-info">
+          <span class="token-id">#${mint.tokenId}</span>
+          <span class="rarity-badge" style="color: ${mint.rarityColor}; border-color: ${mint.rarityColor};">
+            ${mint.rarity}
+          </span>
+        </div>
+        <div class="mint-meta">
+          <span class="owner">${isYours ? 'You' : mint.ownerShort}</span>
+          <span class="time">${timeAgo}</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function getTimeAgo(ms) {
+  const seconds = Math.floor(ms / 1000);
+  if (seconds < 60) return 'Just now';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+async function startRecentMintsPolling() {
+  if (recentMintsInterval) return;
+  
+  const updateFeed = async () => {
+    if (!contractDetails || !wagmiConfig) {
+      console.log('Waiting for contract initialization...');
+      return;
+    }
+    const mints = await fetchRecentMints(5);
+    renderRecentMints(mints);
+  };
+  
+  // Initial load with delay to ensure contract is ready
+  setTimeout(updateFeed, 1000);
+  recentMintsInterval = setInterval(updateFeed, 15000); // Update every 15s
+}
+
+function stopRecentMintsPolling() {
+  if (recentMintsInterval) {
+    clearInterval(recentMintsInterval);
+    recentMintsInterval = null;
+  }
+}
+
+// Start polling when page loads
+document.addEventListener('DOMContentLoaded', () => {
+  startRecentMintsPolling();
+});
+
+// Stop polling when page unloads
+window.addEventListener('beforeunload', () => {
+  stopRecentMintsPolling();
+});
+
+// ===== LEADERBOARD SYSTEM =====
+let leaderboardCache = null;
+let leaderboardLastFetch = 0;
+const LEADERBOARD_CACHE_TTL = 120000; // 2 minutes (matches polling interval)
+
+async function fetchLeaderboard() {
+  try {
+    // Return cached data if fresh
+    const now = Date.now();
+    if (leaderboardCache && (now - leaderboardLastFetch) < LEADERBOARD_CACHE_TTL) {
+      return leaderboardCache;
+    }
+    
+    if (!contractDetails || !wagmiConfig) {
+      console.log('Contract details or wagmi config not ready for leaderboard');
+      return [];
+    }
+    
+    console.log('Fetching leaderboard data from Celoscan API...');
+    
+    // Use Celoscan API proxy to get all NFT transfers (keeps API key secure)
+    const apiUrl = `/api/celoscan?module=account&action=tokennfttx&contractaddress=${contractDetails.address}&page=1&offset=10000&sort=desc`;
+    
+    try {
+      const response = await fetch(apiUrl);
+      const data = await response.json();
+      
+      if (data.status === '1' && data.result && Array.isArray(data.result)) {
+        console.log(`Celoscan API returned ${data.result.length} transfer events`);
+        
+        // Build holder map from transfer events
+        const holderMap = new Map();
+        const tokenOwners = new Map(); // Track current owner of each token
+        
+        // Process transfers in chronological order (oldest first)
+        const transfers = [...data.result].reverse();
+        
+        transfers.forEach(tx => {
+          const tokenId = tx.tokenID;
+          const from = tx.from.toLowerCase();
+          const to = tx.to.toLowerCase();
+          const zeroAddress = '0x0000000000000000000000000000000000000000';
+          
+          // Update token ownership
+          if (from !== zeroAddress && tokenOwners.get(tokenId) === from) {
+            // Remove from previous owner
+            holderMap.set(from, (holderMap.get(from) || 1) - 1);
+            if (holderMap.get(from) <= 0) holderMap.delete(from);
+          }
+          
+          if (to !== zeroAddress) {
+            // Add to new owner
+            tokenOwners.set(tokenId, to);
+            holderMap.set(to, (holderMap.get(to) || 0) + 1);
+          }
+        });
+        
+        console.log(`Found ${holderMap.size} unique holders`);
+        
+        // Now fetch rarity data for top holders
+        const topHolders = Array.from(holderMap.entries())
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 15); // Get top 15 to filter down to 10 after rarity fetch
+        
+        // Fetch rarity data for each holder's tokens
+        const holderData = await Promise.all(
+          topHolders.map(async ([address, count]) => {
+            const rarities = { mythic: 0, legendary: 0, rare: 0, common: 0 };
+            
+            // Get all tokens owned by this address
+            const ownedTokens = [];
+            for (const [tokenId, owner] of tokenOwners.entries()) {
+              if (owner === address) {
+                ownedTokens.push(tokenId);
+              }
+            }
+            
+            // Fetch rarity for each token (in batches)
+            const rarityPromises = ownedTokens.slice(0, 50).map(tokenId => // Limit to 50 to avoid timeout
+              readContract(wagmiConfig, {
+                address: contractDetails.address,
+                abi: contractDetails.abi,
+                functionName: 'tokenTraits',
+                args: [BigInt(tokenId)]
+              })
+              .then(traits => Number(traits[1]))
+              .catch(() => 0) // Default to common on error
+            );
+            
+            const rarityValues = await Promise.all(rarityPromises);
+            
+            rarityValues.forEach(rarity => {
+              if (rarity === 3) rarities.mythic++;
+              else if (rarity === 2) rarities.legendary++;
+              else if (rarity === 1) rarities.rare++;
+              else rarities.common++;
+            });
+            
+            return {
+              address,
+              shortAddress: `${address.slice(0, 6)}...${address.slice(-4)}`,
+              count,
+              rarities
+            };
+          })
+        );
+        
+        // Final sort with rarity tiebreakers
+        const leaderboard = holderData
+          .sort((a, b) => {
+            if (b.count !== a.count) return b.count - a.count;
+            if (b.rarities.mythic !== a.rarities.mythic) return b.rarities.mythic - a.rarities.mythic;
+            return b.rarities.legendary - a.rarities.legendary;
+          })
+          .slice(0, 10);
+        
+        leaderboardCache = leaderboard;
+        leaderboardLastFetch = now;
+        
+        console.log(`Leaderboard updated: ${leaderboard.length} collectors`);
+        return leaderboard;
+        
+      } else {
+        console.warn('Celoscan API returned no data, falling back to blockchain scan');
+        return await fetchLeaderboardFromBlockchain();
+      }
+    } catch (apiError) {
+      console.warn('Celoscan API failed, falling back to blockchain scan:', apiError);
+      return await fetchLeaderboardFromBlockchain();
+    }
+    
+  } catch (e) {
+    console.error('Leaderboard fetch error:', e);
+    return [];
+  }
+}
+
+// Fallback method: scan blockchain directly
+async function fetchLeaderboardFromBlockchain() {
+  try {
+    if (!contractDetails || !wagmiConfig) return [];
+    
+    const totalSupply = await readContract(wagmiConfig, {
+      address: contractDetails.address,
+      abi: contractDetails.abi,
+      functionName: 'totalSupply'
+    });
+    
+    const total = Number(totalSupply);
+    if (total === 0) return [];
+    
+    console.log(`Scanning all ${total} tokens from blockchain...`);
+    
+    const holderMap = new Map();
+    const rarityMap = new Map();
+    
+    // Process ALL tokens, not just last 200
+    const chunkSize = 20;
+    const totalChunks = Math.ceil(total / chunkSize);
+    
+    for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+      const start = chunkIndex * chunkSize + 1;
+      const end = Math.min((chunkIndex + 1) * chunkSize, total);
+      
+      const tokenIds = [];
+      for (let i = start; i <= end; i++) {
+        tokenIds.push(i);
+      }
+      
+      const promises = tokenIds.map(tokenId =>
+        Promise.all([
+          readContract(wagmiConfig, {
+            address: contractDetails.address,
+            abi: contractDetails.abi,
+            functionName: 'ownerOf',
+            args: [BigInt(tokenId)]
+          }),
+          readContract(wagmiConfig, {
+            address: contractDetails.address,
+            abi: contractDetails.abi,
+            functionName: 'tokenTraits',
+            args: [BigInt(tokenId)]
+          })
+        ]).then(([owner, traits]) => ({ owner, rarity: Number(traits[1]) }))
+        .catch(e => {
+          console.log(`Token ${tokenId} fetch failed:`, e.message);
+          return null;
+        })
+      );
+      
+      const results = await Promise.all(promises);
+      
+      results.forEach(result => {
+        if (result && result.owner) {
+          const { owner, rarity } = result;
+          const ownerLower = owner.toLowerCase();
+          
+          holderMap.set(ownerLower, (holderMap.get(ownerLower) || 0) + 1);
+          
+          if (!rarityMap.has(ownerLower)) {
+            rarityMap.set(ownerLower, { mythic: 0, legendary: 0, rare: 0, common: 0 });
+          }
+          const rarities = rarityMap.get(ownerLower);
+          if (rarity === 3) rarities.mythic++;
+          else if (rarity === 2) rarities.legendary++;
+          else if (rarity === 1) rarities.rare++;
+          else rarities.common++;
+        }
+      });
+      
+      console.log(`Processed chunk ${chunkIndex + 1}/${totalChunks}`);
+    }
+    
+    const leaderboard = Array.from(holderMap.entries())
+      .map(([address, count]) => ({
+        address,
+        shortAddress: `${address.slice(0, 6)}...${address.slice(-4)}`,
+        count,
+        rarities: rarityMap.get(address) || { mythic: 0, legendary: 0, rare: 0, common: 0 }
+      }))
+      .sort((a, b) => {
+        if (b.count !== a.count) return b.count - a.count;
+        if (b.rarities.mythic !== a.rarities.mythic) return b.rarities.mythic - a.rarities.mythic;
+        return b.rarities.legendary - a.rarities.legendary;
+      })
+      .slice(0, 10);
+    
+    console.log(`Blockchain scan complete: ${leaderboard.length} collectors`);
+    return leaderboard;
+    
+  } catch (e) {
+    console.error('Blockchain scan error:', e);
+    return [];
+  }
+}
+
+function renderLeaderboard(leaderboard) {
+  const container = document.getElementById('leaderboardContainer');
+  if (!container) return;
+  
+  if (leaderboard.length === 0) {
+    container.innerHTML = '<div class="empty-state">No data yet. Be the first collector! 🎯</div>';
+    return;
+  }
+  
+  const medals = ['🥇', '🥈', '🥉'];
+  
+  container.innerHTML = leaderboard.map((holder, index) => {
+    const rank = index + 1;
+    const medal = medals[index] || `#${rank}`;
+    const isYou = userAddress && holder.address === userAddress.toLowerCase();
+    
+    return `
+      <div class="leaderboard-item ${isYou ? 'your-rank' : ''}" style="animation: slideUp ${0.1 * (index + 1)}s ease-out;">
+        <div class="rank-badge">${medal}</div>
+        <div class="holder-info">
+          <div class="holder-address">${isYou ? '👑 You' : holder.shortAddress}</div>
+          <div class="holder-rarities">
+            ${holder.rarities.mythic > 0 ? `<span class="rarity-count mythic" title="Mythic">${holder.rarities.mythic}M</span>` : ''}
+            ${holder.rarities.legendary > 0 ? `<span class="rarity-count legendary" title="Legendary">${holder.rarities.legendary}L</span>` : ''}
+            ${holder.rarities.rare > 0 ? `<span class="rarity-count rare" title="Rare">${holder.rarities.rare}R</span>` : ''}
+          </div>
+        </div>
+        <div class="holder-count">${holder.count} NFTs</div>
+      </div>
+    `;
+  }).join('');
+}
+
+async function updateLeaderboard() {
+  const leaderboard = await fetchLeaderboard();
+  renderLeaderboard(leaderboard);
+}
+
+// Auto-refresh leaderboard every 2 minutes
+let leaderboardInterval = null;
+
+function startLeaderboardPolling() {
+  if (leaderboardInterval) return;
+  
+  // Initial load with delay to ensure contract is ready
+  setTimeout(() => {
+    updateLeaderboard();
+  }, 2000);
+  
+  leaderboardInterval = setInterval(updateLeaderboard, 120000); // Every 2 minutes
+}
+
+function stopLeaderboardPolling() {
+  if (leaderboardInterval) {
+    clearInterval(leaderboardInterval);
+    leaderboardInterval = null;
+  }
+}
+
+// Start on page load
+document.addEventListener('DOMContentLoaded', () => {
+  startLeaderboardPolling();
+});
+
+window.addEventListener('beforeunload', () => {
+  stopLeaderboardPolling();
+});
+
+// ===== WALLET BALANCE DISPLAY =====
+let celoPrice = 0;
+
 async function updateWalletBalance() {
   const balanceBox = document.getElementById('walletBalanceBox');
   const celoBalanceEl = document.getElementById('celoBalance');
   const celoBalanceUSDEl = document.getElementById('celoBalanceUSD');
-
-  const address = walletManager.getAddress();
-  if (!address || !balanceBox) return;
-
+  
+  if (!userAddress || !balanceBox) return;
+  
   try {
-    const balance = await walletManager.getBalance(address);
-    const balanceInCelo = walletManager.formatBalance(balance);
-    celoBalanceEl.textContent = balanceInCelo + ' CELO';
-
-    let celoPrice = 0;
-    try {
-      const priceData = await apiClient.fetchCeloPrice();
-      celoPrice = parseFloat(priceData.price);
-    } catch (error) {
-      console.log('Could not fetch CELO price for USD conversion');
+    // Get CELO balance
+    const balance = await publicClient.getBalance({
+      address: userAddress,
+      chain: celo
+    });
+    
+    const balanceInCelo = Number(balance) / 1e18;
+    celoBalanceEl.textContent = balanceInCelo.toFixed(4) + ' CELO';
+    
+    // Get CELO price if not already fetched
+    if (celoPrice === 0) {
+      try {
+        const priceData = await fetchCeloPrice();
+        celoPrice = priceData.price; // Extract price from object
+      } catch (e) {
+        console.log('Could not fetch CELO price for USD conversion');
+      }
     }
-
-    const usdValue = parseFloat(balanceInCelo) * celoPrice;
-    celoBalanceUSDEl.textContent = `≈ ${usdValue.toFixed(2)} USD`;
-
+    
+    // Calculate USD value
+    const usdValue = balanceInCelo * celoPrice;
+    celoBalanceUSDEl.textContent = `≈ $${usdValue.toFixed(2)} USD`;
+    
     balanceBox.classList.remove('hidden');
-  } catch (error) {
-    console.error('Failed to fetch wallet balance:', error);
+  } catch (e) {
+    console.error('Failed to fetch wallet balance:', e);
   }
 }
 
-// Load user gallery
-async function loadUserGallery(userAddress) {
-  if (!galleryManager || !userAddress) return;
+// ===== TAB NAVIGATION =====
+const tabButtons = document.querySelectorAll('.tab-button');
+const tabContents = document.querySelectorAll('.tab-content');
+
+function switchTab(tabName) {
+  // Update buttons
+  tabButtons.forEach(btn => {
+    if (btn.dataset.tab === tabName) {
+      btn.classList.add('active');
+    } else {
+      btn.classList.remove('active');
+    }
+  });
   
-  try {
-    const nfts = await galleryManager.loadUserGallery(userAddress);
-    galleryManager.renderGallery(nfts);
-    console.log(`✅ Loaded ${nfts.length} NFTs for gallery`);
-  } catch (error) {
-    console.error('Failed to load gallery:', error);
-  }
-}
-
-// Show address in UI
-function showAddress(addr) {
-  const shortAddr = `${addr.slice(0, 6)}...${addr.slice(-4)}`;
-  userAddrBox.innerHTML = `<span style="cursor: pointer;" title="Click to change wallet">Your address: ${shortAddr}</span>`;
-  userAddrBox.classList.remove('hidden');
-  connectBtn.classList.add('hidden');
-  mintBtn.classList.remove('hidden');
-
-  userAddrBox.onclick = () => {
-    walletManager.openModal();
-  };
-}
-
-// Show connect button
-function showConnectButton() {
-  connectBtn.classList.remove('hidden');
-  mintBtn.classList.add('hidden');
-  userAddrBox.classList.add('hidden');
-}
-
-// Save mint to history
-function saveMintToHistory(tokenId, txHash) {
-  const address = walletManager.getAddress();
-  if (!address) return;
+  // Update content
+  tabContents.forEach(content => {
+    if (content.id === tabName + 'Tab') {
+      content.classList.add('active');
+    } else {
+      content.classList.remove('active');
+    }
+  });
   
-  saveMintToHistoryHelper(tokenId, txHash, address, safeLocalStorage);
-}
-
-// Show transaction links after mint
-function showTransactionLinks(tokenId, txHash) {
-  if (!txLinksContainer) return;
+  // Show/hide sections based on tab
+  const recentSection = document.getElementById('recentMintsSection');
+  const leaderboardSection = document.getElementById('leaderboardSection');
+  const achievementsSection = document.getElementById('achievementsSection');
   
-  const explorerUrl = `https://celoscan.io/tx/${txHash}`;
-  const openseaUrl = `https://celoscan.io/nft/${contractDetails.address}/${tokenId}`;
-  
-  txLinksContainer.innerHTML = `
-    <a href="${explorerUrl}" target="_blank" rel="noopener noreferrer">
-      🔍 View on Celoscan
-    </a>
-    <a href="${openseaUrl}" target="_blank" rel="noopener noreferrer">
-      🖼️ View NFT Details
-    </a>
-    ${isFarcasterEnvironment ? `
-      <button class="cast-link" onclick="handleCastClick(${tokenId})">
-        📣 Cast to Farcaster
-      </button>
-    ` : ''}
-  `;
-  
-  txLinksContainer.classList.remove('hidden');
-}
-
-// Handle cast click
-window.handleCastClick = async function(tokenId) {
-  try {
-    const text = `Just minted CeloNFT #${tokenId}! 🎨\n\nMint yours at celo-nft-phi.vercel.app`;
-    const embedUrl = `https://celo-nft-phi.vercel.app/?token=${tokenId}`;
+  if (tabName === 'gallery') {
+    // Hide all three sections in gallery tab
+    if (recentSection) recentSection.style.display = 'none';
+    if (leaderboardSection) leaderboardSection.style.display = 'none';
+    if (achievementsSection) achievementsSection.style.display = 'none';
+  } else {
+    // Show only recent mints by default in mint tab
+    if (recentSection) recentSection.style.display = 'block';
+    if (leaderboardSection) leaderboardSection.style.display = 'none';
+    if (achievementsSection) achievementsSection.style.display = 'none';
     
-    await createCast(text, embedUrl, isFarcasterEnvironment, setStatus);
-  } catch (error) {
-    console.error('Cast failed:', error);
-    setStatus('Failed to create cast', 'error');
-  }
-};
-
-// Preview NFT
-async function previewNft(tokenId, showContainer = false) {
-  if (!tokenId || !contractDetails) return;
-
-  try {
-    setStatus('Loading NFT preview...', 'info');
+    // Reset toggle buttons to show only Recent active
+    const recentBtn = document.getElementById('toggleRecentBtn');
+    const leaderboardBtn = document.getElementById('toggleLeaderboardBtn');
+    const achievementsBtn = document.getElementById('toggleAchievementsBtn');
     
-    const tokenURI = await mintingManager.getTokenURI(tokenId);
-    if (!tokenURI) {
-      setStatus('Failed to load NFT data', 'error');
+    if (recentBtn) recentBtn.classList.add('active');
+    if (leaderboardBtn) leaderboardBtn.classList.remove('active');
+    if (achievementsBtn) achievementsBtn.classList.remove('active');
+  }
+  
+  // Load content based on tab
+  if (tabName === 'gallery') {
+    loadGallery();
+  }
+}
+
+tabButtons.forEach(btn => {
+  btn.addEventListener('click', () => {
+    switchTab(btn.dataset.tab);
+  });
+});
+
+// ===== SECTION TOGGLE BUTTONS =====
+const toggleButtons = document.querySelectorAll('.toggle-btn');
+
+toggleButtons.forEach(btn => {
+  btn.addEventListener('click', () => {
+    const section = btn.dataset.section;
+    
+    // Remove active from all buttons
+    toggleButtons.forEach(b => b.classList.remove('active'));
+    // Add active to clicked button
+    btn.classList.add('active');
+    
+    // Hide all sections
+    const recentSection = document.getElementById('recentMintsSection');
+    const leaderboardSection = document.getElementById('leaderboardSection');
+    const achievementsSection = document.getElementById('achievementsSection');
+    
+    if (recentSection) recentSection.style.display = 'none';
+    if (leaderboardSection) leaderboardSection.style.display = 'none';
+    if (achievementsSection) achievementsSection.style.display = 'none';
+    
+    // Show selected section
+    if (section === 'recent' && recentSection) {
+      recentSection.style.display = 'block';
+    } else if (section === 'leaderboard' && leaderboardSection) {
+      leaderboardSection.style.display = 'block';
+    } else if (section === 'achievements' && achievementsSection) {
+      achievementsSection.style.display = 'block';
+      loadAchievementsBottom();
+    }
+  });
+});
+
+// ===== GALLERY SYSTEM =====
+let userNFTs = [];
+
+async function loadGallery() {
+  const galleryGrid = document.getElementById('galleryGrid');
+  
+  if (!userAddress || !contractDetails) {
+    galleryGrid.innerHTML = '<div class="empty-state">Connect wallet to view your NFTs</div>';
+    return;
+  }
+  
+  galleryGrid.innerHTML = '<div class="empty-state">Loading your NFTs... ⏳</div>';
+  
+  try {
+    // Get user's NFT count
+    const balance = await readContract(wagmiConfig, {
+      address: contractDetails.address,
+      abi: contractDetails.abi,
+      functionName: 'balanceOf',
+      args: [userAddress]
+    });
+    
+    const nftCount = Number(balance);
+    
+    if (nftCount === 0) {
+      galleryGrid.innerHTML = '<div class="empty-state">You don\'t own any NFTs yet. Mint your first one! 🎨</div>';
       return;
     }
-
-    // Handle data URI
-    let svgData;
-    if (tokenURI.startsWith('data:')) {
-      const base64Data = tokenURI.split(',')[1];
-      const decoded = atob(base64Data);
-      
-      // Try to parse as JSON metadata first
-      try {
-        const metadata = JSON.parse(decoded);
-        
-        // Extract SVG from metadata.image if it's a data URI
-        if (metadata.image?.startsWith('data:image/svg+xml;base64,')) {
-          const svgBase64 = metadata.image.split(',')[1];
-          svgData = atob(svgBase64);
-        } else {
-          svgData = decoded;
-        }
-      } catch {
-        // Not JSON, treat as raw SVG
-        svgData = decoded;
-      }
-    } else {
-      // Handle IPFS or HTTP URI
-      const response = await fetch(tokenURI);
-      if (!response.ok) throw new Error('Failed to fetch NFT data');
-      svgData = await response.text();
-    }
-
-    // Sanitize and display SVG
-    const sanitizedSVG = sanitizeSVG(svgData);
-    currentNFTData = {
-      svg: sanitizedSVG,
-      tokenId: tokenId
-    };
     
-    // Set current NFT data in download manager
-    downloadManager.setCurrentNFTData(currentNFTData);
+    // Get total supply to scan
+    const totalSupply = await readContract(wagmiConfig, {
+      address: contractDetails.address,
+      abi: contractDetails.abi,
+      functionName: 'totalSupply'
+    });
     
-    previewContainer.innerHTML = sanitizedSVG;
-    adjustInjectedSvg(previewContainer);
-
-    if (showContainer) {
-      previewContainer.classList.remove('hidden');
-      nftActions.classList.remove('hidden');
-      
-      // Show second row of actions
-      const nftActionsRow2 = document.getElementById('nftActionsRow2');
-      if (nftActionsRow2) nftActionsRow2.classList.remove('hidden');
-    }
-
-    // Get token traits for rarity effects
-    const traits = await mintingManager.getTokenTraits(tokenId);
-    if (traits) {
-      const rarityLabels = ['common', 'rare', 'legendary', 'mythic'];
-      const rarity = rarityLabels[traits.rarity] || 'common';
-
-      // Add rarity class for effects
-      previewContainer.classList.remove(...rarityLabels);
-      previewContainer.classList.add(rarity);
-
-      // Add sparkle effects for rare NFTs
-      if (traits.rarity >= 1) {
-        previewContainer.classList.add('sparkles');
-      }
-      
-      // Update button label with rarity and price
-      const priceText = (traits.priceSnapshot / 10000).toFixed(4);
-      const rarityText = rarity.charAt(0).toUpperCase() + rarity.slice(1);
-      previewBtn.innerText = `Preview NFT #${tokenId} (${rarityText} / ${priceText})`;
+    const total = Number(totalSupply);
+    userNFTs = [];
+    
+    // Scan for user's NFTs
+    const promises = [];
+    for (let i = 1; i <= total && userNFTs.length < nftCount; i++) {
+      promises.push(
+        readContract(wagmiConfig, {
+          address: contractDetails.address,
+          abi: contractDetails.abi,
+          functionName: 'ownerOf',
+          args: [BigInt(i)]
+        }).then(owner => {
+          if (owner.toLowerCase() === userAddress.toLowerCase()) {
+            return readContract(wagmiConfig, {
+              address: contractDetails.address,
+              abi: contractDetails.abi,
+              functionName: 'tokenTraits',
+              args: [BigInt(i)]
+            }).then(traits => ({
+              tokenId: i,
+              owner,
+              rarity: Number(traits[1]),
+              timestamp: Number(traits[2])
+            }));
+          }
+          return null;
+        }).catch(() => null)
+      );
     }
     
-    setStatus(`NFT #${tokenId} loaded!`, 'success');
-  } catch (error) {
-    console.error('Failed to preview NFT:', error);
-    setStatus('Failed to load NFT preview', 'error');
+    const results = await Promise.all(promises);
+    userNFTs = results.filter(nft => nft !== null);
+    
+    renderGallery(userNFTs);
+  } catch (e) {
+    console.error('Failed to load gallery:', e);
+    galleryGrid.innerHTML = '<div class="empty-state">Failed to load NFTs. Please try again.</div>';
   }
 }
 
-// Initialize TradingView
-function initTradingView() {
-  if (tradingViewLoaded) return;
-  tradingViewLoaded = true;
+function renderGallery(nfts) {
+  const galleryGrid = document.getElementById('galleryGrid');
+  const rarityFilter = document.getElementById('rarityFilter').value;
+  const sortFilter = document.getElementById('sortFilter').value;
   
-  const script = document.createElement('script');
-  script.src = 'https://s3.tradingview.com/tv.js';
-  script.async = true;
-  script.onload = () => {
-    try {
-      new TradingView.widget({
-        autosize: true,
-        symbol: "BINANCE:CELOUSDT",
-        interval: "60",
-        theme: "dark",
-        style: "1",
-        hide_top_toolbar: true,
-        withdateranges: false,
-        toolbar_bg: "#1f1f1f",
-        locale: "en",
-        enable_publishing: false,
-        allow_symbol_change: false,
-        container_id: "celo-chart"
-      });
-      console.log('✅ TradingView widget loaded');
-    } catch (error) {
-      console.error('TradingView widget error:', error);
-    }
-  };
-  script.onerror = () => {
-    console.error('Failed to load TradingView script');
-  };
-  document.head.appendChild(script);
+  // Filter by rarity
+  let filtered = nfts;
+  if (rarityFilter !== 'all') {
+    const rarityMap = { 'common': 0, 'rare': 1, 'legendary': 2, 'mythic': 3 };
+    filtered = nfts.filter(nft => nft.rarity === rarityMap[rarityFilter]);
+  }
+  
+  // Sort
+  filtered.sort((a, b) => {
+    if (sortFilter === 'newest') return b.timestamp - a.timestamp;
+    if (sortFilter === 'oldest') return a.timestamp - b.timestamp;
+    if (sortFilter === 'rarity') return b.rarity - a.rarity;
+    if (sortFilter === 'tokenId') return a.tokenId - b.tokenId;
+    return 0;
+  });
+  
+  if (filtered.length === 0) {
+    galleryGrid.innerHTML = '<div class="empty-state">No NFTs match your filters</div>';
+    return;
+  }
+  
+  const rarityLabels = ['Common', 'Rare', 'Legendary', 'Mythic'];
+  const rarityColors = ['#9ca3af', '#3b82f6', '#f59e0b', '#ec4899'];
+  
+  galleryGrid.innerHTML = filtered.map(nft => `
+    <div class="gallery-item" onclick="viewNFTDetails(${nft.tokenId})">
+      <div class="gallery-item-image">
+        <div style="display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; background: #000; color: #49dfb5; font-size: 2rem;">
+          #${nft.tokenId}
+        </div>
+      </div>
+      <div class="gallery-item-info">
+        <div class="gallery-token-id">#${nft.tokenId}</div>
+        <div class="gallery-rarity" style="color: ${rarityColors[nft.rarity]}; border: 1px solid ${rarityColors[nft.rarity]};">
+          ${rarityLabels[nft.rarity]}
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function viewNFTDetails(tokenId) {
+  // Switch to mint tab and preview this NFT
+  switchTab('mint');
+  lastMintedTokenId = tokenId;
+  previewNft(tokenId);
 }
 
 // Add filter listeners
-function setupFilterListeners() {
-  const rarityFilter = document.getElementById('rarityFilter');
-  const sortFilter = document.getElementById('sortFilter');
+document.getElementById('rarityFilter')?.addEventListener('change', () => {
+  renderGallery(userNFTs);
+});
+
+document.getElementById('sortFilter')?.addEventListener('change', () => {
+  renderGallery(userNFTs);
+});
+
+// ===== ACHIEVEMENTS SYSTEM =====
+const achievements = [
+  {
+    id: 'first_mint',
+    icon: '🎯',
+    title: 'First Steps',
+    description: 'Mint your first CELO NFT',
+    check: () => userMintCount >= 1
+  },
+  {
+    id: 'five_mints',
+    icon: '🔥',
+    title: 'Getting Started',
+    description: 'Mint 5 NFTs',
+    check: () => userMintCount >= 5
+  },
+  {
+    id: 'ten_mints',
+    icon: '💎',
+    title: 'Collector',
+    description: 'Mint 10 NFTs',
+    check: () => userMintCount >= 10
+  },
+  {
+    id: 'rare_pull',
+    icon: '💙',
+    title: 'Rare Find',
+    description: 'Own a Rare NFT',
+    check: () => userNFTs.some(nft => nft.rarity >= 1)
+  },
+  {
+    id: 'legendary_pull',
+    icon: '⭐',
+    title: 'Legendary!',
+    description: 'Own a Legendary NFT',
+    check: () => userNFTs.some(nft => nft.rarity >= 2)
+  },
+  {
+    id: 'mythic_pull',
+    icon: '👑',
+    title: 'Mythic Master',
+    description: 'Own a Mythic NFT',
+    check: () => userNFTs.some(nft => nft.rarity === 3)
+  },
+  {
+    id: 'early_adopter',
+    icon: '🚀',
+    title: 'Early Adopter',
+    description: 'Minted in the first 100',
+    check: () => userNFTs.some(nft => nft.tokenId <= 100)
+  },
+  {
+    id: 'lucky_token',
+    icon: '🍀',
+    title: 'Lucky Number',
+    description: 'Own a lucky token (77, 111, 222, etc.)',
+    check: () => {
+      const luckyNumbers = [77, 111, 222, 333, 444, 555, 666, 777, 888, 999];
+      return userNFTs.some(nft => luckyNumbers.includes(nft.tokenId));
+    }
+  },
+  {
+    id: 'milestone_token',
+    icon: '🎯',
+    title: 'Milestone Collector',
+    description: 'Own a milestone token (100, 250, 500, 1000)',
+    check: () => {
+      const milestones = [100, 250, 500, 1000, 2500, 5000];
+      return userNFTs.some(nft => milestones.includes(nft.tokenId));
+    }
+  },
+  {
+    id: 'top_collector',
+    icon: '🏆',
+    title: 'Top Collector',
+    description: 'Be in the top 10 leaderboard',
+    check: () => {
+      // This would need leaderboard data
+      return userMintCount >= 20;
+    }
+  }
+];
+
+// Load achievements in bottom section
+async function loadAchievementsBottom() {
+  const achievementsGrid = document.getElementById('achievementsGrid2');
+  const achievementCount = document.getElementById('achievementCount2');
+  const totalAchievements = document.getElementById('totalAchievements2');
   
-  if (rarityFilter) {
-    rarityFilter.addEventListener('change', () => {
-      if (galleryManager && galleryManager.userNFTs) {
-        galleryManager.renderGallery(galleryManager.userNFTs);
+  if (!achievementsGrid) return;
+  
+  // Ensure userNFTs are loaded for accurate achievement checking
+  if (userNFTs.length === 0 && userAddress && contractDetails) {
+    try {
+      const balance = await readContract(wagmiConfig, {
+        address: contractDetails.address,
+        abi: contractDetails.abi,
+        functionName: 'balanceOf',
+        args: [userAddress]
+      });
+      
+      const nftCount = Number(balance);
+      
+      if (nftCount > 0) {
+        const totalSupply = await readContract(wagmiConfig, {
+          address: contractDetails.address,
+          abi: contractDetails.abi,
+          functionName: 'totalSupply'
+        });
+        
+        const total = Number(totalSupply);
+        const promises = [];
+        
+        for (let i = 1; i <= total; i++) {
+          promises.push(
+            readContract(wagmiConfig, {
+              address: contractDetails.address,
+              abi: contractDetails.abi,
+              functionName: 'ownerOf',
+              args: [BigInt(i)]
+            }).then(owner => {
+              if (owner.toLowerCase() === userAddress.toLowerCase()) {
+                return readContract(wagmiConfig, {
+                  address: contractDetails.address,
+                  abi: contractDetails.abi,
+                  functionName: 'tokenTraits',
+                  args: [BigInt(i)]
+                }).then(traits => ({
+                  tokenId: i,
+                  owner,
+                  rarity: Number(traits[1]),
+                  timestamp: Number(traits[2])
+                }));
+              }
+              return null;
+            }).catch(() => null)
+          );
+        }
+        
+        const results = await Promise.all(promises);
+        userNFTs = results.filter(nft => nft !== null);
       }
-    });
+    } catch (e) {
+      console.error('Failed to load NFTs for achievements:', e);
+    }
   }
   
-  if (sortFilter) {
-    sortFilter.addEventListener('change', () => {
-      if (galleryManager && galleryManager.userNFTs) {
-        galleryManager.renderGallery(galleryManager.userNFTs);
-      }
-    });
-  }
-}
-
-// View NFT details
-function viewNFTDetails(tokenId) {
-  // Switch to mint tab and preview this NFT
-  tabManager.switchTab('mint');
-  if (lastMintedTokenId !== tokenId) {
-    lastMintedTokenId = tokenId;
-    previewNft(tokenId, true);
-  }
-}
-
-// Expose globally for onclick handlers
-window.viewNFTDetails = viewNFTDetails;
-
-// Initialize the application when the DOM is loaded
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initializeApp);
-} else {
-  initializeApp();
+  let unlockedCount = 0;
+  
+  const html = achievements.map(achievement => {
+    const unlocked = achievement.check();
+    if (unlocked) unlockedCount++;
+    
+    return `
+      <div class="achievement-card ${unlocked ? 'unlocked' : 'locked'}">
+        <div class="achievement-icon">${achievement.icon}</div>
+        <div class="achievement-title">${achievement.title}</div>
+        <div class="achievement-description">${achievement.description}</div>
+        ${unlocked ? '<div class="achievement-reward">✅ Unlocked!</div>' : '<div class="achievement-reward" style="color: #6b7280;">🔒 Locked</div>'}
+      </div>
+    `;
+  }).join('');
+  
+  achievementsGrid.innerHTML = html;
+  if (achievementCount) achievementCount.textContent = unlockedCount;
+  if (totalAchievements) totalAchievements.textContent = achievements.length;
+  
+  // Save achievements to localStorage
+  safeLocalStorage.setItem('achievements', JSON.stringify({
+    unlocked: unlockedCount,
+    total: achievements.length,
+    timestamp: Date.now()
+  }));
 }
