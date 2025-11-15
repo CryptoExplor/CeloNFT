@@ -468,8 +468,8 @@ async function loadAchievementsBottom() {
   const address = walletManager.getAddress();
   if (address && contractDetails) {
     try {
-      const balance = await mintingManager.getUserBalance(address);
-      await achievementsManager.loadAchievementsBottom(address, contractDetails, balance);
+      // Pass 0 for userMintCount; AchievementsManager will derive count from owned NFTs
+      await achievementsManager.loadAchievementsBottom(address, contractDetails, 0);
     } catch (error) {
       console.error('Failed to load achievements:', error);
     }
