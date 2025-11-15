@@ -724,7 +724,7 @@ function saveMintToHistory(tokenId, txHash) {
   saveMintToHistoryHelper(tokenId, txHash, address, safeLocalStorage);
 }
 
-// Show transaction links
+// Show transaction links (always include Cast button, like main.old.js)
 function showTransactionLinks(tokenId, txHash) {
   if (!txLinksContainer) return;
   
@@ -734,7 +734,7 @@ function showTransactionLinks(tokenId, txHash) {
   txLinksContainer.innerHTML = `
     <a href="${explorerUrl}" target="_blank" rel="noopener noreferrer">🔍 View on Celoscan</a>
     <a href="${nftUrl}" target="_blank" rel="noopener noreferrer">🖼️ View NFT</a>
-    ${isFarcasterEnvironment ? `<button class="cast-link" onclick="handleCastClick(${tokenId})">📣 Cast</button>` : ''}
+    <button class="cast-link" onclick="handleCastClick(${tokenId})">📣 Cast</button>
   `;
   
   txLinksContainer.classList.remove('hidden');
@@ -776,79 +776,115 @@ window.handleCastClick = async function(tokenId) {
   }
 };
 
-// Preview NFT
-async function previewNft(tokenId, showContainer = false) {
-  if (!tokenId) return;
+// Preview NFT (ported from main.old.js behavior)
+async function previewNft(tokenId, isNewMint = false) {
+  if (!contractDetails || !tokenId) return;
+
+  // Reset status and show loading spinner like old version
+  setStatus('', 'info');
+  previewContainer.innerHTML = '<div style="display: flex; justify-content: center; align-items: center; height: 200px;"><span class="spinner" style="width: 40px; height: 40px; border-width: 4px;"></span></div>';
+  previewContainer.classList.remove('hidden');
+
+  previewBtn.disabled = true;
+  previewBtn.innerHTML = '<span class="spinner"></span> Loading Preview…';
+  previewContainer.classList.remove('sparkles', 'common', 'rare', 'legendary', 'mythic');
+  nftActions.classList.add('hidden');
+
+  if (!isNewMint) {
+    txLinksContainer.classList.add('hidden');
+  }
+
+  const nftActionsRow2 = document.getElementById('nftActionsRow2');
+  if (nftActionsRow2) nftActionsRow2.classList.add('hidden');
 
   try {
-    setStatus('Loading NFT...', 'info');
-    
     const tokenURI = await mintingManager.getTokenURI(tokenId);
-    if (!tokenURI) return;
+    if (!tokenURI) throw new Error('Missing tokenURI');
 
-    let svgData;
+    let metadata = null;
+    let svgString = '';
+
     if (tokenURI.startsWith('data:')) {
-      const base64Data = tokenURI.split(',')[1];
-      const decoded = atob(base64Data);
-      
-      try {
-        const metadata = JSON.parse(decoded);
-        if (metadata.image?.startsWith('data:image/svg+xml;base64,')) {
-          svgData = atob(metadata.image.split(',')[1]);
-        } else {
-          svgData = decoded;
-        }
-      } catch {
-        svgData = decoded;
-      }
+      const base64Json = tokenURI.split(',')[1];
+      if (!base64Json) throw new Error('Invalid tokenURI format');
+
+      const jsonString = atob(decodeURIComponent(base64Json));
+      metadata = JSON.parse(jsonString);
+
+      if (!metadata.image) throw new Error('Missing image field in metadata');
+      const base64Svg = metadata.image.split(',')[1];
+      if (!base64Svg) throw new Error('Invalid image data format');
+
+      svgString = atob(decodeURIComponent(base64Svg));
     } else {
-      const response = await fetch(tokenURI);
-      if (!response.ok) throw new Error('Failed to fetch NFT');
-      svgData = await response.text();
+      // Fallback: fetch JSON from URL and then SVG
+      const metaRes = await fetch(tokenURI);
+      if (!metaRes.ok) throw new Error('Failed to fetch metadata');
+      metadata = await metaRes.json();
+      if (!metadata.image) throw new Error('Missing image field in metadata');
+
+      if (metadata.image.startsWith('data:image/svg+xml;base64,')) {
+        const base64Svg = metadata.image.split(',')[1];
+        svgString = atob(decodeURIComponent(base64Svg));
+      } else {
+        const svgRes = await fetch(metadata.image);
+        if (!svgRes.ok) throw new Error('Failed to fetch SVG image');
+        svgString = await svgRes.text();
+      }
     }
 
-    const sanitizedSVG = sanitizeSVG(svgData);
-    currentNFTData = { svg: sanitizedSVG, tokenId };
+    const safeSvg = sanitizeSVG(svgString);
+
+    currentNFTData = {
+      svg: safeSvg,
+      metadata,
+      tokenId,
+    };
     downloadManager.setCurrentNFTData(currentNFTData);
-    
-    previewContainer.innerHTML = sanitizedSVG;
+
+    previewContainer.innerHTML = safeSvg;
     adjustInjectedSvg(previewContainer);
 
-    if (showContainer) {
-      previewContainer.classList.remove('hidden');
-      nftActions.classList.remove('hidden');
-      const nftActionsRow2 = document.getElementById('nftActionsRow2');
-      if (nftActionsRow2) nftActionsRow2.classList.remove('hidden');
+    let rarityText = 'Common';
+    let priceText = 'N/A';
+
+    if (metadata?.attributes) {
+      const rarityAttr = metadata.attributes.find((attr) => attr.trait_type === 'Rarity');
+      const priceAttr = metadata.attributes.find((attr) => attr.trait_type === 'CELO Price Snapshot');
+
+      if (rarityAttr) rarityText = rarityAttr.value;
+      if (priceAttr) priceText = priceAttr.value;
     }
 
-    const traits = await mintingManager.getTokenTraits(tokenId);
-    if (traits) {
-      const rarityLabels = ['common', 'rare', 'legendary', 'mythic'];
-      const rarity = rarityLabels[traits.rarity] || 'common';
+    previewContainer.classList.add('sparkles');
+    const rarityClassLower = rarityText.toLowerCase();
+    previewContainer.classList.add(rarityClassLower);
 
-      previewContainer.classList.remove(...rarityLabels);
-      previewContainer.classList.add(rarity);
+    const buttonLabel = `Preview NFT #${tokenId} (${rarityText} / ${priceText})`;
+    previewBtn.innerText = buttonLabel;
 
-      if (traits.rarity >= 1) {
-        previewContainer.classList.add('sparkles');
-      }
-      
-      const priceText = (traits.priceSnapshot / 10000).toFixed(4);
-      const rarityText = rarity.charAt(0).toUpperCase() + rarity.slice(1);
-      previewBtn.innerText = `Preview NFT #${tokenId} (${rarityText} / ${priceText})`;
+    nftActions.classList.remove('hidden');
+    if (nftActionsRow2) nftActionsRow2.classList.remove('hidden');
 
-      // Store details for Farcaster cast text (mirrors main.old.js behavior)
-      lastCastInfo = {
-        tokenId,
-        rarityText,
-        priceText,
-      };
-    }
-    
+    // Store details for Farcaster cast text (rarity + price)
+    lastCastInfo = {
+      tokenId,
+      rarityText,
+      priceText,
+    };
+
     setStatus(`NFT #${tokenId} loaded!`, 'success');
   } catch (error) {
-    console.error('Failed to preview NFT:', error);
-    setStatus('Failed to load NFT', 'error');
+    console.error(`NFT Preview Error for token ID ${tokenId}:`, error);
+    setStatus('Failed to load NFT preview. Check console for details.', 'error');
+    previewBtn.innerText = 'Preview NFT Error';
+    previewContainer.classList.add('hidden');
+    nftActions.classList.add('hidden');
+    const nftActionsRow2 = document.getElementById('nftActionsRow2');
+    if (nftActionsRow2) nftActionsRow2.classList.add('hidden');
+    txLinksContainer.classList.add('hidden');
+  } finally {
+    previewBtn.disabled = false;
   }
 }
 
