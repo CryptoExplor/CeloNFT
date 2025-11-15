@@ -144,6 +144,7 @@
       transform: scale(0.98);
     }
     
+    /* Enhanced External Banner */
     .external-banner-link {
       background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
       padding: 14px 20px;
@@ -151,7 +152,7 @@
       margin-bottom: 16px;
       width: 90%;
       max-width: 390px;
-      display: flex;
+      display: none; /* Hidden by default */
       align-items: center;
       justify-content: center;
       gap: 10px;
@@ -163,8 +164,32 @@
       color: white;
       transition: transform 0.2s, box-shadow 0.2s;
       cursor: pointer;
+      position: relative;
+      overflow: hidden;
     }
     
+    /* Show class - IMPORTANT! */
+    .external-banner-link.show {
+      display: flex !important;
+    }
+    
+    /* Shine effect */
+    .external-banner-link::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+      transition: left 0.5s;
+    }
+    
+    .external-banner-link:hover::before {
+      left: 100%;
+    }
+    
+    /* Hover effect */
     .external-banner-link:hover {
       transform: translateY(-2px);
       box-shadow: 0 6px 16px rgba(139, 92, 246, 0.4);
@@ -174,12 +199,21 @@
       transform: translateY(0);
     }
     
-    .external-banner-link svg {
-      flex-shrink: 0;
-      width: 20px;
-      height: 20px;
+    /* Pulse animation */
+    @keyframes pulse {
+      0%, 100% {
+        box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+      }
+      50% {
+        box-shadow: 0 4px 20px rgba(139, 92, 246, 0.6);
+      }
     }
     
+    .external-banner-link.pulse {
+      animation: pulse 2s infinite;
+    }
+    
+    /* Slide in animation */
     @keyframes slideIn {
       from {
         opacity: 0;
@@ -189,6 +223,12 @@
         opacity: 1;
         transform: translateY(0);
       }
+    }
+    
+    .external-banner-link svg {
+      flex-shrink: 0;
+      width: 20px;
+      height: 20px;
     }
     
     .tx-links-container {
