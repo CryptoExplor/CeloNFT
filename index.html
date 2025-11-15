@@ -144,6 +144,7 @@
       transform: scale(0.98);
     }
     
+    /* Enhanced External Banner - FIXED */
     .external-banner-link {
       background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
       padding: 14px 20px;
@@ -151,7 +152,7 @@
       margin-bottom: 16px;
       width: 90%;
       max-width: 390px;
-      display: flex;
+      display: flex !important; /* Changed from none */
       align-items: center;
       justify-content: center;
       gap: 10px;
@@ -163,8 +164,38 @@
       color: white;
       transition: transform 0.2s, box-shadow 0.2s;
       cursor: pointer;
+      position: relative;
+      overflow: hidden;
+      visibility: hidden; /* Use visibility instead */
     }
     
+    /* Show class */
+    .external-banner-link.show {
+      visibility: visible !important;
+    }
+    
+    /* Hidden class */
+    .external-banner-link.hidden {
+      visibility: hidden !important;
+    }
+    
+    /* Shine effect */
+    .external-banner-link::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+      transition: left 0.5s;
+    }
+    
+    .external-banner-link:hover::before {
+      left: 100%;
+    }
+    
+    /* Hover effect */
     .external-banner-link:hover {
       transform: translateY(-2px);
       box-shadow: 0 6px 16px rgba(139, 92, 246, 0.4);
@@ -174,12 +205,21 @@
       transform: translateY(0);
     }
     
-    .external-banner-link svg {
-      flex-shrink: 0;
-      width: 20px;
-      height: 20px;
+    /* Pulse animation */
+    @keyframes pulse {
+      0%, 100% {
+        box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+      }
+      50% {
+        box-shadow: 0 4px 20px rgba(139, 92, 246, 0.6);
+      }
     }
     
+    .external-banner-link.pulse {
+      animation: pulse 2s infinite;
+    }
+    
+    /* Slide in animation */
     @keyframes slideIn {
       from {
         opacity: 0;
@@ -189,6 +229,12 @@
         opacity: 1;
         transform: translateY(0);
       }
+    }
+    
+    .external-banner-link svg {
+      flex-shrink: 0;
+      width: 20px;
+      height: 20px;
     }
     
     .tx-links-container {
@@ -748,7 +794,7 @@
     /* Wallet Balance Box */
     .wallet-balance-box {
       background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
-      padding: 16px;
+      padding: 12px 16px;
       border-radius: 12px;
       width: 90%;
       max-width: 390px;
@@ -761,19 +807,27 @@
     .balance-label {
       font-size: 0.9rem;
       color: #9ca3af;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
+    }
+
+    .balance-content {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.9rem;
+      color: #49dfb5;
+      font-family: 'Orbitron', sans-serif;
     }
 
     .balance-amount {
-      font-size: 2rem;
       font-weight: bold;
+      margin: 0;
       color: #49dfb5;
-      font-family: 'Orbitron', sans-serif;
-      margin-bottom: 4px;
     }
 
     .balance-usd {
-      font-size: 1rem;
+      margin: 0;
       color: #6ee7b7;
     }
     
@@ -1538,8 +1592,10 @@
   <!-- Wallet Balance Display -->
   <div id="walletBalanceBox" class="wallet-balance-box hidden">
     <div class="balance-label">💰 Wallet Balance</div>
-    <div class="balance-amount" id="celoBalance">-- CELO</div>
-    <div class="balance-usd" id="celoBalanceUSD">$--</div>
+    <div class="balance-content">
+      <div class="balance-amount" id="celoBalance">-- CELO</div>
+      <div class="balance-usd" id="celoBalanceUSD">$--</div>
+    </div>
   </div>
 
   <!-- User Address -->
