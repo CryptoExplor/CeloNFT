@@ -10,8 +10,8 @@
   "dependencies": {
     "@farcaster/miniapp-sdk": "latest",
     "@farcaster/miniapp-wagmi-connector": "latest",
-    "@reown/appkit": "^1.8.10",
-    "@reown/appkit-adapter-wagmi": "^1.8.10",
+    "@reown/appkit": "^1.8.14",
+    "@reown/appkit-adapter-wagmi": "^1.8.14",
     "@vercel/kv": "^3.0.0",
     "@wagmi/core": "^2.13.4",
     "buffer": "^6.0.3",
