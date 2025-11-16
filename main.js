@@ -14,7 +14,7 @@ import {
   readContract,
   waitForTransactionReceipt,
   http,
-  getbalance
+  getBalance // <-- FIX 1: Import getBalance
 } from '@wagmi/core';
 import { celo } from '@wagmi/core/chains';
 import { farcasterMiniApp } from '@farcaster/miniapp-wagmi-connector';
@@ -2854,28 +2854,23 @@ window.addEventListener('beforeunload', () => {
 
 // ===== WALLET BALANCE DISPLAY =====
 let celoPrice = 0;
-import { createPublicClient, http } from 'viem'
-import { celo } from '@wagmi/core/chains'
-
-// Define publicClient to use with CELO chain
-const publicClient = createPublicClient({
-  chain: celo,
-  transport: http()
-})
 
 async function updateWalletBalance() {
   const balanceBox = document.getElementById('walletBalanceBox');
   const celoBalanceEl = document.getElementById('celoBalance');
   const celoBalanceUSDEl = document.getElementById('celoBalanceUSD');
   
-  if (!userAddress || !balanceBox) return;
+  if (!userAddress || !balanceBox || !wagmiConfig) return;
   
   try {
     // Get CELO balance
-    const balance = await publicClient.getBalance({
+    // --- FIX 2: Use getBalance from wagmi/core, not non-existent publicClient ---
+    const balanceData = await getBalance(wagmiConfig, {
       address: userAddress,
-      chain: celo
+      chainId: celo.id // Explicitly check balance on Celo
     });
+    const balance = balanceData.value; // getBalance returns an object, we need the .value
+    // --- END FIX ---
     
     const balanceInCelo = Number(balance) / 1e18;
     celoBalanceEl.textContent = balanceInCelo.toFixed(4) + ' CELO';
@@ -3175,7 +3170,7 @@ const achievements = [
     icon: '👑',
     title: 'Mythic Master',
     description: 'Own a Mythic NFT',
-    check: () => userNFTs.some(nft => nft.rarity === 3)
+    check: ()D => userNFTs.some(nft => nft.rarity === 3)
   },
   {
     id: 'early_adopter',
@@ -3307,14 +3302,3 @@ async function loadAchievementsBottom() {
     timestamp: Date.now()
   }));
 }
-
-
-
-
-
-
-
-
-
-
-
