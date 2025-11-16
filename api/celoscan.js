@@ -1,8 +1,6 @@
-// Celoscan API Proxy
-// Keeps API key secure on backend
-
-const API_KEY = process.env.CELOSCAN_API_KEY || 'X83R8MW5FKH3VM4DR5DY659VZRSTCGHYI5';
-const BASE_URL = 'https://api.celoscan.io/api';
+// api/celoscan.js - Vercel Serverless Function Format
+// ✅ MIGRATED TO ETHERSCAN API V2 (August 2025)
+// Proxy endpoint for Celoscan API using new unified multichain endpoint
 
 export default async function handler(req, res) {
   // CORS headers
@@ -19,48 +17,63 @@ export default async function handler(req, res) {
   }
   
   try {
-    const { module, action, contractaddress, page, offset, sort } = req.query;
+    // Get the API key from environment variables
+    const apiKey = process.env.CELOSCAN_API_KEY;
     
-    // Validate required params
-    if (!module || !action) {
-      return res.status(400).json({
-        error: 'Missing required parameters: module, action'
-      });
+    if (!apiKey) {
+      console.warn('⚠️ CELOSCAN_API_KEY not configured - using public endpoint (rate limited)');
     }
     
-    // Build API URL
-    const params = new URLSearchParams({
-      module,
-      action,
-      apikey: API_KEY
-    });
+    // ✅ NEW: Etherscan API V2 unified endpoint
+    // Use single API key for all chains with chainid parameter
+    const etherscanV2BaseUrl = 'https://api.etherscan.io/v2/api';
+    const celoscanUrl = new URL(etherscanV2BaseUrl);
     
-    // Add optional params
-    if (contractaddress) params.append('contractaddress', contractaddress);
-    if (page) params.append('page', page);
-    if (offset) params.append('offset', offset);
-    if (sort) params.append('sort', sort);
+    // ✅ CRITICAL: Add chainid for Celo network
+    // Celo Mainnet chainid = 42220
+    celoscanUrl.searchParams.append('chainid', '42220');
     
-    const apiUrl = `${BASE_URL}?${params.toString()}`;
+    // Copy all query parameters from the request
+    const queryParams = new URLSearchParams(req.url.split('?')[1] || '');
+    for (const [key, value] of queryParams.entries()) {
+      // Skip chainid if already added
+      if (key !== 'chainid') {
+        celoscanUrl.searchParams.append(key, value);
+      }
+    }
     
-    console.log('Proxying Celoscan API request:', { module, action, contractaddress });
+    // Add the API key if available
+    if (apiKey) {
+      celoscanUrl.searchParams.append('apikey', apiKey);
+    }
     
-    // Fetch from Celoscan
-    const response = await fetch(apiUrl);
-    const data = await response.json();
+    console.log('✅ Fetching from Etherscan V2 (Celo):', celoscanUrl.toString().replace(apiKey || '', 'REDACTED'));
+    
+    // Make the request to Etherscan V2 API
+    const response = await fetch(celoscanUrl.toString());
     
     if (!response.ok) {
-      throw new Error(`Celoscan API error: ${response.status}`);
+      throw new Error(`Etherscan V2 API returned ${response.status}: ${response.statusText}`);
     }
     
-    // Return the data
-    return res.status(200).json(data);
+    const data = await response.json();
     
+    // Check for V1 deprecation error
+    if (data.status === '0' && data.message === 'NOTOK' && 
+        data.result && data.result.includes('deprecated V1 endpoint')) {
+      console.error('❌ CRITICAL: Still using V1 endpoint!', data.result);
+      throw new Error('API V1 deprecated. Please update to V2.');
+    }
+    
+    // Return the response with CORS headers
+    return res.status(200).json(data);
   } catch (error) {
-    console.error('Celoscan proxy error:', error);
-    return res.status(500).json({
-      error: 'Failed to fetch from Celoscan',
-      message: error.message
+    console.error('Celoscan/Etherscan V2 API error:', error);
+    return res.status(500).json({ 
+      error: 'Failed to fetch from Celoscan API', 
+      message: error.message,
+      status: '0',
+      result: []
     });
   }
 }
