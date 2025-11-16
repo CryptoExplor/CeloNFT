@@ -131,18 +131,38 @@ async function getUserStats(address) {
 async function setUserStats(address, stats) {
   const statsKey = `stats:${address.toLowerCase()}`;
   
+  // Ensure all fields are present and valid
+  const validStats = {
+    totalPredictions: parseInt(stats.totalPredictions) || 0,
+    correctPredictions: parseInt(stats.correctPredictions) || 0,
+    currentStreak: parseInt(stats.currentStreak) || 0,
+    bestStreak: parseInt(stats.bestStreak) || 0,
+    lastPredictionCorrect: Boolean(stats.lastPredictionCorrect)
+  };
+  
   if (useKV) {
     try {
       // Store stats for 30 days
-      await kv.set(statsKey, JSON.stringify(stats), { ex: STATS_TTL });
-      console.log(`✅ Stored user stats in KV: ${statsKey}`, stats);
+      await kv.set(statsKey, JSON.stringify(validStats), { ex: STATS_TTL });
+      console.log(`✅ Stored user stats in KV: ${statsKey}`, validStats);
+      
+      // Verify write immediately
+      const verify = await kv.get(statsKey);
+      if (verify) {
+        console.log(`✅ Verified stats write successful`);
+      } else {
+        console.error(`❌ Failed to verify stats write`);
+        throw new Error('KV write verification failed for stats');
+      }
     } catch (error) {
       console.error(`❌ Error storing stats in KV:`, error);
-      userStats.set(address.toLowerCase(), stats);
+      // Fallback to in-memory
+      userStats.set(address.toLowerCase(), validStats);
+      console.log(`⚠️ Fallback: Stored stats in memory instead`);
     }
   } else {
-    userStats.set(address.toLowerCase(), stats);
-    console.log(`📝 Stored user stats in memory: ${statsKey}`, stats);
+    userStats.set(address.toLowerCase(), validStats);
+    console.log(`📝 Stored user stats in memory: ${statsKey}`, validStats);
   }
 }
 
@@ -270,26 +290,43 @@ export default async function handler(req, res) {
           });
         }
         
-        const timeElapsed = Date.now() - timestamp;
+        const timeElapsed = Date.now() - parseInt(timestamp);
         console.log(`⏱️ Verifying prediction for ${userAddress.slice(0,6)}...${userAddress.slice(-4)}`);
-        console.log(`  Timestamp: ${timestamp}`);
+        console.log(`  Timestamp: ${timestamp} (${new Date(parseInt(timestamp)).toISOString()})`);
         console.log(`  Time elapsed: ${Math.floor(timeElapsed / 1000)}s`);
+        console.log(`  Current time: ${Date.now()} (${new Date().toISOString()})`);
         console.log(`  Expected window: 60s`);
         console.log(`  Storage: ${useKV ? 'KV' : 'Memory'}`);
         
-        const predictionKey = `pred:${userAddress.toLowerCase()}:${timestamp}`;
+        // Use consistent key format
+        const predictionKey = `prediction_${userAddress.toLowerCase()}_${timestamp}`;
         console.log(`  Looking for key: ${predictionKey}`);
         
         const prediction = await getPrediction(predictionKey);
         
-        console.log(`Prediction data:`, prediction);
+        console.log(`🔍 Prediction lookup result:`, prediction ? 'FOUND' : 'NOT FOUND');
+        if (prediction) {
+          console.log(`📊 Prediction details:`, {
+            currentPrice: prediction.currentPrice,
+            prediction: prediction.prediction,
+            timestamp: prediction.timestamp,
+            expiresAt: prediction.expiresAt,
+            expiresAtDate: new Date(prediction.expiresAt).toISOString()
+          });
+        }
         
         if (!prediction) {
           console.error(`❌ Prediction not found for key: ${predictionKey}`);
-          console.log(`  This usually means:`);
-          console.log(`  1. Prediction was never stored (check POST /predict logs)`);
-          console.log(`  2. TTL expired (current TTL: ${PREDICTION_TTL}s)`);
-          console.log(`  3. KV connection issue`);
+          console.log(`  Debugging info:`);
+          console.log(`  - User: ${userAddress.toLowerCase()}`);
+          console.log(`  - Timestamp: ${timestamp}`);
+          console.log(`  - TTL: ${PREDICTION_TTL}s (${Math.floor(PREDICTION_TTL / 60)} minutes)`);
+          console.log(`  - Time elapsed since prediction: ${Math.floor(timeElapsed / 1000)}s`);
+          
+          // Try to debug by listing keys (if in-memory)
+          if (!useKV && predictions.size > 0) {
+            console.log(`  - Available keys in memory:`, Array.from(predictions.keys()));
+          }
           
           return res.status(404).json({
             error: 'Prediction not found or expired',
@@ -298,7 +335,8 @@ export default async function handler(req, res) {
             debug: {
               key: predictionKey,
               storage: useKV ? 'kv' : 'memory',
-              timeElapsed: `${Math.floor(timeElapsed / 1000)}s`
+              timeElapsed: `${Math.floor(timeElapsed / 1000)}s`,
+              expectedTTL: `${PREDICTION_TTL}s`
             }
           });
         }
@@ -316,36 +354,56 @@ export default async function handler(req, res) {
         }
         
         // Verify prediction
-        const priceChange = newPrice - prediction.currentPrice;
+        const priceChange = parseFloat(newPrice) - parseFloat(prediction.currentPrice);
         const predictedUp = prediction.prediction === 'up';
         const actuallyWentUp = priceChange > 0;
         
         const correct = predictedUp === actuallyWentUp;
         const multiplier = correct ? 2 : 0.5;
         
+        console.log(`📊 Price analysis:
+          Start: ${prediction.currentPrice}
+          End: ${newPrice}
+          Change: ${priceChange > 0 ? '+' : ''}${priceChange.toFixed(4)}
+          Predicted: ${prediction.prediction.toUpperCase()} (${predictedUp ? 'UP' : 'DOWN'})
+          Actual: ${actuallyWentUp ? 'UP' : 'DOWN'}
+          Result: ${correct ? '✅ CORRECT' : '❌ WRONG'}
+        `);
+        
         // Update user stats with proper streak tracking
         const stats = await getUserStats(userAddress);
         
-        console.log('📊 Current stats:', stats);
+        console.log('📊 Current stats before update:', stats);
         
         stats.totalPredictions++;
         
         if (correct) {
           stats.correctPredictions++;
-          // Increment streak if last prediction was also correct, otherwise reset to 1
-          stats.currentStreak = stats.lastPredictionCorrect ? stats.currentStreak + 1 : 1;
+          // CRITICAL: Increment streak if last prediction was also correct
+          if (stats.lastPredictionCorrect) {
+            stats.currentStreak++;
+            console.log(`🔥 Streak increased to ${stats.currentStreak}!`);
+          } else {
+            stats.currentStreak = 1;
+            console.log(`🆕 Starting new streak: 1`);
+          }
           stats.bestStreak = Math.max(stats.bestStreak, stats.currentStreak);
           stats.lastPredictionCorrect = true;
         } else {
           // Reset streak on wrong prediction
+          console.log(`💔 Streak broken. Resetting from ${stats.currentStreak} to 0`);
           stats.currentStreak = 0;
           stats.lastPredictionCorrect = false;
         }
         
-        console.log('📊 Updated stats:', stats);
+        console.log('📊 Updated stats after prediction:', stats);
         
         // Save updated stats
         await setUserStats(userAddress, stats);
+        
+        // Verify stats were saved
+        const verifyStats = await getUserStats(userAddress);
+        console.log('✅ Verified saved stats:', verifyStats);
         
         // Clean up prediction
         await deletePrediction(predictionKey);
@@ -354,15 +412,17 @@ export default async function handler(req, res) {
         
         console.log(`${correct ? '✅' : '❌'} Prediction result:
           User: ${userAddress.slice(0, 6)}...${userAddress.slice(-4)}
-          Start: $${prediction.currentPrice.toFixed(4)}
-          End: $${newPrice.toFixed(4)}
+          Start: ${prediction.currentPrice.toFixed(4)}
+          End: ${parseFloat(newPrice).toFixed(4)}
           Change: ${priceChange > 0 ? '+' : ''}${priceChange.toFixed(4)} (${((priceChange / prediction.currentPrice) * 100).toFixed(2)}%)
           Predicted: ${prediction.prediction.toUpperCase()}
           Result: ${correct ? 'CORRECT ✅' : 'WRONG ❌'}
           Multiplier: ${multiplier}x
           Stats: ${stats.totalPredictions} total, ${stats.correctPredictions} correct
           Win Rate: ${winRate}%
-          Streak: ${stats.currentStreak} (Best: ${stats.bestStreak})
+          Current Streak: ${stats.currentStreak} 🔥
+          Best Streak: ${stats.bestStreak} 🏆
+          Last Correct: ${stats.lastPredictionCorrect}
           Storage: ${useKV ? 'KV' : 'Memory'}
         `);
         
@@ -370,8 +430,8 @@ export default async function handler(req, res) {
           success: true,
           correct,
           prediction: prediction.prediction,
-          startPrice: prediction.currentPrice,
-          endPrice: newPrice,
+          startPrice: parseFloat(prediction.currentPrice),
+          endPrice: parseFloat(newPrice),
           priceChange: priceChange.toFixed(4),
           priceChangePercent: ((priceChange / prediction.currentPrice) * 100).toFixed(2),
           multiplier,
@@ -380,11 +440,13 @@ export default async function handler(req, res) {
             correctPredictions: stats.correctPredictions,
             currentStreak: stats.currentStreak,
             bestStreak: stats.bestStreak,
-            winRate: winRate
+            winRate: winRate,
+            lastPredictionCorrect: stats.lastPredictionCorrect
           }
         });
       } catch (verifyError) {
         console.error('❌ Error verifying prediction:', verifyError);
+        console.error('Error stack:', verifyError.stack);
         return res.status(500).json({
           error: 'Failed to verify prediction',
           message: verifyError.message,
