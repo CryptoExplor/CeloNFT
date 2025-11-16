@@ -507,8 +507,8 @@ function showPredictionResultPopup(verifyResult, airdropResult) {
   const content = document.createElement('div');
   content.style.cssText = `
     background: linear-gradient(135deg, ${isCorrect ? '#1e3a2f 0%, #0f1a0f 100%' : '#3a2e1e 0%, #1f1a0f 100%'});
-    padding: 15px;
-    border-radius: 10px;
+    padding: 25px;
+    border-radius: 15px;
     max-width: 380px;
     width: 90%;
     border: 3px solid ${isCorrect ? '#10b981' : '#f59e0b'};
@@ -3298,6 +3298,7 @@ async function loadAchievementsBottom() {
     timestamp: Date.now()
   }));
 }
+
 
 
 
