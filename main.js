@@ -506,7 +506,7 @@ function showPredictionResultPopup(verifyResult, airdropResult) {
   
   const content = document.createElement('div');
   content.style.cssText = `
-    background: linear-gradient(135deg, ${isCorrect ? '#1e3a2f 0%, #0f1f1a 100%' : '#3a2e1e 0%, #1f1a0f 100%'});
+    background: linear-gradient(135deg, ${isCorrect ? '#1e3a2f 0%, #0f1a0f 100%' : '#3a2e1e 0%, #1f1a0f 100%'});
     padding: 20px;
     border-radius: 12px;
     max-width: 380px;
@@ -853,7 +853,7 @@ async function verifyPrediction(prediction, startPrice, timestamp, modal, cleanu
     const priceData = await fetchCeloPrice();
     const newPrice = priceData.price;
     
-    // Verify with backend
+    // Verify prediction with backend
     const response = await fetch('/api/prediction', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -2184,7 +2184,7 @@ mintBtn.addEventListener('click', async () => {
         try {
           setStatus('🔍 Verifying prediction result...', 'info');
           
-          // Verify prediction with backend
+          // Fetch current price for verification
           const priceData = await fetchCeloPrice();
           console.log('Current price for verification:', priceData.price);
           console.log('Verifying prediction with params:', {
@@ -2231,6 +2231,17 @@ mintBtn.addEventListener('click', async () => {
             useClientSideVerification = true;
           }
           
+          let userStats = null;
+          try {
+            const statsResponse = await fetch(`/api/prediction?userAddress=${userAddress}`);
+            if (statsResponse.ok) {
+              userStats = await statsResponse.json();
+              console.log('Fetched user stats:', userStats);
+            }
+          } catch (statsError) {
+            console.error('Error fetching user stats:', statsError);
+          }
+          
           // Fallback to client-side verification
           if (useClientSideVerification) {
             const priceChange = priceData.price - predictionResult.startPrice;
@@ -2258,7 +2269,21 @@ mintBtn.addEventListener('click', async () => {
               priceChange: priceChange.toFixed(4),
               priceChangePercent: ((priceChange / predictionResult.startPrice) * 100).toFixed(2),
               multiplier,
-              stats: null // No stats in client-side mode
+              stats: userStats || {
+                totalPredictions: 0,
+                correctPredictions: 0,
+                currentStreak: 0,
+                bestStreak: 0,
+                winRate: 0
+              }
+            };
+          } else if (verifyResult && !verifyResult.stats) {
+            verifyResult.stats = userStats || {
+              totalPredictions: 0,
+              correctPredictions: 0,
+              currentStreak: 0,
+              bestStreak: 0,
+              winRate: 0
             };
           }
           
