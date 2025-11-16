@@ -531,7 +531,7 @@ function showPredictionResultPopup(verifyResult, airdropResult) {
     </div>
     
     <h2 style="color: ${isSkipped ? '#fbbf24' : (isCorrect ? '#10b981' : '#f59e0b')}; margin: 0 0 8px 0; font-size: 1.4rem;">
-      ${isSkipped ? 'BONUS AIRDROP!' : (isCorrect ? 'CORRECT PREDICTION!' : 'WRONG PREDICTION')}
+      ${isSkipped ? 'BONUS AIRDROP' : (isCorrect ? 'CORRECT PREDICTION' : 'WRONG PREDICTION')}
     </h2>
     
     ${!isSkipped ? `
@@ -544,7 +544,7 @@ function showPredictionResultPopup(verifyResult, airdropResult) {
       </div>
     ` : ''}
     
-    <div style="background: rgba(15, 23, 42, 0.6); padding: 14px; border-radius: 10px; margin: 14px 0; border: 1px solid #334155;">
+    <div style="background: rgba(15, 23, 42, 0.6); padding: 10px; border-radius: 10px; margin: 10px 0; border: 1px solid #334155;">
       <div style="color: #94a3b8; font-size: 0.85rem; margin-bottom: 2px;">💰 Airdrop Breakdown</div>
       
       <div style="display: flex; justify-content: space-between; margin: 6px 0; color: #e2e8f0; font-size: 0.85rem;">
@@ -3298,6 +3298,7 @@ async function loadAchievementsBottom() {
     timestamp: Date.now()
   }));
 }
+
 
 
 
