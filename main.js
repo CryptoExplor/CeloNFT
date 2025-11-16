@@ -549,7 +549,7 @@ function showPredictionResultPopup(verifyResult, airdropResult) {
       
       <div style="display: flex; justify-content: space-between; margin: 6px 0; color: #e2e8f0; font-size: 0.85rem;">
         <span>Base Amount:</span>
-        <span style="color: #94a3b8; font-weight: bold; font-size: 2rem;">${airdropResult.baseAmount || '0.01'} CELO</span>
+        <span style="color: #94a3b8; font-weight: bold;">${airdropResult.baseAmount || '0.01'} CELO</span>
       </div>
       
       ${!isSkipped ? `
@@ -575,7 +575,7 @@ function showPredictionResultPopup(verifyResult, airdropResult) {
       
       <div style="border-top: 2px solid #334155; margin: 10px 0; padding-top: 10px;">
         <div style="font-size: 0.95rem; color: #94a3b8;">Total Airdrop</div>
-        <div style="font-size: 2rem; font-weight: bold; color: ${hasBonuses ? '#fbbf24' : (isCorrect ? '#10b981' : '#f59e0b')}; margin-top: 4px;">
+        <div style="font-size: 1.2rem; font-weight: bold; color: ${hasBonuses ? '#fbbf24' : (isCorrect ? '#10b981' : '#f59e0b')}; margin-top: 4px;">
           ${airdropAmount} CELO
         </div>
       </div>
@@ -3298,6 +3298,7 @@ async function loadAchievementsBottom() {
     timestamp: Date.now()
   }));
 }
+
 
 
 
