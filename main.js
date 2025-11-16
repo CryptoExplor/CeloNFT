@@ -2853,6 +2853,14 @@ window.addEventListener('beforeunload', () => {
 
 // ===== WALLET BALANCE DISPLAY =====
 let celoPrice = 0;
+import { createPublicClient, http } from 'viem'
+import { celo } from '@wagmi/core/chains'
+
+// Define publicClient to use with CELO chain
+const publicClient = createPublicClient({
+  chain: celo,
+  transport: http()
+})
 
 async function updateWalletBalance() {
   const balanceBox = document.getElementById('walletBalanceBox');
@@ -3298,6 +3306,7 @@ async function loadAchievementsBottom() {
     timestamp: Date.now()
   }));
 }
+
 
 
 
