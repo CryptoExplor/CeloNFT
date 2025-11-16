@@ -13,7 +13,8 @@ import {
   writeContract,
   readContract,
   waitForTransactionReceipt,
-  http
+  http,
+  getbalance
 } from '@wagmi/core';
 import { celo } from '@wagmi/core/chains';
 import { farcasterMiniApp } from '@farcaster/miniapp-wagmi-connector';
@@ -3306,6 +3307,7 @@ async function loadAchievementsBottom() {
     timestamp: Date.now()
   }));
 }
+
 
 
 
