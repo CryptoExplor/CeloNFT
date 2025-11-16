@@ -3170,7 +3170,7 @@ const achievements = [
     icon: '👑',
     title: 'Mythic Master',
     description: 'Own a Mythic NFT',
-    check: ()D => userNFTs.some(nft => nft.rarity === 3)
+    check: () => userNFTs.some(nft => nft.rarity === 3)
   },
   {
     id: 'early_adopter',
@@ -3302,3 +3302,4 @@ async function loadAchievementsBottom() {
     timestamp: Date.now()
   }));
 }
+
