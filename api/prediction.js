@@ -9,10 +9,19 @@ try {
   const kvModule = await import('@vercel/kv');
   kv = kvModule.kv;
   useKV = true;
-  console.log('✅ Vercel KV enabled');
+  console.log('✅ Vercel KV module loaded successfully');
+  console.log('📋 KV client type:', typeof kv);
+  console.log('📋 KV methods available:', Object.keys(kv).slice(0, 10).join(', '));
 } catch (e) {
+  console.error('❌ Failed to load Vercel KV module:', e.message);
   console.log('⚠️ Vercel KV not available, using in-memory storage');
-  console.log('⚠️ For production use, configure Vercel KV environment variables');
+  console.log('⚠️ For production use, configure Vercel KV environment variables:');
+  console.log('   Required environment variables:');
+  console.log('   - KV_URL');
+  console.log('   - KV_REST_API_URL');
+  console.log('   - KV_REST_API_TOKEN');
+  console.log('   - KV_REST_API_READ_ONLY_TOKEN');
+  console.log('   Go to: Vercel Dashboard → Your Project → Settings → Environment Variables');
   useKV = false;
 }
 
@@ -31,29 +40,50 @@ const HISTORY_TTL = 3600; // 1 hour in seconds
 async function storePrediction(key, data) {
   if (useKV) {
     try {
-      // Store with 5-minute expiration (enough time for 60s prediction + buffer)
-      await kv.set(key, JSON.stringify(data), { ex: PREDICTION_TTL });
-      console.log(`✅ Stored prediction in KV: ${key} (TTL: ${PREDICTION_TTL}s)`);
+      // CRITICAL: Store with explicit JSON serialization
+      const dataString = JSON.stringify(data);
+      console.log(`🔑 KV Store - Key: ${key}`);
+      console.log(`📦 KV Store - Data: ${dataString}`);
+      console.log(`⏰ KV Store - TTL: ${PREDICTION_TTL}s`);
+      
+      // Store with 5-minute expiration
+      await kv.set(key, dataString, { ex: PREDICTION_TTL });
+      console.log(`✅ KV set() completed for key: ${key}`);
+      
+      // Wait a moment for write to propagate
+      await new Promise(resolve => setTimeout(resolve, 100));
       
       // Verify write immediately
       const verify = await kv.get(key);
+      console.log(`🔍 KV Verification - Result:`, verify ? 'FOUND' : 'NOT FOUND');
+      
       if (verify) {
-        console.log(`✅ Verified prediction stored:`, JSON.parse(verify));
+        const parsed = typeof verify === 'string' ? JSON.parse(verify) : verify;
+        console.log(`✅ Verified prediction stored correctly:`, parsed);
         return true;
       } else {
-        console.error(`❌ Failed to verify prediction write for key: ${key}`);
-        throw new Error('KV write verification failed');
+        console.error(`❌ CRITICAL: KV write verification FAILED for key: ${key}`);
+        console.error(`   This means the data was NOT saved to KV!`);
+        throw new Error('KV write verification failed - data not persisted');
       }
     } catch (error) {
       console.error(`❌ Error storing prediction in KV:`, error);
+      console.error(`   Error details:`, {
+        name: error.name,
+        message: error.message,
+        stack: error.stack
+      });
+      
       // Fallback to in-memory
       predictions.set(key, data);
-      console.log(`⚠️ Fallback: Stored in memory instead`);
+      console.log(`⚠️ FALLBACK: Stored in memory instead: ${key}`);
+      console.log(`⚠️ Memory storage is NOT persistent - predictions will be lost on server restart!`);
       return false;
     }
   } else {
     predictions.set(key, data);
     console.log(`📝 Stored prediction in memory: ${key}`);
+    console.log(`⚠️ Using in-memory storage - configure Vercel KV for persistence!`);
     return true;
   }
 }
@@ -273,7 +303,15 @@ export default async function handler(req, res) {
         success: true,
         message: 'Prediction recorded',
         expiresAt: timestamp + PREDICTION_WINDOW,
-        storage: useKV ? 'kv' : 'memory'
+        storage: useKV ? 'kv' : 'memory',
+        debug: {
+          key: predictionKey,
+          timestamp: predictionData.timestamp,
+          expiresAt: predictionData.expiresAt,
+          ttl: PREDICTION_TTL,
+          currentTime: Date.now(),
+          predictionWindow: PREDICTION_WINDOW
+        }
       });
     }
     
