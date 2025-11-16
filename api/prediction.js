@@ -1,5 +1,5 @@
 // Price Prediction Game API with Vercel KV (Redis) support
-// Falls back to in-memory storage if KV is not available
+// Fixed: Proper TTL, better error handling, and win streak tracking
 
 let kv = null;
 let useKV = false;
@@ -11,12 +11,8 @@ try {
   useKV = true;
   console.log('✅ Vercel KV enabled');
 } catch (e) {
-  console.log('⚠️ Vercel KV not available, using in-memory storage (predictions will be lost on restart)');
-  console.log('⚠️ For production use, please configure Vercel KV environment variables:');
-  console.log('   - KV_URL');
-  console.log('   - KV_REST_API_URL');
-  console.log('   - KV_REST_API_TOKEN');
-  console.log('   - KV_REST_API_READ_ONLY_TOKEN');
+  console.log('⚠️ Vercel KV not available, using in-memory storage');
+  console.log('⚠️ For production use, configure Vercel KV environment variables');
   useKV = false;
 }
 
@@ -27,42 +23,55 @@ const userStats = new Map();
 
 const PREDICTION_WINDOW = 60000; // 1 minute
 const MAX_PREDICTIONS_PER_HOUR = 10;
+const PREDICTION_TTL = 300; // 5 minutes in seconds (enough time for verification)
+const STATS_TTL = 2592000; // 30 days in seconds
+const HISTORY_TTL = 3600; // 1 hour in seconds
 
 // Helper functions for KV storage
 async function storePrediction(key, data) {
   if (useKV) {
     try {
-      // Store in Vercel KV with 2-minute expiration (prediction window + buffer)
-      // KV automatically handles JSON serialization
-      await kv.set(key, data, { ex: 120 }); // 120 seconds = 2 minutes
-      console.log(`✅ Stored prediction in KV: ${key}`);
+      // Store with 5-minute expiration (enough time for 60s prediction + buffer)
+      await kv.set(key, JSON.stringify(data), { ex: PREDICTION_TTL });
+      console.log(`✅ Stored prediction in KV: ${key} (TTL: ${PREDICTION_TTL}s)`);
       
-      // Verify write by reading back immediately
+      // Verify write immediately
       const verify = await kv.get(key);
       if (verify) {
-        console.log(`✅ Verified prediction stored correctly:`, { key, data: verify });
+        console.log(`✅ Verified prediction stored:`, JSON.parse(verify));
+        return true;
       } else {
         console.error(`❌ Failed to verify prediction write for key: ${key}`);
+        throw new Error('KV write verification failed');
       }
     } catch (error) {
       console.error(`❌ Error storing prediction in KV:`, error);
       // Fallback to in-memory
       predictions.set(key, data);
       console.log(`⚠️ Fallback: Stored in memory instead`);
+      return false;
     }
   } else {
     predictions.set(key, data);
     console.log(`📝 Stored prediction in memory: ${key}`);
+    return true;
   }
 }
 
 async function getPrediction(key) {
   if (useKV) {
     try {
-      // KV automatically deserializes JSON
       const data = await kv.get(key);
       console.log(`🔍 KV lookup for ${key}:`, data ? 'FOUND' : 'NOT FOUND');
-      return data || null;
+      
+      if (data) {
+        // Parse if it's a string
+        if (typeof data === 'string') {
+          return JSON.parse(data);
+        }
+        return data;
+      }
+      return null;
     } catch (error) {
       console.error(`❌ Error reading from KV:`, error);
       return predictions.get(key) || null;
@@ -89,52 +98,88 @@ async function deletePrediction(key) {
 }
 
 async function getUserStats(address) {
+  const statsKey = `stats:${address.toLowerCase()}`;
+  
   if (useKV) {
-    const statsKey = `stats:${address.toLowerCase()}`;
-    const data = await kv.get(statsKey);
-    return data || {
-      totalPredictions: 0,
-      correctPredictions: 0,
-      currentStreak: 0,
-      bestStreak: 0,
-      lastPredictionCorrect: false
-    };
+    try {
+      const data = await kv.get(statsKey);
+      if (data) {
+        // Parse if it's a string
+        if (typeof data === 'string') {
+          return JSON.parse(data);
+        }
+        return data;
+      }
+    } catch (error) {
+      console.error(`❌ Error reading stats from KV:`, error);
+    }
   } else {
-    return userStats.get(address.toLowerCase()) || {
-      totalPredictions: 0,
-      correctPredictions: 0,
-      currentStreak: 0,
-      bestStreak: 0,
-      lastPredictionCorrect: false
-    };
+    const data = userStats.get(address.toLowerCase());
+    if (data) return data;
   }
+  
+  // Return default stats
+  return {
+    totalPredictions: 0,
+    correctPredictions: 0,
+    currentStreak: 0,
+    bestStreak: 0,
+    lastPredictionCorrect: false
+  };
 }
 
 async function setUserStats(address, stats) {
+  const statsKey = `stats:${address.toLowerCase()}`;
+  
   if (useKV) {
-    const statsKey = `stats:${address.toLowerCase()}`;
-    // Store stats for 30 days (will persist across sessions)
-    await kv.set(statsKey, stats, { ex: 2592000 }); // 30 days in seconds
+    try {
+      // Store stats for 30 days
+      await kv.set(statsKey, JSON.stringify(stats), { ex: STATS_TTL });
+      console.log(`✅ Stored user stats in KV: ${statsKey}`, stats);
+    } catch (error) {
+      console.error(`❌ Error storing stats in KV:`, error);
+      userStats.set(address.toLowerCase(), stats);
+    }
   } else {
     userStats.set(address.toLowerCase(), stats);
+    console.log(`📝 Stored user stats in memory: ${statsKey}`, stats);
   }
 }
 
 async function getUserHistory(address) {
+  const historyKey = `history:${address.toLowerCase()}`;
+  
   if (useKV) {
-    const historyKey = `history:${address.toLowerCase()}`;
-    const data = await kv.get(historyKey);
-    return data || [];
+    try {
+      const data = await kv.get(historyKey);
+      if (data) {
+        if (typeof data === 'string') {
+          return JSON.parse(data);
+        }
+        return data;
+      }
+    } catch (error) {
+      console.error(`❌ Error reading history from KV:`, error);
+    }
   } else {
-    return predictionHistory.get(address.toLowerCase()) || [];
+    const data = predictionHistory.get(address.toLowerCase());
+    if (data) return data;
   }
+  
+  return [];
 }
 
 async function setUserHistory(address, history) {
+  const historyKey = `history:${address.toLowerCase()}`;
+  
   if (useKV) {
-    const historyKey = `history:${address.toLowerCase()}`;
-    // Store history for 1 hour (rate limiting window)
-    await kv.set(historyKey, history, { ex: 3600 }); // 1 hour
+    try {
+      // Store history for 1 hour (rate limiting window)
+      await kv.set(historyKey, JSON.stringify(history), { ex: HISTORY_TTL });
+    } catch (error) {
+      console.error(`❌ Error storing history in KV:`, error);
+      predictionHistory.set(address.toLowerCase(), history);
+    }
   } else {
     predictionHistory.set(address.toLowerCase(), history);
   }
@@ -174,37 +219,41 @@ export default async function handler(req, res) {
         });
       }
       
-      // Store prediction
-      const predictionKey = `${userAddress.toLowerCase()}-${timestamp}`;
+      // Store prediction with extended TTL
+      const predictionKey = `pred:${userAddress.toLowerCase()}:${timestamp}`;
       const predictionData = {
         userAddress: userAddress.toLowerCase(),
         currentPrice,
         prediction, // 'up' or 'down'
         timestamp,
         expiresAt: timestamp + PREDICTION_WINDOW,
-        storedAt: Date.now() // Track when stored
+        storedAt: Date.now()
       };
       
-      await storePrediction(predictionKey, predictionData);
+      const stored = await storePrediction(predictionKey, predictionData);
+      
+      if (!stored && useKV) {
+        console.warn('⚠️ KV storage failed, using in-memory fallback');
+      }
       
       // Update history
       userHistory.push(timestamp);
       await setUserHistory(userAddress, userHistory);
       
-      const ttlSeconds = 120;
       console.log(`📊 Prediction recorded:
         User: ${userAddress.slice(0, 6)}...${userAddress.slice(-4)}
         Price: $${currentPrice}
         Prediction: ${prediction.toUpperCase()}
         Key: ${predictionKey}
-        TTL: ${ttlSeconds} seconds (auto-delete after 2 minutes)
-        Expires: ${new Date(timestamp + PREDICTION_WINDOW).toLocaleTimeString()}
+        TTL: ${PREDICTION_TTL}s
+        Storage: ${useKV ? 'KV' : 'Memory'}
       `);
       
       return res.status(200).json({
         success: true,
         message: 'Prediction recorded',
-        expiresAt: timestamp + PREDICTION_WINDOW
+        expiresAt: timestamp + PREDICTION_WINDOW,
+        storage: useKV ? 'kv' : 'memory'
       });
     }
     
@@ -213,13 +262,22 @@ export default async function handler(req, res) {
       try {
         const { userAddress, timestamp, newPrice } = req.body;
         
+        if (!userAddress || !timestamp || !newPrice) {
+          return res.status(400).json({
+            error: 'Missing required fields',
+            correct: false,
+            multiplier: 0
+          });
+        }
+        
         const timeElapsed = Date.now() - timestamp;
         console.log(`⏱️ Verifying prediction for ${userAddress.slice(0,6)}...${userAddress.slice(-4)}`);
         console.log(`  Timestamp: ${timestamp}`);
-        console.log(`  Time elapsed since prediction: ${Math.floor(timeElapsed / 1000)}s`);
-        console.log(`  Expected TTL: 120s (should still exist if < 120s)`);
+        console.log(`  Time elapsed: ${Math.floor(timeElapsed / 1000)}s`);
+        console.log(`  Expected window: 60s`);
+        console.log(`  Storage: ${useKV ? 'KV' : 'Memory'}`);
         
-        const predictionKey = `${userAddress.toLowerCase()}-${timestamp}`;
+        const predictionKey = `pred:${userAddress.toLowerCase()}:${timestamp}`;
         console.log(`  Looking for key: ${predictionKey}`);
         
         const prediction = await getPrediction(predictionKey);
@@ -227,16 +285,28 @@ export default async function handler(req, res) {
         console.log(`Prediction data:`, prediction);
         
         if (!prediction) {
-          console.log(`Prediction not found for key: ${predictionKey}`);
+          console.error(`❌ Prediction not found for key: ${predictionKey}`);
+          console.log(`  This usually means:`);
+          console.log(`  1. Prediction was never stored (check POST /predict logs)`);
+          console.log(`  2. TTL expired (current TTL: ${PREDICTION_TTL}s)`);
+          console.log(`  3. KV connection issue`);
+          
           return res.status(404).json({
-            error: 'Prediction not found',
+            error: 'Prediction not found or expired',
             correct: false,
-            multiplier: 0
+            multiplier: 0,
+            debug: {
+              key: predictionKey,
+              storage: useKV ? 'kv' : 'memory',
+              timeElapsed: `${Math.floor(timeElapsed / 1000)}s`
+            }
           });
         }
         
-        // Check if expired (allow 5 extra seconds grace period)
-        if (Date.now() > prediction.expiresAt + 5000) {
+        // Check if expired (allow 10 second grace period)
+        const gracePeriod = 10000;
+        if (Date.now() > prediction.expiresAt + gracePeriod) {
+          console.warn(`⚠️ Prediction expired: ${Date.now() - prediction.expiresAt}ms ago`);
           await deletePrediction(predictionKey);
           return res.status(400).json({
             error: 'Prediction expired',
@@ -251,25 +321,36 @@ export default async function handler(req, res) {
         const actuallyWentUp = priceChange > 0;
         
         const correct = predictedUp === actuallyWentUp;
-        const multiplier = correct ? 2 : 0.5; // 2x for correct, 0.5x consolation prize for wrong
+        const multiplier = correct ? 2 : 0.5;
         
-        // Update user stats
+        // Update user stats with proper streak tracking
         const stats = await getUserStats(userAddress);
         
+        console.log('📊 Current stats:', stats);
+        
         stats.totalPredictions++;
+        
         if (correct) {
           stats.correctPredictions++;
+          // Increment streak if last prediction was also correct, otherwise reset to 1
           stats.currentStreak = stats.lastPredictionCorrect ? stats.currentStreak + 1 : 1;
           stats.bestStreak = Math.max(stats.bestStreak, stats.currentStreak);
+          stats.lastPredictionCorrect = true;
         } else {
+          // Reset streak on wrong prediction
           stats.currentStreak = 0;
+          stats.lastPredictionCorrect = false;
         }
-        stats.lastPredictionCorrect = correct;
         
+        console.log('📊 Updated stats:', stats);
+        
+        // Save updated stats
         await setUserStats(userAddress, stats);
         
-        // Clean up
+        // Clean up prediction
         await deletePrediction(predictionKey);
+        
+        const winRate = ((stats.correctPredictions / stats.totalPredictions) * 100).toFixed(1);
         
         console.log(`${correct ? '✅' : '❌'} Prediction result:
           User: ${userAddress.slice(0, 6)}...${userAddress.slice(-4)}
@@ -277,10 +358,12 @@ export default async function handler(req, res) {
           End: $${newPrice.toFixed(4)}
           Change: ${priceChange > 0 ? '+' : ''}${priceChange.toFixed(4)} (${((priceChange / prediction.currentPrice) * 100).toFixed(2)}%)
           Predicted: ${prediction.prediction.toUpperCase()}
-          Result: ${correct ? 'CORRECT' : 'WRONG'}
+          Result: ${correct ? 'CORRECT ✅' : 'WRONG ❌'}
           Multiplier: ${multiplier}x
-          Win Rate: ${((stats.correctPredictions / stats.totalPredictions) * 100).toFixed(1)}%
-          Streak: ${stats.currentStreak}
+          Stats: ${stats.totalPredictions} total, ${stats.correctPredictions} correct
+          Win Rate: ${winRate}%
+          Streak: ${stats.currentStreak} (Best: ${stats.bestStreak})
+          Storage: ${useKV ? 'KV' : 'Memory'}
         `);
         
         return res.status(200).json({
@@ -297,14 +380,16 @@ export default async function handler(req, res) {
             correctPredictions: stats.correctPredictions,
             currentStreak: stats.currentStreak,
             bestStreak: stats.bestStreak,
-            winRate: ((stats.correctPredictions / stats.totalPredictions) * 100).toFixed(1)
+            winRate: winRate
           }
         });
       } catch (verifyError) {
-        console.error('Error verifying prediction:', verifyError);
+        console.error('❌ Error verifying prediction:', verifyError);
         return res.status(500).json({
           error: 'Failed to verify prediction',
-          message: verifyError.message
+          message: verifyError.message,
+          correct: false,
+          multiplier: 0
         });
       }
     }
@@ -321,7 +406,9 @@ export default async function handler(req, res) {
       
       stats.winRate = stats.totalPredictions > 0 
         ? ((stats.correctPredictions / stats.totalPredictions) * 100).toFixed(1)
-        : 0;
+        : '0';
+      
+      console.log(`📊 Fetched stats for ${userAddress.slice(0,6)}...${userAddress.slice(-4)}:`, stats);
       
       return res.status(200).json(stats);
     }
@@ -329,7 +416,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
     
   } catch (error) {
-    console.error('Prediction API error:', error);
+    console.error('❌ Prediction API error:', error);
     return res.status(500).json({
       error: 'Internal server error',
       message: error.message
@@ -337,35 +424,37 @@ export default async function handler(req, res) {
   }
 }
 
-// Cleanup expired predictions periodically
-setInterval(() => {
-  const now = Date.now();
-  let cleaned = 0;
-  
-  for (const [key, pred] of predictions.entries()) {
-    if (now > pred.expiresAt + 60000) { // Extra minute buffer
-      predictions.delete(key);
-      cleaned++;
+// Cleanup expired predictions periodically (in-memory only)
+if (!useKV) {
+  setInterval(() => {
+    const now = Date.now();
+    let cleaned = 0;
+    
+    for (const [key, pred] of predictions.entries()) {
+      if (now > pred.expiresAt + 60000) {
+        predictions.delete(key);
+        cleaned++;
+      }
     }
-  }
-  
-  if (cleaned > 0) {
-    console.log(`🧹 Cleaned ${cleaned} expired predictions`);
-  }
-}, 60000); // Clean every minute
-
-// Cleanup old history (daily)
-setInterval(() => {
-  const oneDayAgo = Date.now() - 86400000;
-  
-  for (const [address, history] of predictionHistory.entries()) {
-    const recent = history.filter(t => t > oneDayAgo);
-    if (recent.length === 0) {
-      predictionHistory.delete(address);
-    } else {
-      predictionHistory.set(address, recent);
+    
+    if (cleaned > 0) {
+      console.log(`🧹 Cleaned ${cleaned} expired predictions from memory`);
     }
-  }
+  }, 60000);
   
-  console.log('🧹 Cleaned old prediction history');
-}, 86400000); // Clean once per day
+  // Cleanup old history (daily)
+  setInterval(() => {
+    const oneDayAgo = Date.now() - 86400000;
+    
+    for (const [address, history] of predictionHistory.entries()) {
+      const recent = history.filter(t => t > oneDayAgo);
+      if (recent.length === 0) {
+        predictionHistory.delete(address);
+      } else {
+        predictionHistory.set(address, recent);
+      }
+    }
+    
+    console.log('🧹 Cleaned old prediction history from memory');
+  }, 86400000);
+}
