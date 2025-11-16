@@ -526,7 +526,7 @@ function showPredictionResultPopup(verifyResult, airdropResult) {
   const isSkipped = prediction === 'skipped' || !verifyResult.stats;
   
   content.innerHTML = `
-    <div style="font-size: 3rem; margin-bottom: 5px;">
+    <div style="font-size: 2rem; margin-bottom: 3px;">
       ${isSkipped ? '🎁' : (isCorrect ? '✅' : '🎲')}
     </div>
     
@@ -3298,4 +3298,5 @@ async function loadAchievementsBottom() {
     timestamp: Date.now()
   }));
 }
+
 
