@@ -549,7 +549,7 @@ function showPredictionResultPopup(verifyResult, airdropResult) {
       
       <div style="display: flex; justify-content: space-between; margin: 6px 0; color: #e2e8f0; font-size: 0.85rem;">
         <span>Base Amount:</span>
-        <span style="color: #94a3b8; font-weight: bold;">${airdropResult.baseAmount || '0.01'} CELO</span>
+        <span style="color: #94a3b8; font-weight: bold; font-size: 2rem;">${airdropResult.baseAmount || '0.01'} CELO</span>
       </div>
       
       ${!isSkipped ? `
@@ -3298,6 +3298,7 @@ async function loadAchievementsBottom() {
     timestamp: Date.now()
   }));
 }
+
 
 
 
