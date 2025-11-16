@@ -545,7 +545,7 @@ function showPredictionResultPopup(verifyResult, airdropResult) {
     ` : ''}
     
     <div style="background: rgba(15, 23, 42, 0.6); padding: 14px; border-radius: 10px; margin: 14px 0; border: 1px solid #334155;">
-      <div style="color: #94a3b8; font-size: 0.85rem; margin-bottom: 8px;">💰 Airdrop Breakdown</div>
+      <div style="color: #94a3b8; font-size: 0.85rem; margin-bottom: 2px;">💰 Airdrop Breakdown</div>
       
       <div style="display: flex; justify-content: space-between; margin: 6px 0; color: #e2e8f0; font-size: 0.85rem;">
         <span>Base Amount:</span>
@@ -3298,6 +3298,7 @@ async function loadAchievementsBottom() {
     timestamp: Date.now()
   }));
 }
+
 
 
 
