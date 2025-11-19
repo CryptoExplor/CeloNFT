@@ -1535,6 +1535,12 @@ function shareToTwitter() {
   
   window.open(twitterUrl, '_blank', 'width=550,height=420');
   setStatus('Opening Twitter...', 'info');
+  
+  // Close the status message after 5 seconds
+  setTimeout(() => {
+    statusBox.innerHTML = '';
+    statusBox.className = 'status-box';
+  }, 5000);
 }
 
 function showGiftModal() {
@@ -3346,4 +3352,3 @@ async function loadAchievementsBottom() {
   }));
 }
 
-v
