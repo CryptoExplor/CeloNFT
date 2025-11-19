@@ -14,7 +14,7 @@ import {
   readContract,
   waitForTransactionReceipt,
   http,
-  getBalance // <-- FIX 1: Import getBalance
+  getBalance
 } from '@wagmi/core';
 import { celo } from '@wagmi/core/chains';
 import { farcasterMiniApp } from '@farcaster/miniapp-wagmi-connector';
@@ -608,20 +608,22 @@ function showPredictionResultPopup(verifyResult, airdropResult) {
       </div>
     ` : ''}
     
-    <button id="closePredictionResult" style="
+    <button id="castAndClosePredictionResult" style="
       width: 100%;
-      padding: 10px;
-      background: linear-gradient(90deg, #49dfb5, #10b981);
-      color: #0f0f0f;
+      padding: 12px;
+      background: linear-gradient(90deg, ${hasBonuses ? '#fbbf24, #f59e0b' : (isCorrect ? '#10b981, #059669' : '#8b5cf6, #6366f1')});
+      color: white;
       border: none;
       border-radius: 8px;
-      font-size: 0.95rem;
+      font-size: 1rem;
       font-weight: bold;
       cursor: pointer;
       font-family: 'Orbitron', sans-serif;
       margin-top: 8px;
-    ">
-      ${hasBonuses ? '🎉 Amazing!' : (isCorrect ? '🎉 Awesome!' : '👍 Got It!')}
+      box-shadow: 0 4px 12px ${hasBonuses ? 'rgba(251, 191, 36, 0.4)' : (isCorrect ? 'rgba(16, 185, 129, 0.4)' : 'rgba(139, 92, 246, 0.4)')};
+      transition: transform 0.2s, box-shadow 0.2s;
+    " onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 16px ${hasBonuses ? 'rgba(251, 191, 36, 0.5)' : (isCorrect ? 'rgba(16, 185, 129, 0.5)' : 'rgba(139, 92, 246, 0.5)')}'" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 12px ${hasBonuses ? 'rgba(251, 191, 36, 0.4)' : (isCorrect ? 'rgba(16, 185, 129, 0.4)' : 'rgba(139, 92, 246, 0.4)')}'">
+      ${hasBonuses ? '🎉 Amazing! Cast It!' : (isCorrect ? '🎉 Awesome! Cast It!' : '👍 Got It! Cast It!')}
     </button>
   `;
   
@@ -644,13 +646,25 @@ function showPredictionResultPopup(verifyResult, airdropResult) {
     }, 300);
   }
   
-  // Close button
-  document.getElementById('closePredictionResult').onclick = () => {
+  // Single button - Cast and close
+  document.getElementById('castAndClosePredictionResult').onclick = async () => {
+    // Cast to Farcaster with prediction result
+    if (lastMintedInfo.tokenId) {
+      await castToFarcaster(
+        lastMintedInfo.tokenId,
+        lastMintedInfo.rarity || 'Common',
+        lastMintedInfo.price,
+        airdropAmount,
+        verifyResult
+      );
+    }
+    
+    // Close modal with animation
     modal.style.animation = 'fadeOut 0.3s';
     setTimeout(() => modal.remove(), 300);
   };
   
-  // Click outside to close
+  // Click outside to close (without cast
   modal.onclick = (e) => {
     if (e.target === modal) {
       modal.style.animation = 'fadeOut 0.3s';
@@ -1215,15 +1229,43 @@ bonusStyle.textContent = `
 `;
 document.head.appendChild(bonusStyle);
 
-async function castToFarcaster(tokenId, rarity, price, airdropAmount = null) {
+async function castToFarcaster(tokenId, rarity, price, airdropAmount = null, predictionResult = null) {
   let text;
   
   if (airdropAmount) {
     // Format airdrop amount nicely
     const airdropFormatted = parseFloat(airdropAmount).toFixed(4);
-    text = `I just minted CELO NFT #${tokenId} (${rarity}) at ${price} and received ${airdropFormatted} CELO airdrop! 🎨✨💰\n\nMint yours now:`;
+    
+    if (predictionResult && predictionResult.correct === true) {
+      // Correct prediction - highlight the 2x bonus!
+      text = `🎯 I predicted CELO price correctly and got 2x airdrop!
+
+✨ Minted NFT #${tokenId} (${rarity}) at ${price}
+💰 Earned ${airdropFormatted} CELO
+🔥 Try your luck with price predictions!
+
+Mint + Predict:`;
+    } else if (predictionResult && predictionResult.correct === false) {
+      // Wrong prediction but still got consolation
+      text = `🎲 I played the CELO price prediction game!
+
+✨ Minted NFT #${tokenId} (${rarity}) at ${price}
+💰 Got ${airdropFormatted} CELO consolation prize
+📈 Will you predict correctly?
+
+Mint + Predict:`;
+    } else {
+      // Lucky/rarity bonuses without prediction
+      text = `💎 LUCKY MINT! Got bonus airdrop!
+
+✨ Minted NFT #${tokenId} (${rarity}) at ${price}
+🎁 Received ${airdropFormatted} CELO
+🍀 Plus price prediction game!
+
+Mint + Earn:`;
+    }
   } else {
-    text = `I just minted CELO NFT #${tokenId} (${rarity}) at ${price}! 🎨✨\n\nMint yours now:`;
+    text = `I just minted CELO NFT #${tokenId} (${rarity}) at ${price}! 🎨✨\n\nFree mint + Airdrop + Price game:`;
   }
   
   const embedUrl = MINIAPP_URL;
@@ -1664,7 +1706,7 @@ async function previewNft(tokenId, isNewMint = false) {
       castBtnElement.innerHTML = '📣 Cast';
       castBtnElement.onclick = async () => {
         // Use stored airdrop amount if available
-        await castToFarcaster(tokenId, rarityText, priceText, lastAirdropAmount);
+        await castToFarcaster(tokenId, rarityText, priceText, lastAirdropAmount, null);
       };
       txLinksContainer.appendChild(castBtnElement);
       
@@ -2116,7 +2158,8 @@ mintBtn.addEventListener('click', async () => {
             lastMintedInfo.tokenId, 
             lastMintedInfo.rarity || 'Common', 
             lastMintedInfo.price,
-            lastAirdropAmount // Include airdrop amount
+            lastAirdropAmount, // Include airdrop amount
+            null // No prediction result in this context
           );
         }
       };
@@ -3303,3 +3346,4 @@ async function loadAchievementsBottom() {
   }));
 }
 
+v
