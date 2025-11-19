@@ -1298,6 +1298,11 @@ Mint + Earn:`;
     
     if (popup) {
       setStatus('Opening Warpcast composer...', 'success');
+      // Clear the status after 5 seconds
+      setTimeout(() => {
+        statusBox.innerHTML = '';
+        statusBox.className = 'status-box';
+      }, 5000);
     } else {
       setStatus('Please allow popups to share on Warpcast', 'warning');
     }
@@ -1520,15 +1525,63 @@ async function copyImageToClipboard() {
 }
 
 function shareToTwitter() {
-  let text = `I just minted a CELO NFT with live price snapshot! 🎨✨`;
+  let text;
   
-  // Add airdrop info if available
-  if (lastAirdropAmount) {
+  // Use the same detailed messaging as castToFarcaster
+  if (lastAirdropAmount && lastMintedInfo.tokenId && lastMintedInfo.rarity && lastMintedInfo.price) {
     const airdropFormatted = parseFloat(lastAirdropAmount).toFixed(4);
-    text = `I just minted a CELO NFT and received ${airdropFormatted} CELO airdrop! 🎨✨💰`;
+    
+    // Check if this was from a prediction
+    const hasPredictionData = sessionStorage.getItem('lastPredictionResult');
+    if (hasPredictionData) {
+      try {
+        const predictionResult = JSON.parse(hasPredictionData);
+        if (predictionResult.correct === true) {
+          // Correct prediction - highlight the 2x bonus!
+          text = `🎯 I predicted CELO price correctly and got 2x airdrop!
+
+✨ Minted NFT #${lastMintedInfo.tokenId} (${lastMintedInfo.rarity}) at ${lastMintedInfo.price}
+💰 Earned ${airdropFormatted} CELO
+🔥 Try your luck with price predictions!
+
+Mint + Predict:`;
+        } else if (predictionResult.correct === false) {
+          // Wrong prediction but still got consolation
+          text = `🎲 I played the CELO price prediction game!
+
+✨ Minted NFT #${lastMintedInfo.tokenId} (${lastMintedInfo.rarity}) at ${lastMintedInfo.price}
+💰 Got ${airdropFormatted} CELO consolation prize
+📈 Will you predict correctly?
+
+Mint + Predict:`;
+        } else {
+          // Lucky/rarity bonuses without prediction
+          text = `💎 LUCKY MINT! Got bonus airdrop!
+
+✨ Minted NFT #${lastMintedInfo.tokenId} (${lastMintedInfo.rarity}) at ${lastMintedInfo.price}
+🎁 Received ${airdropFormatted} CELO
+🍀 Plus price prediction game!
+
+Mint + Earn:`;
+        }
+      } catch (e) {
+        // Fallback if parsing fails
+        text = `💎 LUCKY MINT! Got bonus airdrop!
+
+✨ Minted NFT #${lastMintedInfo.tokenId} (${lastMintedInfo.rarity}) at ${lastMintedInfo.price}
+🎁 Received ${airdropFormatted} CELO
+🍀 Plus price prediction game!
+
+Mint + Earn:`;
+      }
+    } else {
+      // Standard mint without prediction
+      text = `I just minted CELO NFT #${lastMintedInfo.tokenId} (${lastMintedInfo.rarity}) at ${lastMintedInfo.price}! 🎨✨\n\nFree mint + Airdrop + Price game:`;
+    }
+  } else {
+    // Fallback if we don't have mint info
+    text = `I just minted a CELO NFT with live price snapshot! 🎨✨\n\nMint yours:`;
   }
-  
-  text += `\n\nMint yours:`;
   
   const appUrl = 'https://celo-nft-phi.vercel.app/';
   const twitterUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(appUrl)}&hashtags=CeloNFT,Celo`;
