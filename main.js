@@ -1229,15 +1229,16 @@ bonusStyle.textContent = `
 `;
 document.head.appendChild(bonusStyle);
 
+// ===== FARCASTER + WARPCAST CASTING =====
 async function castToFarcaster(tokenId, rarity, price, airdropAmount = null, predictionResult = null) {
   let text;
-  
+
+  // 💸 If we have airdrop info, build the richer copy
   if (airdropAmount) {
-    // Format airdrop amount nicely
-    const airdropFormatted = parseFloat(airdropAmount).toFixed(4);
-    
+    const airdropFormatted = Number(airdropAmount).toFixed(4);
+
     if (predictionResult && predictionResult.correct === true) {
-      // Correct prediction - highlight the 2x bonus!
+      // Correct prediction - 2x airdrop
       text = `🎯 I predicted CELO price correctly and got 2x airdrop!
 
 ✨ Minted NFT #${tokenId} (${rarity}) at ${price}
@@ -1246,7 +1247,7 @@ async function castToFarcaster(tokenId, rarity, price, airdropAmount = null, pre
 
 Mint + Predict:`;
     } else if (predictionResult && predictionResult.correct === false) {
-      // Wrong prediction but still got consolation
+      // Wrong prediction but consolation airdrop
       text = `🎲 I played the CELO price prediction game!
 
 ✨ Minted NFT #${tokenId} (${rarity}) at ${price}
@@ -1255,7 +1256,7 @@ Mint + Predict:`;
 
 Mint + Predict:`;
     } else {
-      // Lucky/rarity bonuses without prediction
+      // Lucky / rarity bonus airdrops without explicit prediction result
       text = `💎 LUCKY MINT! Got bonus airdrop!
 
 ✨ Minted NFT #${tokenId} (${rarity}) at ${price}
@@ -1265,22 +1266,29 @@ Mint + Predict:`;
 Mint + Earn:`;
     }
   } else {
-    text = `I just minted CELO NFT #${tokenId} (${rarity}) at ${price}! 🎨✨\n\nFree mint + Airdrop + Price game:`;
+    // Plain mint copy if we don't have airdrop details
+    text = `I just minted CELO NFT #${tokenId} (${rarity}) at ${price}! 🎨✨
+
+Free mint + Airdrop + Price game:`;
   }
-  
+
   const embedUrl = MINIAPP_URL;
-  
+
+  // ✅ Native Farcaster Mini App flow
   if (isFarcasterEnvironment && sdk?.actions?.composeCast) {
     try {
       setStatus('Opening cast composer... 📝', 'info');
-      
+
       const result = await sdk.actions.composeCast({
-        text: text,
-        embeds: [embedUrl]
+        text,
+        embeds: [embedUrl],
       });
-      
+
       if (result?.cast) {
-        setStatus(`✅ Cast posted! Hash: ${result.cast.hash.slice(0, 10)}...`, 'success');
+        setStatus(
+          `✅ Cast posted! Hash: ${result.cast.hash.slice(0, 10)}...`,
+          'success'
+        );
         console.log('Cast hash:', result.cast.hash);
         if (result.cast.channelKey) {
           console.log('Posted to channel:', result.cast.channelKey);
@@ -1293,12 +1301,20 @@ Mint + Earn:`;
       setStatus('Failed to create cast. Please try again.', 'error');
     }
   } else {
-    const warpcastUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(text)}&embeds[]=${encodeURIComponent(embedUrl)}`;
-    const popup = window.open(warpcastUrl, '_blank', 'width=600,height=700');
-    
+    // 🌐 Warpcast web fallback
+    const warpcastUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(
+      text
+    )}&embeds[]=${encodeURIComponent(embedUrl)}`;
+
+    const popup = window.open(
+      warpcastUrl,
+      '_blank',
+      'width=600,height=700'
+    );
+
     if (popup) {
-      setStatus('Opening Warpcast composer...', 'success');
-      // Clear the status after 5 seconds
+      setStatus('Opening Warpcast composer.', 'success');
+      // Clear status after 5s
       setTimeout(() => {
         statusBox.innerHTML = '';
         statusBox.className = 'status-box';
@@ -1308,7 +1324,6 @@ Mint + Earn:`;
     }
   }
 }
-
 async function downloadSVGFile() {
   if (!currentNFTData || !currentNFTData.svg) {
     setStatus('No NFT data available for download', 'error');
@@ -3430,5 +3445,6 @@ async function loadAchievementsBottom() {
     timestamp: Date.now()
   }));
 }
+
 
 
