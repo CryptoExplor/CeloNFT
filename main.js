@@ -1526,18 +1526,23 @@ async function copyImageToClipboard() {
 
 function shareToTwitter() {
   let text;
-  
-  // Use the same detailed messaging as castToFarcaster
-  if (lastAirdropAmount && lastMintedInfo.tokenId && lastMintedInfo.rarity && lastMintedInfo.price) {
-    const airdropFormatted = parseFloat(lastAirdropAmount).toFixed(4);
-    
-    // Check if this was from a prediction
+
+  // Prefer detailed copy if we have full mint + airdrop context
+  if (
+    lastAirdropAmount &&
+    lastMintedInfo &&
+    lastMintedInfo.tokenId &&
+    lastMintedInfo.rarity &&
+    lastMintedInfo.price
+  ) {
+    const airdropFormatted = Number(lastAirdropAmount).toFixed(4);
+
     const hasPredictionData = sessionStorage.getItem('lastPredictionResult');
     if (hasPredictionData) {
       try {
         const predictionResult = JSON.parse(hasPredictionData);
+
         if (predictionResult.correct === true) {
-          // Correct prediction - highlight the 2x bonus!
           text = `🎯 I predicted CELO price correctly and got 2x airdrop!
 
 ✨ Minted NFT #${lastMintedInfo.tokenId} (${lastMintedInfo.rarity}) at ${lastMintedInfo.price}
@@ -1546,7 +1551,6 @@ function shareToTwitter() {
 
 Mint + Predict:`;
         } else if (predictionResult.correct === false) {
-          // Wrong prediction but still got consolation
           text = `🎲 I played the CELO price prediction game!
 
 ✨ Minted NFT #${lastMintedInfo.tokenId} (${lastMintedInfo.rarity}) at ${lastMintedInfo.price}
@@ -1555,7 +1559,7 @@ Mint + Predict:`;
 
 Mint + Predict:`;
         } else {
-          // Lucky/rarity bonuses without prediction
+          // Neutral / skipped prediction but bonus airdrop
           text = `💎 LUCKY MINT! Got bonus airdrop!
 
 ✨ Minted NFT #${lastMintedInfo.tokenId} (${lastMintedInfo.rarity}) at ${lastMintedInfo.price}
@@ -1565,7 +1569,7 @@ Mint + Predict:`;
 Mint + Earn:`;
         }
       } catch (e) {
-        // Fallback if parsing fails
+        console.warn('Failed to parse lastPredictionResult:', e);
         text = `💎 LUCKY MINT! Got bonus airdrop!
 
 ✨ Minted NFT #${lastMintedInfo.tokenId} (${lastMintedInfo.rarity}) at ${lastMintedInfo.price}
@@ -1575,21 +1579,43 @@ Mint + Earn:`;
 Mint + Earn:`;
       }
     } else {
-      // Standard mint without prediction
-      text = `I just minted CELO NFT #${lastMintedInfo.tokenId} (${lastMintedInfo.rarity}) at ${lastMintedInfo.price}! 🎨✨\n\nFree mint + Airdrop + Price game:`;
+      // No prediction data, but we still know airdrop amount
+      text = `I just minted CELO NFT #${lastMintedInfo.tokenId} (${lastMintedInfo.rarity}) at ${lastMintedInfo.price}! 🎨✨
+
+💰 Airdrop received: ${airdropFormatted} CELO
+Free mint + Airdrop + Price game:`;
     }
+  } else if (lastMintedInfo && lastMintedInfo.tokenId && lastMintedInfo.rarity && lastMintedInfo.price) {
+    // Fallback: only mint info
+    text = `I just minted CELO NFT #${lastMintedInfo.tokenId} (${lastMintedInfo.rarity}) at ${lastMintedInfo.price}! 🎨✨
+
+Free mint + Airdrop + Price game:`;
   } else {
-    // Fallback if we don't have mint info
-    text = `I just minted a CELO NFT with live price snapshot! 🎨✨\n\nMint yours:`;
+    // Ultimate fallback if user hits share before a successful mint
+    text = `I just minted a CELO NFT with a live CELO price snapshot! 🎨✨
+
+Mint yours:`;
   }
-  
+
+  // Public web app URL (good for Twitter)
   const appUrl = 'https://celo-nft-phi.vercel.app/';
-  const twitterUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(appUrl)}&hashtags=CeloNFT,Celo`;
-  
-  window.open(twitterUrl, '_blank', 'width=550,height=420');
-  setStatus('Opening Twitter...', 'info');
-  
-  // Close the status message after 5 seconds
+  const twitterUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(
+    text
+  )}&url=${encodeURIComponent(appUrl)}&hashtags=CeloNFT,Celo`;
+
+  const popup = window.open(
+    twitterUrl,
+    '_blank',
+    'width=550,height=420'
+  );
+
+  if (popup) {
+    setStatus('Opening Twitter...', 'info');
+  } else {
+    setStatus('Please allow popups to share on Twitter', 'warning');
+  }
+
+  // Clear status after 5s
   setTimeout(() => {
     statusBox.innerHTML = '';
     statusBox.className = 'status-box';
@@ -3404,4 +3430,5 @@ async function loadAchievementsBottom() {
     timestamp: Date.now()
   }));
 }
+
 
