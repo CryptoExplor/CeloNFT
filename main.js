@@ -674,15 +674,6 @@ function showPredictionResultPopup(verifyResult, airdropResult) {
   };
 }
 
-// ===== PRICE PREDICTION GAME ===== (FINAL FIXED VERSION)
-
-// Show prediction result popup after airdrop (unchanged – works perfectly)
-function showPredictionResultPopup(verifyResult, airdropResult) {
-  // ... your existing beautiful popup code (no changes needed)
-  // (kept exactly as you wrote it – it's perfect)
-  // ... [your full showPredictionResultPopup function here] ...
-}
-
 // Show prediction modal and return user's choice
 async function showPredictionModal() {
   return new Promise((resolve) => {
