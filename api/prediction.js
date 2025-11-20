@@ -1,8 +1,6 @@
 // Price Prediction Game API with Vercel KV (Redis) support
 // FIXED: Consistent key format, proper KV storage, win streak tracking
 
-import { randomUUID } from 'crypto';   // ← Node.js built-in, works on Vercel
-
 let kv = null;
 let useKV = false;
 
@@ -232,16 +230,13 @@ export default async function handler(req, res) {
         });
       }
       
-      // CRITICAL: Use short unique ID instead of timestamp
-      const predictionId = randomUUID().replace(/-/g, '').slice(0, 12); // 12-char safe string
-      const predictionKey = `pred_${userAddress.toLowerCase()}_${predictionId}`;
-
+      // CRITICAL: Use underscore format for key
+      const predictionKey = `pred_${userAddress.toLowerCase()}_${timestamp}`;
       const predictionData = {
         userAddress: userAddress.toLowerCase(),
         currentPrice: parseFloat(currentPrice),
         prediction,
-        timestamp: parseInt(timestamp),           // still store original timestamp for display
-        predictionId,                              // ← add this
+        timestamp: parseInt(timestamp),
         expiresAt: parseInt(timestamp) + PREDICTION_WINDOW,
         storedAt: Date.now()
       };
@@ -266,46 +261,32 @@ export default async function handler(req, res) {
       return res.status(200).json({
         success: true,
         message: 'Prediction recorded',
-        predictionId,                  // ← THIS IS NEW
         expiresAt: timestamp + PREDICTION_WINDOW,
         storage: useKV ? 'kv' : 'memory',
-        // key: predictionKey         // optional, you can remove for security
+        key: predictionKey // For debugging
       });
     }
     
     // ===== VERIFY PREDICTION =====
     if (req.method === 'POST' && req.body.action === 'verify') {
       try {
-        // OLD:
-        // const { userAddress, timestamp, newPrice } = req.body;
-        // NEW – require predictionId instead of timestamp
-        const { userAddress, predictionId, newPrice } = req.body;
-
-        // OLD:
-        // if (!userAddress || !timestamp || !newPrice) {
-        //   return res.status(400).json({
-        //     error: 'Missing required fields',
-        //     correct: false,
-        //     multiplier: 0
-        //   });
-        // }
-        // NEW – require predictionId instead of timestamp
-        if (!userAddress || !predictionId || !newPrice) {
-          return res.status(400).json({ 
-            error: 'Missing required fields (need predictionId)', 
+        const { userAddress, timestamp, newPrice } = req.body;
+        
+        if (!userAddress || !timestamp || !newPrice) {
+          return res.status(400).json({
+            error: 'Missing required fields',
             correct: false,
             multiplier: 0
           });
         }
         
-        // OLD:
-        // const predictionKey = `pred_${userAddress.toLowerCase()}_${timestamp}`;
-        // NEW – require predictionId instead of timestamp
-        const predictionKey = `pred_${userAddress.toLowerCase()}_${predictionId}`;
+        // CRITICAL: Use same key format as storage
+        const predictionKey = `pred_${userAddress.toLowerCase()}_${timestamp}`;
         
         console.log(`\n🔍 VERIFYING PREDICTION`);
         console.log(`User: ${userAddress.slice(0, 6)}...${userAddress.slice(-4)}`);
         console.log(`Key: ${predictionKey}`);
+        console.log(`Time since prediction: ${Math.floor((Date.now() - parseInt(timestamp)) / 1000)}s`);
         console.log(`Storage: ${useKV ? 'KV' : 'Memory'}`);
         
         const prediction = await getPrediction(predictionKey);
@@ -325,7 +306,7 @@ export default async function handler(req, res) {
             debug: {
               key: predictionKey,
               storage: useKV ? 'kv' : 'memory',
-              // timestamp: timestamp,
+              timestamp: timestamp,
               ttl: PREDICTION_TTL
             }
           });
