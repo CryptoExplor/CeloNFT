@@ -8,7 +8,7 @@ const MIN_AIRDROP_AMOUNT = '0.005'; // Minimum CELO
 const MAX_AIRDROP_AMOUNT = '0.01'; // Maximum CELO
 const ABSOLUTE_MAX_AIRDROP = '0.033'; // Hard cap - no one can get more than this
 const RATE_LIMIT_WINDOW = 3600000; // 1 hour in ms
-const MAX_CLAIMS_PER_HOUR = 3;
+const MAX_CLAIMS_PER_HOUR = 5;
 const LOW_BALANCE_THRESHOLD = '1.0'; // Alert when below 1 CELO
 
 // ===== LUCKY TOKEN BONUSES =====
