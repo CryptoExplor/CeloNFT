@@ -1,7 +1,6 @@
 // Buffer polyfill for WalletConnect
 import { Buffer } from 'buffer';
 window.Buffer = Buffer;
-
 window.global = window.global || window;
 window.process = window.process || { env: {} };
 
@@ -246,46 +245,12 @@ function sanitizeSVG(svgString) {
     .replace(/<iframe.*?>.*?<\/iframe>/gi, '')
     .replace(/on\w+\s*=\s*["'][^"']*["']/gi, '')
     .replace(/javascript:/gi, '')
-    .replace(/data:text\/html/gi, '')
-    // Fix invalid width/height attributes
-    .replace(/width\s*=\s*["'](small|medium|large|auto|x?small|x?large)["']/gi, '')
-    .replace(/height\s*=\s*["'](small|medium|large|auto|x?small|x?large)["']/gi, '')
-    // Remove other potentially problematic attributes
-    .replace(/width\s*=\s*["']?[a-zA-Z]+["']?/gi, '')
-    .replace(/height\s*=\s*["']?[a-zA-Z]+["']?/gi, '');
+    .replace(/data:text\/html/gi, '');
 }
 
 function adjustInjectedSvg(container) {
-  // Check if container exists before querying
-  if (!container) return;
-  
   const svg = container.querySelector('svg');
   if (svg) {
-    // Remove invalid width/height attributes before processing
-    const widthAttr = svg.getAttribute('width');
-    const heightAttr = svg.getAttribute('height');
-    
-    // Check if width/height are valid numeric values
-    if (widthAttr && (widthAttr === 'small' || widthAttr === 'medium' || widthAttr === 'large' || widthAttr === 'auto' || widthAttr.includes('small') || widthAttr.includes('large'))) {
-      svg.removeAttribute('width');
-    } else if (widthAttr) {
-      // Try to parse and validate the width value
-      const parsedWidth = parseFloat(widthAttr);
-      if (isNaN(parsedWidth)) {
-        svg.removeAttribute('width');
-      }
-    }
-    
-    if (heightAttr && (heightAttr === 'small' || heightAttr === 'medium' || heightAttr === 'large' || heightAttr === 'auto' || heightAttr.includes('small') || heightAttr.includes('large'))) {
-      svg.removeAttribute('height');
-    } else if (heightAttr) {
-      // Try to parse and validate the height value
-      const parsedHeight = parseFloat(heightAttr);
-      if (isNaN(parsedHeight)) {
-        svg.removeAttribute('height');
-      }
-    }
-    
     if (!svg.hasAttribute('viewBox')) {
       const w = svg.getAttribute('width');
       const h = svg.getAttribute('height');
@@ -657,7 +622,7 @@ function showPredictionResultPopup(verifyResult, airdropResult) {
       margin-top: 8px;
       box-shadow: 0 4px 12px ${hasBonuses ? 'rgba(251, 191, 36, 0.4)' : (isCorrect ? 'rgba(16, 185, 129, 0.4)' : 'rgba(139, 92, 246, 0.4)')};
       transition: transform 0.2s, box-shadow 0.2s;
-    " onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 16px ${hasBonuses ? 'rgba(251, 191, 36, 0.5)' : (isCorrect ? 'rgba(16, 185, 129, 0.5)' : 'rgba(139, 92, 246, 0.5)')}';" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 12px ${hasBonuses ? 'rgba(251, 191, 36, 0.4)' : (isCorrect ? 'rgba(16, 185, 129, 0.4)' : 'rgba(139, 92, 246, 0.4)')}';">
+    " onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 16px ${hasBonuses ? 'rgba(251, 191, 36, 0.5)' : (isCorrect ? 'rgba(16, 185, 129, 0.5)' : 'rgba(139, 92, 246, 0.5)')}'" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 12px ${hasBonuses ? 'rgba(251, 191, 36, 0.4)' : (isCorrect ? 'rgba(16, 185, 129, 0.4)' : 'rgba(139, 92, 246, 0.4)')}'">
       ${hasBonuses ? '🎉 Amazing! Cast It!' : (isCorrect ? '🎉 Awesome! Cast It!' : '👍 Got It! Cast It!')}
     </button>
   `;
@@ -718,7 +683,9 @@ async function showPredictionModal() {
     const content = document.createElement('div');
     content.className = 'prediction-content';
     content.innerHTML = `
-      <div class="timer-display" id="predictionTimer">⏱️ <span id="timerSeconds">60</span>s</div>
+      <div class="timer-display" id="predictionTimer">
+        ⏱️ <span id="timerSeconds">60</span>s
+      </div>
       
       <div class="prediction-header">
         <div class="prediction-icon">📈</div>
@@ -775,8 +742,7 @@ async function showPredictionModal() {
           <div class="stat-label">Total</div>
         </div>
       </div>
-    `})};
-
+    `;
     
     modal.appendChild(content);
     document.body.appendChild(modal);
@@ -845,8 +811,8 @@ async function showPredictionModal() {
             action: 'predict',
             userAddress,
             currentPrice,
-            prediction
-            // Removed timestamp - now using server-generated predictionId
+            prediction,
+            timestamp
           })
         });
         
@@ -855,26 +821,18 @@ async function showPredictionModal() {
           throw new Error(error.message || 'Failed to store prediction');
         }
         
-        const data = await response.json();
-        
-        // THIS IS THE CRITICAL FIX
-        if (data.success) {
-          localStorage.setItem('activePredictionId', data.predictionId);
-          localStorage.setItem('predictionExpiresAt', data.expiresAt);
-          
-          setStatus('Prediction locked! 60 seconds starting...', 'success');
-          // startCountdown(); // your existing timer function
-        } else {
-          setStatus(data.error || 'Failed to record prediction', 'error');
-        }
+        // Calculate remaining time
+        const elapsedTime = Date.now() - timestamp;
+        const remainingTime = Math.max(0, 60000 - elapsedTime);
         
         // Close modal and proceed to mint immediately
         cleanup();
         resolve({
           skip: false,
           prediction,
-          startPrice: currentPrice
-          // Removed timestamp and timeLeft - not needed with predictionId system
+          timestamp,
+          startPrice: currentPrice,
+          timeLeft: remainingTime
         });
         
       } catch (error) {
@@ -883,6 +841,7 @@ async function showPredictionModal() {
         cleanup();
         resolve({ skip: true });
       }
+    };
     
     // Event listeners
     document.getElementById('predictUp').onclick = () => handlePrediction('up');
@@ -899,78 +858,101 @@ async function showPredictionModal() {
         resolve({ skip: true });
       }
     };
-  }
-
-// Verify prediction after 60 seconds
-async function verifyPredictionAndContinue(prediction, startPrice) {
-  return new Promise(async (resolve) => {
-    try {
-      // Fetch fresh price
-      const newPriceData = await fetchCeloPrice();
-      const newPrice = newPriceData.price;
-
-      // Get the server-generated predictionId
-      const predictionId = localStorage.getItem('activePredictionId');
-      if (!predictionId) {
-        throw new Error('No active prediction found – treating as skip');
-      }
-
-      // Send verification
-      const response = await fetch('/api/prediction', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'verify',
-          userAddress,
-          predictionId,
-          newPrice
-        })
-      });
-
-      // Always clean up localStorage first
-      localStorage.removeItem('activePredictionId');
-      localStorage.removeItem('predictionExpiresAt');
-
-      // Handle HTTP errors
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Verify failed:', response.status, errorText);
-        throw new Error('Server error during verification');
-      }
-
-      const result = await response.json();
-
-      // Backend now returns { success: true, correct: true/false, ... }
-      if (!result.success) {
-        throw new Error(result.error || 'Verification failed');
-      }
-
-      // SUCCESS — everything worked perfectly
-      resolve({
-        skip: false,
-        correct: !!result.correct,        // force boolean
-        multiplier: result.multiplier || 1,
-        startPrice,
-        endPrice: newPrice,
-        verifyResult: result               // full stats, streaks, etc.
-      });
-
-    } catch (error) {
-      // ANY error = fallback to standard airdrop (safe & fair)
-      console.error('Prediction verification failed:', error);
-
-      // Make sure storage is clean
-      localStorage.removeItem('activePredictionId');
-      localStorage.removeItem('predictionExpiresAt');
-
-      setStatus('Prediction result unavailable – standard airdrop applied', 'warning');
-
-      resolve({
-        skip: true
-      });
-    }
   });
 }
+
+// Verify prediction after 60 seconds
+async function verifyPrediction(prediction, startPrice, timestamp, modal, cleanup, resolve) {
+  try {
+    // Fetch new price
+    const priceData = await fetchCeloPrice();
+    const newPrice = priceData.price;
+    
+    // Verify prediction with backend
+    const response = await fetch('/api/prediction', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'verify',
+        userAddress,
+        timestamp,
+        newPrice
+      })
+    });
+    
+    const result = await response.json();
+    
+    // Show result
+    const content = modal.querySelector('.prediction-content');
+    const isCorrect = result.correct;
+    const priceChange = parseFloat(result.priceChange);
+    
+    content.innerHTML = `
+      <div class="prediction-result ${isCorrect ? 'result-correct' : 'result-wrong'}">
+        <div class="result-icon">${isCorrect ? '✅' : '❌'}</div>
+        <div class="result-text">${isCorrect ? 'CORRECT!' : 'WRONG!'}</div>
+        <div class="result-details">
+          ${prediction.toUpperCase()}: $${startPrice.toFixed(4)} → $${newPrice.toFixed(4)}
+          <br>
+          <span style="color: ${priceChange > 0 ? '#10b981' : '#ef4444'};">
+            ${priceChange > 0 ? '+' : ''}${priceChange} (${result.priceChangePercent}%)
+          </span>
+        </div>
+      </div>
+      
+      <div class="prediction-info">
+        <div class="info-item">
+          <span class="info-label">Airdrop Multiplier:</span>
+          <span class="info-value" style="color: ${isCorrect ? '#10b981' : '#f59e0b'};">
+            ${result.multiplier}x
+          </span>
+        </div>
+        ${result.stats ? `
+          <div class="info-item">
+            <span class="info-label">Win Rate:</span>
+            <span class="info-value">${result.stats.winRate}%</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">Current Streak:</span>
+            <span class="info-value">${result.stats.currentStreak}</span>
+          </div>
+        ` : ''}
+      </div>
+      
+      <button class="action-button" id="continueBtn" style="width: 100%; margin-top: 20px;">
+        ${isCorrect ? '🎉 Claim 2x Airdrop!' : '🎲 Claim 0.5x Consolation'}
+      </button>
+      <button class="skip-btn" id="cancelPrediction" style="margin-top: 10px;">
+        ❌ Cancel & Start Over
+      </button>
+    `;
+    
+    document.getElementById('continueBtn').onclick = () => {
+      cleanup();
+      resolve({
+        skip: false,
+        prediction,
+        multiplier: result.multiplier,
+        correct: isCorrect,
+        timestamp,
+        startPrice,
+        endPrice: newPrice
+      });
+    };
+    
+    document.getElementById('cancelPrediction').onclick = () => {
+      cleanup();
+      resolve({ skip: true });
+    };
+    
+  } catch (error) {
+    console.error('Verification error:', error);
+    setStatus('Prediction verification failed', 'error');
+    cleanup();
+    resolve({ skip: true });
+  }
+}
+
 // ⭐ AIRDROP CLAIMING FUNCTION ⭐
 async function claimAirdrop(tokenId, txHash, predictionMultiplier = 1) {
   try {
@@ -1029,7 +1011,7 @@ async function claimAirdrop(tokenId, txHash, predictionMultiplier = 1) {
       }
       
       // Add airdrop link to transaction container
-      if (data.txHash && txLinksContainer) {
+      if (data.txHash) {
         const airdropLink = document.createElement('a');
         airdropLink.href = data.explorerUrl || `https://celoscan.io/tx/${data.txHash}`;
         airdropLink.target = '_blank';
@@ -1806,18 +1788,15 @@ async function previewNft(tokenId, isNewMint = false) {
         <a href="${celoscanTokenUrl}" target="_blank" rel="noopener noreferrer">View on Celoscan</a>
       `;
       
-      // Check if txLinksContainer exists before appending
-      if (txLinksContainer) {
-        const castBtnElement = document.createElement('button');
-        castBtnElement.id = 'castBtn';
-        castBtnElement.className = 'tx-link cast-link';
-        castBtnElement.innerHTML = '📣 Cast';
-        castBtnElement.onclick = async () => {
-          // Use stored airdrop amount if available
-          await castToFarcaster(tokenId, rarityText, priceText, lastAirdropAmount, null);
-        };
-        txLinksContainer.appendChild(castBtnElement);
-      }
+      const castBtnElement = document.createElement('button');
+      castBtnElement.id = 'castBtn';
+      castBtnElement.className = 'tx-link cast-link';
+      castBtnElement.innerHTML = '📣 Cast';
+      castBtnElement.onclick = async () => {
+        // Use stored airdrop amount if available
+        await castToFarcaster(tokenId, rarityText, priceText, lastAirdropAmount, null);
+      };
+      txLinksContainer.appendChild(castBtnElement);
       
       txLinksContainer.classList.remove('hidden');
     }
@@ -2257,25 +2236,22 @@ mintBtn.addEventListener('click', async () => {
         <a href="${celoscanTokenUrl}" target="_blank" rel="noopener noreferrer">View on Celoscan</a>
       `;
       
-      // Check if txLinksContainer exists before appending
-      if (txLinksContainer) {
-        const castBtnElement = document.createElement('button');
-        castBtnElement.id = 'castBtn';
-        castBtnElement.className = 'tx-link cast-link';
-        castBtnElement.innerHTML = '📣 Cast';
-        castBtnElement.onclick = async () => {
-          if (lastMintedInfo.tokenId) {
-            await castToFarcaster(
-              lastMintedInfo.tokenId, 
-              lastMintedInfo.rarity || 'Common', 
-              lastMintedInfo.price,
-              lastAirdropAmount, // Include airdrop amount
-              null // No prediction result in this context
-            );
-          }
-        };
-        txLinksContainer.appendChild(castBtnElement);
-      }
+      const castBtnElement = document.createElement('button');
+      castBtnElement.id = 'castBtn';
+      castBtnElement.className = 'tx-link cast-link';
+      castBtnElement.innerHTML = '📣 Cast';
+      castBtnElement.onclick = async () => {
+        if (lastMintedInfo.tokenId) {
+          await castToFarcaster(
+            lastMintedInfo.tokenId, 
+            lastMintedInfo.rarity || 'Common', 
+            lastMintedInfo.price,
+            lastAirdropAmount, // Include airdrop amount
+            null // No prediction result in this context
+          );
+        }
+      };
+      txLinksContainer.appendChild(castBtnElement);
       
       txLinksContainer.classList.remove('hidden');
     }
@@ -2329,12 +2305,13 @@ mintBtn.addEventListener('click', async () => {
       }, 2000);
     } else {
       // User made a prediction - wait for verification
-      setStatus(`⏳ Waiting for price verification... (60s remaining)`, 'info');
+      const remainingSeconds = Math.ceil(predictionResult.timeLeft / 1000);
+      setStatus(`⏳ Waiting for price verification... (${remainingSeconds}s remaining)`, 'info');
       
-      // Fixed 60-second delay for prediction verification
-      const safeDelay = 60000; // 60 seconds
+      // Fix race condition: ensure minimum delay of 1 second
+      const safeDelay = Math.max(predictionResult.timeLeft || 0, 1000);
       
-      // Schedule airdrop after 60 seconds
+      // Schedule airdrop after remaining time
       setTimeout(async () => {
         try {
           setStatus('🔍 Verifying prediction result...', 'info');
@@ -2342,12 +2319,9 @@ mintBtn.addEventListener('click', async () => {
           // Fetch current price for verification
           const priceData = await fetchCeloPrice();
           console.log('Current price for verification:', priceData.price);
-          
-          // CRITICAL: get predictionId from localStorage
-          const activeId = localStorage.getItem('activePredictionId');
           console.log('Verifying prediction with params:', {
             userAddress,
-            predictionId: activeId,
+            timestamp: predictionResult.timestamp,
             newPrice: priceData.price
           });
           
@@ -2362,7 +2336,7 @@ mintBtn.addEventListener('click', async () => {
               body: JSON.stringify({
                 action: 'verify',
                 userAddress,
-                predictionId: activeId,      // ← send this instead of timestamp
+                timestamp: predictionResult.timestamp,
                 newPrice: priceData.price
               })
             });
@@ -2389,9 +2363,17 @@ mintBtn.addEventListener('click', async () => {
             useClientSideVerification = true;
           }
           
-          // Clean up localStorage after verification attempt
-          localStorage.removeItem('activePredictionId');
-          localStorage.removeItem('predictionExpiresAt');
+          let userStats = null;
+          try {
+            const statsResponse = await fetch(`/api/prediction?userAddress=${userAddress}`);
+            if (statsResponse.ok) {
+              userStats = await statsResponse.json();
+              console.log('Fetched user stats:', userStats);
+            }
+          } catch (statsError) {
+            console.error('Error fetching user stats:', statsError);
+          }
+          
           // Fallback to client-side verification
           if (useClientSideVerification) {
             const priceChange = priceData.price - predictionResult.startPrice;
@@ -3452,9 +3434,6 @@ async function loadAchievementsBottom() {
   }));
 }
 
-// Initialize when DOM is loaded
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initializeApp);
-} else {
-  initializeApp();
-}
+
+
+
