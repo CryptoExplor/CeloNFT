@@ -246,12 +246,46 @@ function sanitizeSVG(svgString) {
     .replace(/<iframe.*?>.*?<\/iframe>/gi, '')
     .replace(/on\w+\s*=\s*["'][^"']*["']/gi, '')
     .replace(/javascript:/gi, '')
-    .replace(/data:text\/html/gi, '');
+    .replace(/data:text\/html/gi, '')
+    // Fix invalid width/height attributes
+    .replace(/width\s*=\s*["'](small|medium|large|auto|x?small|x?large)["']/gi, '')
+    .replace(/height\s*=\s*["'](small|medium|large|auto|x?small|x?large)["']/gi, '')
+    // Remove other potentially problematic attributes
+    .replace(/width\s*=\s*["']?[a-zA-Z]+["']?/gi, '')
+    .replace(/height\s*=\s*["']?[a-zA-Z]+["']?/gi, '');
 }
 
 function adjustInjectedSvg(container) {
+  // Check if container exists before querying
+  if (!container) return;
+  
   const svg = container.querySelector('svg');
   if (svg) {
+    // Remove invalid width/height attributes before processing
+    const widthAttr = svg.getAttribute('width');
+    const heightAttr = svg.getAttribute('height');
+    
+    // Check if width/height are valid numeric values
+    if (widthAttr && (widthAttr === 'small' || widthAttr === 'medium' || widthAttr === 'large' || widthAttr === 'auto' || widthAttr.includes('small') || widthAttr.includes('large'))) {
+      svg.removeAttribute('width');
+    } else if (widthAttr) {
+      // Try to parse and validate the width value
+      const parsedWidth = parseFloat(widthAttr);
+      if (isNaN(parsedWidth)) {
+        svg.removeAttribute('width');
+      }
+    }
+    
+    if (heightAttr && (heightAttr === 'small' || heightAttr === 'medium' || heightAttr === 'large' || heightAttr === 'auto' || heightAttr.includes('small') || heightAttr.includes('large'))) {
+      svg.removeAttribute('height');
+    } else if (heightAttr) {
+      // Try to parse and validate the height value
+      const parsedHeight = parseFloat(heightAttr);
+      if (isNaN(parsedHeight)) {
+        svg.removeAttribute('height');
+      }
+    }
+    
     if (!svg.hasAttribute('viewBox')) {
       const w = svg.getAttribute('width');
       const h = svg.getAttribute('height');
@@ -995,7 +1029,7 @@ async function claimAirdrop(tokenId, txHash, predictionMultiplier = 1) {
       }
       
       // Add airdrop link to transaction container
-      if (data.txHash) {
+      if (data.txHash && txLinksContainer) {
         const airdropLink = document.createElement('a');
         airdropLink.href = data.explorerUrl || `https://celoscan.io/tx/${data.txHash}`;
         airdropLink.target = '_blank';
@@ -1772,15 +1806,18 @@ async function previewNft(tokenId, isNewMint = false) {
         <a href="${celoscanTokenUrl}" target="_blank" rel="noopener noreferrer">View on Celoscan</a>
       `;
       
-      const castBtnElement = document.createElement('button');
-      castBtnElement.id = 'castBtn';
-      castBtnElement.className = 'tx-link cast-link';
-      castBtnElement.innerHTML = '📣 Cast';
-      castBtnElement.onclick = async () => {
-        // Use stored airdrop amount if available
-        await castToFarcaster(tokenId, rarityText, priceText, lastAirdropAmount, null);
-      };
-      txLinksContainer.appendChild(castBtnElement);
+      // Check if txLinksContainer exists before appending
+      if (txLinksContainer) {
+        const castBtnElement = document.createElement('button');
+        castBtnElement.id = 'castBtn';
+        castBtnElement.className = 'tx-link cast-link';
+        castBtnElement.innerHTML = '📣 Cast';
+        castBtnElement.onclick = async () => {
+          // Use stored airdrop amount if available
+          await castToFarcaster(tokenId, rarityText, priceText, lastAirdropAmount, null);
+        };
+        txLinksContainer.appendChild(castBtnElement);
+      }
       
       txLinksContainer.classList.remove('hidden');
     }
@@ -2220,22 +2257,25 @@ mintBtn.addEventListener('click', async () => {
         <a href="${celoscanTokenUrl}" target="_blank" rel="noopener noreferrer">View on Celoscan</a>
       `;
       
-      const castBtnElement = document.createElement('button');
-      castBtnElement.id = 'castBtn';
-      castBtnElement.className = 'tx-link cast-link';
-      castBtnElement.innerHTML = '📣 Cast';
-      castBtnElement.onclick = async () => {
-        if (lastMintedInfo.tokenId) {
-          await castToFarcaster(
-            lastMintedInfo.tokenId, 
-            lastMintedInfo.rarity || 'Common', 
-            lastMintedInfo.price,
-            lastAirdropAmount, // Include airdrop amount
-            null // No prediction result in this context
-          );
-        }
-      };
-      txLinksContainer.appendChild(castBtnElement);
+      // Check if txLinksContainer exists before appending
+      if (txLinksContainer) {
+        const castBtnElement = document.createElement('button');
+        castBtnElement.id = 'castBtn';
+        castBtnElement.className = 'tx-link cast-link';
+        castBtnElement.innerHTML = '📣 Cast';
+        castBtnElement.onclick = async () => {
+          if (lastMintedInfo.tokenId) {
+            await castToFarcaster(
+              lastMintedInfo.tokenId, 
+              lastMintedInfo.rarity || 'Common', 
+              lastMintedInfo.price,
+              lastAirdropAmount, // Include airdrop amount
+              null // No prediction result in this context
+            );
+          }
+        };
+        txLinksContainer.appendChild(castBtnElement);
+      }
       
       txLinksContainer.classList.remove('hidden');
     }
