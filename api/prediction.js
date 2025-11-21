@@ -204,23 +204,27 @@ export default async function handler(req, res) {
     
     // ===== VERIFY PREDICTION =====
     if (req.method === 'POST' && req.body.action === 'verify') {
-      const { userAddress, predictionId, newPrice } = req.body;
+      const { userAddress, predictionId, timestamp, newPrice } = req.body;
+      
+      // Support both predictionId (new) and timestamp (legacy fallback)
+      const lookupId = predictionId || timestamp;
       
       // Validation
-      if (!userAddress || !predictionId || !newPrice) {
+      if (!userAddress || !lookupId || !newPrice) {
         return res.status(400).json({
           error: 'Missing required fields',
-          required: ['userAddress', 'predictionId', 'newPrice'],
+          required: ['userAddress', 'predictionId OR timestamp', 'newPrice'],
+          received: { userAddress: !!userAddress, predictionId: !!predictionId, timestamp: !!timestamp, newPrice: !!newPrice },
           correct: false,
           multiplier: 0
         });
       }
       
-      const key = `pred_${userAddress.toLowerCase()}_${predictionId}`;
+      const key = `pred_${userAddress.toLowerCase()}_${lookupId}`;
       
       console.log('\n🔍 VERIFYING PREDICTION');
       console.log(`User: ${userAddress.slice(0, 6)}...${userAddress.slice(-4)}`);
-      console.log(`ID: ${predictionId}`);
+      console.log(`Lookup ID: ${lookupId} (from ${predictionId ? 'predictionId' : 'timestamp'})`);
       console.log(`Key: ${key}`);
       
       // Retrieve prediction
