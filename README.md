@@ -70,7 +70,7 @@
 - **Platform**: Vercel Functions
 - **Airdrop System**: Smart bonus system with lucky token multipliers
 - **Data Source**: Celoscan API for accurate holder tracking
-- **Rate Limiting**: 3 claims per hour per address
+- **Rate Limiting**: 5 claims per hour per address
 - **Security**: NFT ownership verification, recent mint validation
 - **Caching**: 60-second TTL for leaderboard performance
 
