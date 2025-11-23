@@ -16,6 +16,7 @@ import {
   http,
   getBalance
 } from '@wagmi/core';
+import GalleryManager from './gallery.js';
 import { celo } from '@wagmi/core/chains';
 import { farcasterMiniApp } from '@farcaster/miniapp-wagmi-connector';
 import { createAppKit } from '@reown/appkit';
@@ -57,6 +58,7 @@ let isFarcasterEnvironment = false;
 let wagmiConfig = null;
 let userMintCount = 0;
 let currentNFTData = null;
+let galleryManager = null;
 let accountChangeTimeout = null;
 let tradingViewLoaded = false;
 let lastAirdropAmount = null; // Store last airdrop amount for cast
@@ -1981,6 +1983,12 @@ wagmiConfig = wagmiAdapter.wagmiConfig;
     } catch (e) { 
       setStatus("Missing contract details.", 'error'); 
       console.error('Contract load error:', e);
+              
+        // Initialize Gallery Manager
+        if (wagmiConfig && contractDetails) {
+          galleryManager = new GalleryManager(wagmiConfig, contractDetails);
+          console.log('Gallery Manager initialized');
+        }
       
       const retryBtn = document.createElement('button');
       retryBtn.className = 'action-button';
@@ -3433,6 +3441,7 @@ async function loadAchievementsBottom() {
     timestamp: Date.now()
   }));
 }
+
 
 
 
