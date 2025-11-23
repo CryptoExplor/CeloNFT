@@ -3918,3 +3918,5 @@ async function loadAchievementsBottom() {
     total: achievements.length,
     timestamp: Date.now()
   }));
+}
+}
