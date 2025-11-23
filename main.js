@@ -60,7 +60,6 @@ let currentNFTData = null;
 let accountChangeTimeout = null;
 let tradingViewLoaded = false;
 let lastAirdropAmount = null; // Store last airdrop amount for cast
-let galleryManager = null; // Add this line
 
 // Safe LocalStorage wrapper
 const safeLocalStorage = {
@@ -1979,11 +1978,6 @@ wagmiConfig = wagmiAdapter.wagmiConfig;
       contractDetails = await response.json();
       contractAddress = contractDetails.address;
       console.log('Contract loaded:', contractAddress);
-      
-      // Initialize GalleryManager after contract details are loaded
-      if (wagmiConfig && contractDetails) {
-        galleryManager = new GalleryManager(wagmiConfig, contractDetails);
-      }
     } catch (e) { 
       setStatus("Missing contract details.", 'error'); 
       console.error('Contract load error:', e);
@@ -2083,11 +2077,6 @@ watchAccount(wagmiConfig, {
           setStatus('Wallet connected successfully!', 'success');
           mintBtn.disabled = false;
           
-          // Reinitialize galleryManager with new account
-          if (wagmiConfig && contractDetails) {
-            galleryManager = new GalleryManager(wagmiConfig, contractDetails);
-          }
-          
           updateSupply(true);
           updateUserMintCount();
           
@@ -2124,9 +2113,6 @@ watchAccount(wagmiConfig, {
           showConnectButton();
           setStatus('Wallet disconnected. Please connect again.', 'warning');
           mintBtn.disabled = true;
-          
-          // Reset galleryManager
-          galleryManager = null;
           
           // Hide tabs and balance
           const tabNav = document.getElementById('tabNavigation');
@@ -3133,476 +3119,129 @@ toggleButtons.forEach(btn => {
     }
   });
 });
-// ===== GALLERY FIX - Add this to your main.js =====
 
-// 1. Replace the duplicate EnhancedGallery class definition with this single one:
+// ===== GALLERY SYSTEM =====
+let userNFTs = [];
 
-class GalleryManager {
-  constructor(wagmiConfig, contractDetails) {
-    this.wagmiConfig = wagmiConfig;
-    this.contractDetails = contractDetails;
-    this.userNFTs = [];
-    this.isLoading = false;
-    this.currentPage = 1;
-    this.itemsPerPage = 12;
-    this.totalPages = 0;
-    this.currentFilters = {
-      rarity: 'all',
-      sort: 'newest',
-      search: ''
-    };
+async function loadGallery() {
+  const galleryGrid = document.getElementById('galleryGrid');
+  
+  if (!userAddress || !contractDetails) {
+    galleryGrid.innerHTML = '<div class="empty-state">Connect wallet to view your NFTs</div>';
+    return;
   }
-
-  async loadUserGallery(userAddress) {
-    if (this.isLoading) return this.userNFTs;
+  
+  galleryGrid.innerHTML = '<div class="empty-state">Loading your NFTs... ⏳</div>';
+  
+  try {
+    // Get user's NFT count
+    const balance = await readContract(wagmiConfig, {
+      address: contractDetails.address,
+      abi: contractDetails.abi,
+      functionName: 'balanceOf',
+      args: [userAddress]
+    });
     
-    const galleryGrid = document.getElementById('galleryGrid');
-    if (!userAddress || !this.contractDetails) {
-      galleryGrid.innerHTML = '<div class="empty-state-card"><div class="empty-icon">🎨</div><h3>Connect Wallet</h3><p>Connect your wallet to view your NFTs</p></div>';
-      return [];
-    }
-
-    this.isLoading = true;
-    this.showLoadingState();
-
-    try {
-      const balance = await readContract(this.wagmiConfig, {
-        address: this.contractDetails.address,
-        abi: this.contractDetails.abi,
-        functionName: 'balanceOf',
-        args: [userAddress]
-      });
-
-      const nftCount = Number(balance);
-      
-      if (nftCount === 0) {
-        galleryGrid.innerHTML = `
-          <div class="empty-state-card">
-            <div class="empty-icon">🎨</div>
-            <h3>No NFTs Yet</h3>
-            <p>You haven't minted any NFTs. Start your collection now!</p>
-            <button onclick="switchTab('mint')" class="action-button" style="margin-top: 16px;">
-              Mint Your First NFT
-            </button>
-          </div>
-        `;
-        this.isLoading = false;
-        return [];
-      }
-
-      this.updateLoadingProgress(0, nftCount);
-
-      const totalSupply = await readContract(this.wagmiConfig, {
-        address: this.contractDetails.address,
-        abi: this.contractDetails.abi,
-        functionName: 'totalSupply'
-      });
-
-      const total = Number(totalSupply);
-      this.userNFTs = [];
-
-      const batchSize = 20;
-      
-      for (let start = total; start >= 1 && this.userNFTs.length < nftCount; start -= batchSize) {
-        const end = Math.max(1, start - batchSize + 1);
-        const tokenIds = [];
-        
-        for (let i = start; i >= end; i--) {
-          tokenIds.push(i);
-        }
-
-        const promises = tokenIds.map(tokenId =>
-          Promise.all([
-            readContract(this.wagmiConfig, {
-              address: this.contractDetails.address,
-              abi: this.contractDetails.abi,
-              functionName: 'ownerOf',
-              args: [BigInt(tokenId)]
-            }),
-            readContract(this.wagmiConfig, {
-              address: this.contractDetails.address,
-              abi: this.contractDetails.abi,
-              functionName: 'tokenTraits',
-              args: [BigInt(tokenId)]
-            }),
-            readContract(this.wagmiConfig, {
-              address: this.contractDetails.address,
-              abi: this.contractDetails.abi,
-              functionName: 'tokenURI',
-              args: [BigInt(tokenId)]
-            })
-          ])
-          .then(([owner, traits, tokenURI]) => {
-            if (owner.toLowerCase() === userAddress.toLowerCase()) {
-              let priceSnapshot = 'N/A';
-              try {
-                const base64Json = tokenURI.split(',')[1];
-                const jsonString = atob(decodeURIComponent(base64Json));
-                const metadata = JSON.parse(jsonString);
-                const priceAttr = metadata.attributes?.find(attr => attr.trait_type === 'CELO Price Snapshot');
-                if (priceAttr) priceSnapshot = priceAttr.value;
-              } catch (e) {
-                console.log(`Failed to parse metadata for token ${tokenId}`);
-              }
-
-              return {
-                tokenId,
-                owner,
-                rarity: Number(traits[1]),
-                timestamp: Number(traits[2]),
-                priceSnapshot,
-                tokenURI
-              };
-            }
-            return null;
-          })
-          .catch(() => null)
-        );
-
-        const results = await Promise.all(promises);
-        this.userNFTs.push(...results.filter(nft => nft !== null));
-
-        this.updateLoadingProgress(this.userNFTs.length, nftCount);
-
-        if (this.userNFTs.length >= nftCount) break;
-      }
-
-      this.userNFTs.sort((a, b) => b.tokenId - a.tokenId);
-      this.totalPages = Math.ceil(this.userNFTs.length / this.itemsPerPage);
-      this.currentPage = 1;
-
-      this.renderGallery();
-      this.updateGalleryStats();
-
-    } catch (error) {
-      console.error('Failed to load gallery:', error);
-      galleryGrid.innerHTML = `
-        <div class="empty-state-card error">
-          <div class="empty-icon">⚠️</div>
-          <h3>Failed to Load NFTs</h3>
-          <p>${error.message || 'Please try again later'}</p>
-          <button onclick="loadGallery()" class="action-button" style="margin-top: 16px;">
-            Retry
-          </button>
-        </div>
-      `;
-    } finally {
-      this.isLoading = false;
-    }
-
-    return this.userNFTs;
-  }
-
-  showLoadingState() {
-    const galleryGrid = document.getElementById('galleryGrid');
-    galleryGrid.innerHTML = `
-      <div class="gallery-loading">
-        <div class="loading-message">
-          <span class="spinner" style="width: 40px; height: 40px; border-width: 4px;"></span>
-          <p>Loading your NFT collection...</p>
-          <div class="loading-progress">
-            <div class="progress-bar">
-              <div class="progress-fill" id="loadingProgress" style="width: 0%"></div>
-            </div>
-            <span id="loadingText">Scanning blockchain...</span>
-          </div>
-        </div>
-      </div>
-    `;
-  }
-
-  updateLoadingProgress(found, total) {
-    const progressFill = document.getElementById('loadingProgress');
-    const loadingText = document.getElementById('loadingText');
+    const nftCount = Number(balance);
     
-    if (progressFill && loadingText) {
-      const percentage = (found / total) * 100;
-      progressFill.style.width = `${percentage}%`;
-      loadingText.textContent = `Found ${found} of ${total} NFTs...`;
-    }
-  }
-
-  renderGallery() {
-    const galleryGrid = document.getElementById('galleryGrid');
-    
-    let filtered = this.applyFilters(this.userNFTs);
-    this.totalPages = Math.ceil(filtered.length / this.itemsPerPage);
-    
-    if (this.currentPage > this.totalPages) {
-      this.currentPage = Math.max(1, this.totalPages);
-    }
-    
-    const startIndex = (this.currentPage - 1) * this.itemsPerPage;
-    const endIndex = startIndex + this.itemsPerPage;
-    const paginatedNFTs = filtered.slice(startIndex, endIndex);
-
-    if (filtered.length === 0) {
-      galleryGrid.innerHTML = `
-        <div class="empty-state-card">
-          <div class="empty-icon">🔍</div>
-          <h3>No NFTs Found</h3>
-          <p>Try adjusting your filters</p>
-          <button onclick="galleryManager.resetFilters()" class="action-button" style="margin-top: 16px;">
-            Reset Filters
-          </button>
-        </div>
-      `;
-      this.updatePagination(0);
+    if (nftCount === 0) {
+      galleryGrid.innerHTML = '<div class="empty-state">You don\'t own any NFTs yet. Mint your first one! 🎨</div>';
       return;
     }
-
-    const rarityLabels = ['Common', 'Rare', 'Legendary', 'Mythic'];
-    const rarityColors = ['#9ca3af', '#3b82f6', '#f59e0b', '#ec4899'];
-    const rarityGradients = [
-      'linear-gradient(135deg, #6b7280, #4b5563)',
-      'linear-gradient(135deg, #3b82f6, #2563eb)',
-      'linear-gradient(135deg, #f59e0b, #d97706)',
-      'linear-gradient(135deg, #ec4899, #be185d)'
-    ];
-
-    galleryGrid.innerHTML = paginatedNFTs.map((nft, index) => `
-      <div class="gallery-item" onclick="viewNFTDetails(${nft.tokenId})" style="animation-delay: ${index * 0.05}s">
-        <div class="gallery-item-badge" style="background: ${rarityGradients[nft.rarity]};">
-          #${nft.tokenId}
-        </div>
-        <div class="gallery-item-image rarity-${rarityLabels[nft.rarity].toLowerCase()}">
-          <div class="nft-placeholder">
-            <div class="placeholder-icon">${this.getRarityIcon(nft.rarity)}</div>
-            <div class="placeholder-token">#${nft.tokenId}</div>
-          </div>
-        </div>
-        <div class="gallery-item-info">
-          <div class="gallery-item-header">
-            <div class="gallery-token-id">Token #${nft.tokenId}</div>
-            <div class="gallery-rarity" style="color: ${rarityColors[nft.rarity]}; border-color: ${rarityColors[nft.rarity]};">
-              ${rarityLabels[nft.rarity]}
-            </div>
-          </div>
-          <div class="gallery-item-price">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 2L2 7v10c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-10-5z"/>
-            </svg>
-            ${nft.priceSnapshot}
-          </div>
-          <div class="gallery-item-date">
-            ${this.formatTimestamp(nft.timestamp)}
-          </div>
-        </div>
-      </div>
-    `).join('');
-
-    this.updatePagination(filtered.length);
-  }
-
-  applyFilters(nfts) {
-    let filtered = [...nfts];
-
-    if (this.currentFilters.rarity !== 'all') {
-      const rarityMap = { 'common': 0, 'rare': 1, 'legendary': 2, 'mythic': 3 };
-      filtered = filtered.filter(nft => nft.rarity === rarityMap[this.currentFilters.rarity]);
-    }
-
-    if (this.currentFilters.search) {
-      const search = this.currentFilters.search.toLowerCase();
-      filtered = filtered.filter(nft => 
-        nft.tokenId.toString().includes(search) ||
-        nft.priceSnapshot.toLowerCase().includes(search)
+    
+    // Get total supply to scan
+    const totalSupply = await readContract(wagmiConfig, {
+      address: contractDetails.address,
+      abi: contractDetails.abi,
+      functionName: 'totalSupply'
+    });
+    
+    const total = Number(totalSupply);
+    userNFTs = [];
+    
+    // Scan for user's NFTs
+    const promises = [];
+    for (let i = 1; i <= total && userNFTs.length < nftCount; i++) {
+      promises.push(
+        readContract(wagmiConfig, {
+          address: contractDetails.address,
+          abi: contractDetails.abi,
+          functionName: 'ownerOf',
+          args: [BigInt(i)]
+        }).then(owner => {
+          if (owner.toLowerCase() === userAddress.toLowerCase()) {
+            return readContract(wagmiConfig, {
+              address: contractDetails.address,
+              abi: contractDetails.abi,
+              functionName: 'tokenTraits',
+              args: [BigInt(i)]
+            }).then(traits => ({
+              tokenId: i,
+              owner,
+              rarity: Number(traits[1]),
+              timestamp: Number(traits[2])
+            }));
+          }
+          return null;
+        }).catch(() => null)
       );
     }
-
-    filtered.sort((a, b) => {
-      switch (this.currentFilters.sort) {
-        case 'newest':
-          return b.timestamp - a.timestamp;
-        case 'oldest':
-          return a.timestamp - b.timestamp;
-        case 'rarity':
-          return b.rarity - a.rarity || b.tokenId - a.tokenId;
-        case 'tokenId':
-          return b.tokenId - a.tokenId;
-        case 'price':
-          const priceA = parseFloat(a.priceSnapshot.replace('$', '')) || 0;
-          const priceB = parseFloat(b.priceSnapshot.replace('$', '')) || 0;
-          return priceB - priceA;
-        default:
-          return 0;
-      }
-    });
-
-    return filtered;
-  }
-
-  updatePagination(totalItems) {
-    const paginationContainer = document.getElementById('galleryPagination');
-    if (!paginationContainer) return;
-
-    if (totalItems <= this.itemsPerPage) {
-      paginationContainer.innerHTML = '';
-      return;
-    }
-
-    const maxVisiblePages = 5;
-    const startPage = Math.max(1, this.currentPage - Math.floor(maxVisiblePages / 2));
-    const endPage = Math.min(this.totalPages, startPage + maxVisiblePages - 1);
-
-    let paginationHTML = `
-      <div class="pagination-info">
-        Showing ${(this.currentPage - 1) * this.itemsPerPage + 1}-${Math.min(this.currentPage * this.itemsPerPage, totalItems)} of ${totalItems}
-      </div>
-      <div class="pagination-controls">
-    `;
-
-    paginationHTML += `
-      <button class="pagination-btn ${this.currentPage === 1 ? 'disabled' : ''}" 
-        onclick="galleryManager.goToPage(${this.currentPage - 1})"
-        ${this.currentPage === 1 ? 'disabled' : ''}>
-        ‹
-      </button>
-    `;
-
-    if (startPage > 1) {
-      paginationHTML += `
-        <button class="pagination-btn" onclick="galleryManager.goToPage(1)">1</button>
-        ${startPage > 2 ? '<span class="pagination-ellipsis">...</span>' : ''}
-      `;
-    }
-
-    for (let i = startPage; i <= endPage; i++) {
-      paginationHTML += `
-        <button class="pagination-btn ${i === this.currentPage ? 'active' : ''}" 
-          onclick="galleryManager.goToPage(${i})">
-          ${i}
-        </button>
-      `;
-    }
-
-    if (endPage < this.totalPages) {
-      paginationHTML += `
-        ${endPage < this.totalPages - 1 ? '<span class="pagination-ellipsis">...</span>' : ''}
-        <button class="pagination-btn" onclick="galleryManager.goToPage(${this.totalPages})">${this.totalPages}</button>
-      `;
-    }
-
-    paginationHTML += `
-      <button class="pagination-btn ${this.currentPage === this.totalPages ? 'disabled' : ''}" 
-        onclick="galleryManager.goToPage(${this.currentPage + 1})"
-        ${this.currentPage === this.totalPages ? 'disabled' : ''}>
-        ›
-      </button>
-    `;
-
-    paginationHTML += '</div>';
-    paginationContainer.innerHTML = paginationHTML;
-  }
-
-  goToPage(page) {
-    if (page < 1 || page > this.totalPages || page === this.currentPage) return;
-    this.currentPage = page;
-    this.renderGallery();
     
-    const galleryHeader = document.querySelector('.gallery-header');
-    if (galleryHeader) {
-      galleryHeader.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-  }
-
-  updateFilter(filterType, value) {
-    this.currentFilters[filterType] = value;
-    this.currentPage = 1;
-    this.renderGallery();
-    this.updateGalleryStats();
-  }
-
-  resetFilters() {
-    this.currentFilters = {
-      rarity: 'all',
-      sort: 'newest',
-      search: ''
-    };
-    this.currentPage = 1;
+    const results = await Promise.all(promises);
+    userNFTs = results.filter(nft => nft !== null);
     
-    const rarityFilter = document.getElementById('rarityFilter');
-    const sortFilter = document.getElementById('sortFilter');
-    const searchInput = document.getElementById('searchInput');
-    
-    if (rarityFilter) rarityFilter.value = 'all';
-    if (sortFilter) sortFilter.value = 'newest';
-    if (searchInput) searchInput.value = '';
-    
-    this.renderGallery();
-    this.updateGalleryStats();
-  }
-
-  updateGalleryStats() {
-    const statsContainer = document.getElementById('galleryStats');
-    if (!statsContainer) return;
-
-    const filtered = this.applyFilters(this.userNFTs);
-    const rarityCount = { common: 0, rare: 0, legendary: 0, mythic: 0 };
-    
-    filtered.forEach(nft => {
-      const rarityLabels = ['common', 'rare', 'legendary', 'mythic'];
-      rarityCount[rarityLabels[nft.rarity]]++;
-    });
-
-    statsContainer.innerHTML = `
-      <div class="gallery-stat">
-        <div class="stat-value">${filtered.length}</div>
-        <div class="stat-label">Total NFTs</div>
-      </div>
-      <div class="gallery-stat">
-        <div class="stat-value" style="color: #ec4899;">${rarityCount.mythic}</div>
-        <div class="stat-label">Mythic</div>
-      </div>
-      <div class="gallery-stat">
-        <div class="stat-value" style="color: #f59e0b;">${rarityCount.legendary}</div>
-        <div class="stat-label">Legendary</div>
-      </div>
-      <div class="gallery-stat">
-        <div class="stat-value" style="color: #3b82f6;">${rarityCount.rare}</div>
-        <div class="stat-label">Rare</div>
-      </div>
-    `;
-  }
-
-  getRarityIcon(rarity) {
-    const icons = ['💎', '💠', '⭐', '👑'];
-    return icons[rarity] || '💎';
-  }
-
-  formatTimestamp(timestamp) {
-    const date = new Date(timestamp * 1000);
-    const now = new Date();
-    const diffTime = Math.abs(now - date);
-    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-    
-    if (diffDays === 0) return 'Today';
-    if (diffDays === 1) return 'Yesterday';
-    if (diffDays < 7) return `${diffDays} days ago`;
-    if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
-    
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  }
-
-  exportGalleryData() {
-    const data = this.userNFTs.map(nft => ({
-      tokenId: nft.tokenId,
-      rarity: ['Common', 'Rare', 'Legendary', 'Mythic'][nft.rarity],
-      priceSnapshot: nft.priceSnapshot,
-      mintDate: new Date(nft.timestamp * 1000).toISOString()
-    }));
-
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `celo-nft-collection-${Date.now()}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+    renderGallery(userNFTs);
+  } catch (e) {
+    console.error('Failed to load gallery:', e);
+    galleryGrid.innerHTML = '<div class="empty-state">Failed to load NFTs. Please try again.</div>';
   }
 }
 
-// 2. Add the missing viewNFTDetails function (place after GalleryManager class):
+function renderGallery(nfts) {
+  const galleryGrid = document.getElementById('galleryGrid');
+  const rarityFilter = document.getElementById('rarityFilter').value;
+  const sortFilter = document.getElementById('sortFilter').value;
+  
+  // Filter by rarity
+  let filtered = nfts;
+  if (rarityFilter !== 'all') {
+    const rarityMap = { 'common': 0, 'rare': 1, 'legendary': 2, 'mythic': 3 };
+    filtered = nfts.filter(nft => nft.rarity === rarityMap[rarityFilter]);
+  }
+  
+  // Sort
+  filtered.sort((a, b) => {
+    if (sortFilter === 'newest') return b.timestamp - a.timestamp;
+    if (sortFilter === 'oldest') return a.timestamp - b.timestamp;
+    if (sortFilter === 'rarity') return b.rarity - a.rarity;
+    if (sortFilter === 'tokenId') return a.tokenId - b.tokenId;
+    return 0;
+  });
+  
+  if (filtered.length === 0) {
+    galleryGrid.innerHTML = '<div class="empty-state">No NFTs match your filters</div>';
+    return;
+  }
+  
+  const rarityLabels = ['Common', 'Rare', 'Legendary', 'Mythic'];
+  const rarityColors = ['#9ca3af', '#3b82f6', '#f59e0b', '#ec4899'];
+  
+  galleryGrid.innerHTML = filtered.map(nft => `
+    <div class="gallery-item" onclick="viewNFTDetails(${nft.tokenId})">
+      <div class="gallery-item-image">
+        <div style="display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; background: #000; color: #49dfb5; font-size: 2rem;">
+          #${nft.tokenId}
+        </div>
+      </div>
+      <div class="gallery-item-info">
+        <div class="gallery-token-id">#${nft.tokenId}</div>
+        <div class="gallery-rarity" style="color: ${rarityColors[nft.rarity]}; border: 1px solid ${rarityColors[nft.rarity]};">
+          ${rarityLabels[nft.rarity]}
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
 
 function viewNFTDetails(tokenId) {
   // Switch to mint tab and preview this NFT
@@ -3611,140 +3250,15 @@ function viewNFTDetails(tokenId) {
   previewNft(tokenId);
 }
 
-// 3. Update the loadGallery function (replace existing):
+// Add filter listeners
+document.getElementById('rarityFilter')?.addEventListener('change', () => {
+  renderGallery(userNFTs);
+});
 
-async function loadGallery() {
-  if (!galleryManager && wagmiConfig && contractDetails) {
-    galleryManager = new GalleryManager(wagmiConfig, contractDetails);
-  }
-  
-  if (galleryManager && userAddress) {
-    await galleryManager.loadUserGallery(userAddress);
-  }
-}
+document.getElementById('sortFilter')?.addEventListener('change', () => {
+  renderGallery(userNFTs);
+});
 
-// 4. Fix the achievements function - replace loadAchievementsBottom with this:
-
-async function loadAchievementsBottom() {
-  const achievementsGrid = document.getElementById('achievementsGrid2');
-  const achievementCount = document.getElementById('achievementCount2');
-  const totalAchievements = document.getElementById('totalAchievements2');
-  
-  if (!achievementsGrid) return;
-  
-  // Get NFTs from galleryManager if available
-  let nftsForAchievements = [];
-  if (galleryManager && galleryManager.userNFTs) {
-    nftsForAchievements = galleryManager.userNFTs;
-  }
-  
-  // If no NFTs in gallery, fetch them
-  if (nftsForAchievements.length === 0 && userAddress && contractDetails) {
-    try {
-      const balance = await readContract(wagmiConfig, {
-        address: contractDetails.address,
-        abi: contractDetails.abi,
-        functionName: 'balanceOf',
-        args: [userAddress]
-      });
-      
-      const nftCount = Number(balance);
-      
-      if (nftCount > 0) {
-        const totalSupply = await readContract(wagmiConfig, {
-          address: contractDetails.address,
-          abi: contractDetails.abi,
-          functionName: 'totalSupply'
-        });
-        
-        const total = Number(totalSupply);
-        const promises = [];
-        
-        for (let i = 1; i <= total && nftsForAchievements.length < nftCount; i++) {
-          promises.push(
-            readContract(wagmiConfig, {
-              address: contractDetails.address,
-              abi: contractDetails.abi,
-              functionName: 'ownerOf',
-              args: [BigInt(i)]
-            }).then(owner => {
-              if (owner.toLowerCase() === userAddress.toLowerCase()) {
-                return readContract(wagmiConfig, {
-                  address: contractDetails.address,
-                  abi: contractDetails.abi,
-                  functionName: 'tokenTraits',
-                  args: [BigInt(i)]
-                }).then(traits => ({
-                  tokenId: i,
-                  owner,
-                  rarity: Number(traits[1]),
-                  timestamp: Number(traits[2])
-                }));
-              }
-              return null;
-            }).catch(() => null)
-          );
-        }
-        
-        const results = await Promise.all(promises);
-        nftsForAchievements = results.filter(nft => nft !== null);
-      }
-    } catch (e) {
-      console.error('Failed to load NFTs for achievements:', e);
-    }
-  }
-  
-  let unlockedCount = 0;
-  
-  const html = achievements.map(achievement => {
-    // Update check functions to use nftsForAchievements
-    let unlocked = false;
-    
-    if (achievement.id === 'first_mint') {
-      unlocked = userMintCount >= 1;
-    } else if (achievement.id === 'five_mints') {
-      unlocked = userMintCount >= 5;
-    } else if (achievement.id === 'ten_mints') {
-      unlocked = userMintCount >= 10;
-    } else if (achievement.id === 'rare_pull') {
-      unlocked = nftsForAchievements.some(nft => nft.rarity >= 1);
-    } else if (achievement.id === 'legendary_pull') {
-      unlocked = nftsForAchievements.some(nft => nft.rarity >= 2);
-    } else if (achievement.id === 'mythic_pull') {
-      unlocked = nftsForAchievements.some(nft => nft.rarity === 3);
-    } else if (achievement.id === 'early_adopter') {
-      unlocked = nftsForAchievements.some(nft => nft.tokenId <= 100);
-    } else if (achievement.id === 'lucky_token') {
-      const luckyNumbers = [77, 111, 222, 333, 444, 555, 666, 777, 888, 999];
-      unlocked = nftsForAchievements.some(nft => luckyNumbers.includes(nft.tokenId));
-    } else if (achievement.id === 'milestone_token') {
-      const milestones = [100, 250, 500, 1000, 2500, 5000];
-      unlocked = nftsForAchievements.some(nft => milestones.includes(nft.tokenId));
-    } else if (achievement.id === 'top_collector') {
-      unlocked = userMintCount >= 20;
-    }
-    
-    if (unlocked) unlockedCount++;
-    
-    return `
-      <div class="achievement-card ${unlocked ? 'unlocked' : 'locked'}">
-        <div class="achievement-icon">${achievement.icon}</div>
-        <div class="achievement-title">${achievement.title}</div>
-        <div class="achievement-description">${achievement.description}</div>
-        ${unlocked ? '<div class="achievement-reward">✅ Unlocked!</div>' : '<div class="achievement-reward" style="color: #6b7280;">🔒 Locked</div>'}
-      </div>
-    `;
-  }).join('');
-  
-  achievementsGrid.innerHTML = html;
-  if (achievementCount) achievementCount.textContent = unlockedCount;
-  if (totalAchievements) totalAchievements.textContent = achievements.length;
-  
-  safeLocalStorage.setItem('achievements', JSON.stringify({
-    unlocked: unlockedCount,
-    total: achievements.length,
-    timestamp: Date.now()
-  }));
 // ===== ACHIEVEMENTS SYSTEM =====
 const achievements = [
   {
@@ -3919,4 +3433,7 @@ async function loadAchievementsBottom() {
     timestamp: Date.now()
   }));
 }
-}
+
+
+
+
