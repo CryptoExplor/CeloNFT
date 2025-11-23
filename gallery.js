@@ -5,14 +5,8 @@
  */
 
 import { readContract } from '@wagmi/core';
-// API client helper - inline implementation
-const apiClient = {
-  async fetchNFTTransfers(contractAddress) {
-    const apiUrl = `/api/celoscan?module=account&action=tokennfttx&contractaddress=${contractAddress}&page=1&offset=10000&sort=desc`;
-    const response = await fetch(apiUrl);
-    return await response.json();
-  }
-};  
+import { apiClient } from './api-client.js';
+
 export class GalleryManager {
   constructor(wagmiConfig, contractDetails) {
     this.wagmiConfig = wagmiConfig;
@@ -24,64 +18,83 @@ export class GalleryManager {
   }
 
   /**
-   * Load user's NFT gallery
+   * Load user's NFT gallery with improved error handling and performance
    */
   async loadUserGallery(userAddress) {
     try {
+      if (!userAddress || !this.wagmiConfig || !this.contractDetails) {
+        console.warn('Missing required parameters for loading gallery');
+        return [];
+      }
+
       // Get user's NFT count
       const balance = await readContract(this.wagmiConfig, {
         address: this.contractDetails.address,
         abi: this.contractDetails.abi,
         functionName: 'balanceOf',
-        args: [userAddress]
+        args: [userAddress],
       });
 
       const nftCount = Number(balance);
-      if (nftCount === 0) return [];
+      if (nftCount === 0) {
+        return [];
+      }
 
       // Get total supply to scan
       const totalSupply = await readContract(this.wagmiConfig, {
         address: this.contractDetails.address,
         abi: this.contractDetails.abi,
-        functionName: 'totalSupply'
+        functionName: 'totalSupply',
       });
 
       const total = Number(totalSupply);
       this.userNFTs = [];
 
-      // Optimized: Scan from newest to oldest (reverse order)
-      const promises = [];
-      for (let i = total; i >= 1 && this.userNFTs.length < nftCount; i--) {
-        promises.push(
-          readContract(this.wagmiConfig, {
-            address: this.contractDetails.address,
-            abi: this.contractDetails.abi,
-            functionName: 'ownerOf',
-            args: [BigInt(i)]
-          })
-          .then(owner => {
-            if (owner.toLowerCase() === userAddress.toLowerCase()) {
-              return readContract(this.wagmiConfig, {
-                address: this.contractDetails.address,
-                abi: this.contractDetails.abi,
-                functionName: 'tokenTraits',
-                args: [BigInt(i)]
+      // Optimized: Scan from newest to oldest (reverse order) with batch processing
+      const batchSize = 20; // Process in batches to avoid overwhelming the RPC
+      let tokenId = total;
+      
+      while (tokenId >= 1 && this.userNFTs.length < nftCount) {
+        const batchEnd = Math.max(1, tokenId - batchSize + 1);
+        const batchPromises = [];
+        
+        // Create batch of promises
+        for (let i = tokenId; i >= batchEnd && this.userNFTs.length < nftCount; i--) {
+          batchPromises.push(
+            readContract(this.wagmiConfig, {
+              address: this.contractDetails.address,
+              abi: this.contractDetails.abi,
+              functionName: 'ownerOf',
+              args: [BigInt(i)],
+            })
+              .then((owner) => {
+                if (owner.toLowerCase() === userAddress.toLowerCase()) {
+                  return readContract(this.wagmiConfig, {
+                    address: this.contractDetails.address,
+                    abi: this.contractDetails.abi,
+                    functionName: 'tokenTraits',
+                    args: [BigInt(i)],
+                  }).then((traits) => ({
+                    tokenId: i,
+                    owner,
+                    rarity: Number(traits[1]),
+                    timestamp: Number(traits[2]),
+                  }));
+                }
+                return null;
               })
-              .then(traits => ({
-                tokenId: i,
-                owner,
-                rarity: Number(traits[1]),
-                timestamp: Number(traits[2])
-              }));
-            }
-            return null;
-          })
-          .catch(() => null)
-        );
+              .catch(() => null)
+          );
+        }
+        
+        // Wait for batch to complete
+        const batchResults = await Promise.all(batchPromises);
+        const validResults = batchResults.filter((nft) => nft !== null);
+        this.userNFTs.push(...validResults);
+        
+        // Move to next batch
+        tokenId = batchEnd - 1;
       }
-
-      const results = await Promise.all(promises);
-      this.userNFTs = results.filter(nft => nft !== null);
 
       // Sort by token ID descending (newest first)
       this.userNFTs.sort((a, b) => b.tokenId - a.tokenId);
@@ -94,13 +107,99 @@ export class GalleryManager {
   }
 
   /**
-   * Fetch leaderboard (with Celoscan API + fallback)
+   * Fetch recent mints with improved error handling
+   */
+  async fetchRecentMints(limit = 5) {
+    try {
+      if (!this.wagmiConfig || !this.contractDetails) {
+        console.warn('Missing required parameters for fetching recent mints');
+        return [];
+      }
+
+      const totalSupply = await readContract(this.wagmiConfig, {
+        address: this.contractDetails.address,
+        abi: this.contractDetails.abi,
+        functionName: 'totalSupply',
+      });
+
+      const total = Number(totalSupply);
+      if (total === 0) return [];
+
+      const start = Math.max(1, total - limit + 1);
+      const mints = [];
+
+      const tokenIds = [];
+      for (let i = total; i >= start; i--) {
+        tokenIds.push(i);
+      }
+
+      // Batch process to improve performance
+      const batchSize = 10;
+      for (let i = 0; i < tokenIds.length; i += batchSize) {
+        const batch = tokenIds.slice(i, i + batchSize);
+        const promises = batch.map((tokenId) =>
+          Promise.all([
+            readContract(this.wagmiConfig, {
+              address: this.contractDetails.address,
+              abi: this.contractDetails.abi,
+              functionName: 'ownerOf',
+              args: [BigInt(tokenId)],
+            }),
+            readContract(this.wagmiConfig, {
+              address: this.contractDetails.address,
+              abi: this.contractDetails.abi,
+              functionName: 'tokenTraits',
+              args: [BigInt(tokenId)],
+            }),
+          ])
+            .then(([owner, traits]) => ({
+              tokenId,
+              owner,
+              traits,
+            }))
+            .catch((error) => {
+              console.log(`Failed to fetch token #${tokenId}:`, error.message);
+              return null;
+            })
+        );
+
+        const results = await Promise.all(promises);
+        results.forEach((result) => {
+          if (result) {
+            const rarity = Number(result.traits[1]);
+            const rarityLabels = ['Common', 'Rare', 'Legendary', 'Mythic'];
+            const rarityColors = ['#9ca3af', '#3b82f6', '#f59e0b', '#ec4899'];
+            
+            mints.push({
+              tokenId: result.tokenId,
+              owner: result.owner,
+              ownerShort: `${result.owner.slice(0, 6)}...${result.owner.slice(-4)}`,
+              rarity: rarityLabels[rarity] || 'Common',
+              rarityColor: rarityColors[rarity] || '#9ca3af',
+              timestamp: Number(result.traits[2]) * 1000,
+            });
+          }
+        });
+      }
+
+      return mints;
+    } catch (error) {
+      console.error('Failed to fetch recent mints:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Fetch leaderboard with improved caching and error handling
    */
   async fetchLeaderboard() {
     try {
       // Return cached data if fresh
       const now = Date.now();
-      if (this.leaderboardCache && (now - this.leaderboardLastFetch) < this.leaderboardCacheTTL) {
+      if (
+        this.leaderboardCache &&
+        now - this.leaderboardLastFetch < this.leaderboardCacheTTL
+      ) {
         return this.leaderboardCache;
       }
 
@@ -111,7 +210,7 @@ export class GalleryManager {
 
         // If Celoscan returns an error status or missing result, fall back to on-chain scan
         if (!data || data.status !== '1' || !Array.isArray(data.result)) {
-          console.warn('Celoscan returned invalid or empty data, falling back to blockchain scan', data);
+          console.warn('Celoscan returned invalid or empty data, falling back to blockchain scan:', data);
           return await this.fetchLeaderboardFromBlockchain();
         }
 
@@ -124,7 +223,7 @@ export class GalleryManager {
         // Process transfers in chronological order (oldest first)
         const transfers = [...data.result].reverse();
 
-        transfers.forEach(tx => {
+        transfers.forEach((tx) => {
           const tokenId = tx.tokenID;
           const from = tx.from.toLowerCase();
           const to = tx.to.toLowerCase();
@@ -149,9 +248,13 @@ export class GalleryManager {
           .sort((a, b) => b[1] - a[1])
           .slice(0, 15);
 
-        // Fetch rarity data for each holder
-        const holderData = await Promise.all(
-          topHolders.map(async ([address, count]) => {
+        // Fetch rarity data for each holder with improved batching
+        const holderData = [];
+        const batchSize = 5; // Process holders in smaller batches
+        
+        for (let i = 0; i < topHolders.length; i += batchSize) {
+          const batch = topHolders.slice(i, i + batchSize);
+          const batchPromises = batch.map(async ([address, count]) => {
             const rarities = { mythic: 0, legendary: 0, rare: 0, common: 0 };
 
             // Get all tokens owned by this address
@@ -163,20 +266,20 @@ export class GalleryManager {
             }
 
             // Fetch rarity for each token (limited to 50)
-            const rarityPromises = ownedTokens.slice(0, 50).map(tokenId =>
+            const rarityPromises = ownedTokens.slice(0, 50).map((tokenId) =>
               readContract(this.wagmiConfig, {
                 address: this.contractDetails.address,
                 abi: this.contractDetails.abi,
                 functionName: 'tokenTraits',
-                args: [BigInt(tokenId)]
+                args: [BigInt(tokenId)],
               })
-              .then(traits => Number(traits[1]))
-              .catch(() => 0)
+                .then((traits) => Number(traits[1]))
+                .catch(() => 0)
             );
 
             const rarityValues = await Promise.all(rarityPromises);
 
-            rarityValues.forEach(rarity => {
+            rarityValues.forEach((rarity) => {
               if (rarity === 3) rarities.mythic++;
               else if (rarity === 2) rarities.legendary++;
               else if (rarity === 1) rarities.rare++;
@@ -187,16 +290,20 @@ export class GalleryManager {
               address,
               shortAddress: `${address.slice(0, 6)}...${address.slice(-4)}`,
               count,
-              rarities
+              rarities,
             };
-          })
-        );
+          });
+
+          const batchResults = await Promise.all(batchPromises);
+          holderData.push(...batchResults);
+        }
 
         // Final sort with rarity tiebreakers
         const leaderboard = holderData
           .sort((a, b) => {
             if (b.count !== a.count) return b.count - a.count;
-            if (b.rarities.mythic !== a.rarities.mythic) return b.rarities.mythic - a.rarities.mythic;
+            if (b.rarities.mythic !== a.rarities.mythic)
+              return b.rarities.mythic - a.rarities.mythic;
             return b.rarities.legendary - a.rarities.legendary;
           })
           .slice(0, 10);
@@ -206,12 +313,10 @@ export class GalleryManager {
 
         console.log(`Leaderboard updated: ${leaderboard.length} collectors`);
         return leaderboard;
-
       } catch (apiError) {
-        console.warn('Celoscan API failed, falling back to blockchain scan', apiError);
+        console.warn('Celoscan API failed, falling back to blockchain scan:', apiError);
         return await this.fetchLeaderboardFromBlockchain();
       }
-
     } catch (error) {
       console.error('Leaderboard fetch error:', error);
       return [];
@@ -219,14 +324,19 @@ export class GalleryManager {
   }
 
   /**
-   * Fallback: Scan blockchain directly
+   * Fallback: Scan blockchain directly with improved performance
    */
   async fetchLeaderboardFromBlockchain() {
     try {
+      if (!this.wagmiConfig || !this.contractDetails) {
+        console.warn('Missing required parameters for blockchain scan');
+        return [];
+      }
+
       const totalSupply = await readContract(this.wagmiConfig, {
         address: this.contractDetails.address,
         abi: this.contractDetails.abi,
-        functionName: 'totalSupply'
+        functionName: 'totalSupply',
       });
 
       const total = Number(totalSupply);
@@ -237,54 +347,61 @@ export class GalleryManager {
       const holderMap = new Map();
       const rarityMap = new Map();
 
-      // Scan all tokens
-      const promises = [];
-      for (let i = 1; i <= total; i++) {
-        promises.push(
-          Promise.all([
-            readContract(this.wagmiConfig, {
-              address: this.contractDetails.address,
-              abi: this.contractDetails.abi,
-              functionName: 'ownerOf',
-              args: [BigInt(i)]
-            }),
-            readContract(this.wagmiConfig, {
-              address: this.contractDetails.address,
-              abi: this.contractDetails.abi,
-              functionName: 'tokenTraits',
-              args: [BigInt(i)]
-            })
-          ])
-          .then(([owner, traits]) => {
-            const addr = owner.toLowerCase();
-            holderMap.set(addr, (holderMap.get(addr) || 0) + 1);
+      // Scan all tokens with improved batching
+      const batchSize = 50;
+      for (let start = 1; start <= total; start += batchSize) {
+        const end = Math.min(start + batchSize - 1, total);
+        const promises = [];
+        
+        for (let i = start; i <= end; i++) {
+          promises.push(
+            Promise.all([
+              readContract(this.wagmiConfig, {
+                address: this.contractDetails.address,
+                abi: this.contractDetails.abi,
+                functionName: 'ownerOf',
+                args: [BigInt(i)],
+              }),
+              readContract(this.wagmiConfig, {
+                address: this.contractDetails.address,
+                abi: this.contractDetails.abi,
+                functionName: 'tokenTraits',
+                args: [BigInt(i)],
+              }),
+            ])
+              .then(([owner, traits]) => {
+                const addr = owner.toLowerCase();
+                holderMap.set(addr, (holderMap.get(addr) || 0) + 1);
 
-            if (!rarityMap.has(addr)) {
-              rarityMap.set(addr, { mythic: 0, legendary: 0, rare: 0, common: 0 });
-            }
-            const rarities = rarityMap.get(addr);
-            const rarity = Number(traits[1]);
-            if (rarity === 3) rarities.mythic++;
-            else if (rarity === 2) rarities.legendary++;
-            else if (rarity === 1) rarities.rare++;
-            else rarities.common++;
-          })
-          .catch(() => null)
-        );
+                if (!rarityMap.has(addr)) {
+                  rarityMap.set(addr, { mythic: 0, legendary: 0, rare: 0, common: 0 });
+                }
+
+                const rarity = Number(traits[1]);
+                const rarities = rarityMap.get(addr);
+                if (rarity === 3) rarities.mythic++;
+                else if (rarity === 2) rarities.legendary++;
+                else if (rarity === 1) rarities.rare++;
+                else rarities.common++;
+              })
+              .catch(() => null)
+          );
+        }
+
+        await Promise.all(promises);
       }
-
-      await Promise.all(promises);
 
       const leaderboard = Array.from(holderMap.entries())
         .map(([address, count]) => ({
           address,
           shortAddress: `${address.slice(0, 6)}...${address.slice(-4)}`,
           count,
-          rarities: rarityMap.get(address)
+          rarities: rarityMap.get(address),
         }))
         .sort((a, b) => {
           if (b.count !== a.count) return b.count - a.count;
-          if (b.rarities.mythic !== a.rarities.mythic) return b.rarities.mythic - a.rarities.mythic;
+          if (b.rarities.mythic !== a.rarities.mythic)
+            return b.rarities.mythic - a.rarities.mythic;
           return b.rarities.legendary - a.rarities.legendary;
         })
         .slice(0, 10);
@@ -306,16 +423,16 @@ export class GalleryManager {
     const galleryGrid = document.getElementById(containerId);
     const rarityFilter = document.getElementById('rarityFilter')?.value || 'all';
     const sortFilter = document.getElementById('sortFilter')?.value || 'newest';
-
+    
     if (!galleryGrid) return;
-
+    
     // Filter by rarity
     let filtered = nfts;
     if (rarityFilter !== 'all') {
       const rarityMap = { 'common': 0, 'rare': 1, 'legendary': 2, 'mythic': 3 };
       filtered = nfts.filter(nft => nft.rarity === rarityMap[rarityFilter]);
     }
-
+    
     // Sort
     filtered.sort((a, b) => {
       if (sortFilter === 'newest') return b.timestamp - a.timestamp;
@@ -324,15 +441,15 @@ export class GalleryManager {
       if (sortFilter === 'tokenId') return a.tokenId - b.tokenId;
       return 0;
     });
-
+    
     if (filtered.length === 0) {
       galleryGrid.innerHTML = '<div class="empty-state">No NFTs match your filters</div>';
       return;
     }
-
+    
     const rarityLabels = ['Common', 'Rare', 'Legendary', 'Mythic'];
     const rarityColors = ['#9ca3af', '#3b82f6', '#f59e0b', '#ec4899'];
-
+    
     galleryGrid.innerHTML = filtered.map(nft => `
       <div class="gallery-item" onclick="viewNFTDetails(${nft.tokenId})">
         <div class="gallery-item-image">
@@ -359,6 +476,3 @@ export class GalleryManager {
     return tokenId;
   }
 }
-
-// Export for use in main.js
-export default GalleryManager;
