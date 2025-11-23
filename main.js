@@ -3133,16 +3133,15 @@ toggleButtons.forEach(btn => {
     }
   });
 });
+// ===== GALLERY FIX - Add this to your main.js =====
 
-// ===== GALLERY SYSTEM =====
-// ===== ENHANCED GALLERY SYSTEM =====
+// 1. Replace the duplicate EnhancedGallery class definition with this single one:
 
-class EnhancedGallery {
+class GalleryManager {
   constructor(wagmiConfig, contractDetails) {
     this.wagmiConfig = wagmiConfig;
     this.contractDetails = contractDetails;
     this.userNFTs = [];
-    this.allNFTsCache = new Map(); // Cache all NFT metadata
     this.isLoading = false;
     this.currentPage = 1;
     this.itemsPerPage = 12;
@@ -3154,15 +3153,12 @@ class EnhancedGallery {
     };
   }
 
-  /**
-   * Load user's NFT gallery with improved performance
-   */
   async loadUserGallery(userAddress) {
     if (this.isLoading) return this.userNFTs;
     
     const galleryGrid = document.getElementById('galleryGrid');
     if (!userAddress || !this.contractDetails) {
-      galleryGrid.innerHTML = '<div class="empty-state">Connect wallet to view your NFTs</div>';
+      galleryGrid.innerHTML = '<div class="empty-state-card"><div class="empty-icon">🎨</div><h3>Connect Wallet</h3><p>Connect your wallet to view your NFTs</p></div>';
       return [];
     }
 
@@ -3170,7 +3166,6 @@ class EnhancedGallery {
     this.showLoadingState();
 
     try {
-      // Get user's NFT balance
       const balance = await readContract(this.wagmiConfig, {
         address: this.contractDetails.address,
         abi: this.contractDetails.abi,
@@ -3195,10 +3190,8 @@ class EnhancedGallery {
         return [];
       }
 
-      // Show progress indicator
       this.updateLoadingProgress(0, nftCount);
 
-      // Get total supply for efficient scanning
       const totalSupply = await readContract(this.wagmiConfig, {
         address: this.contractDetails.address,
         abi: this.contractDetails.abi,
@@ -3208,9 +3201,7 @@ class EnhancedGallery {
       const total = Number(totalSupply);
       this.userNFTs = [];
 
-      // Optimized scanning: Check from newest to oldest
       const batchSize = 20;
-      let processed = 0;
       
       for (let start = total; start >= 1 && this.userNFTs.length < nftCount; start -= batchSize) {
         const end = Math.max(1, start - batchSize + 1);
@@ -3220,7 +3211,6 @@ class EnhancedGallery {
           tokenIds.push(i);
         }
 
-        // Batch fetch ownership and traits
         const promises = tokenIds.map(tokenId =>
           Promise.all([
             readContract(this.wagmiConfig, {
@@ -3235,7 +3225,6 @@ class EnhancedGallery {
               functionName: 'tokenTraits',
               args: [BigInt(tokenId)]
             }),
-            // Fetch tokenURI for thumbnail preview
             readContract(this.wagmiConfig, {
               address: this.contractDetails.address,
               abi: this.contractDetails.abi,
@@ -3245,7 +3234,6 @@ class EnhancedGallery {
           ])
           .then(([owner, traits, tokenURI]) => {
             if (owner.toLowerCase() === userAddress.toLowerCase()) {
-              // Parse metadata for price info
               let priceSnapshot = 'N/A';
               try {
                 const base64Json = tokenURI.split(',')[1];
@@ -3274,21 +3262,15 @@ class EnhancedGallery {
         const results = await Promise.all(promises);
         this.userNFTs.push(...results.filter(nft => nft !== null));
 
-        processed += tokenIds.length;
         this.updateLoadingProgress(this.userNFTs.length, nftCount);
 
-        // Break early if we found all user's NFTs
         if (this.userNFTs.length >= nftCount) break;
       }
 
-      // Sort by token ID descending (newest first)
       this.userNFTs.sort((a, b) => b.tokenId - a.tokenId);
-
-      // Calculate total pages
       this.totalPages = Math.ceil(this.userNFTs.length / this.itemsPerPage);
       this.currentPage = 1;
 
-      // Render gallery
       this.renderGallery();
       this.updateGalleryStats();
 
@@ -3311,9 +3293,6 @@ class EnhancedGallery {
     return this.userNFTs;
   }
 
-  /**
-   * Show loading state with skeleton cards
-   */
   showLoadingState() {
     const galleryGrid = document.getElementById('galleryGrid');
     galleryGrid.innerHTML = `
@@ -3332,9 +3311,6 @@ class EnhancedGallery {
     `;
   }
 
-  /**
-   * Update loading progress
-   */
   updateLoadingProgress(found, total) {
     const progressFill = document.getElementById('loadingProgress');
     const loadingText = document.getElementById('loadingText');
@@ -3346,24 +3322,16 @@ class EnhancedGallery {
     }
   }
 
-  /**
-   * Render gallery with pagination and filters
-   */
   renderGallery() {
     const galleryGrid = document.getElementById('galleryGrid');
     
-    // Apply filters
     let filtered = this.applyFilters(this.userNFTs);
-    
-    // Update total pages after filtering
     this.totalPages = Math.ceil(filtered.length / this.itemsPerPage);
     
-    // Ensure current page is valid
     if (this.currentPage > this.totalPages) {
       this.currentPage = Math.max(1, this.totalPages);
     }
     
-    // Paginate
     const startIndex = (this.currentPage - 1) * this.itemsPerPage;
     const endIndex = startIndex + this.itemsPerPage;
     const paginatedNFTs = filtered.slice(startIndex, endIndex);
@@ -3423,23 +3391,17 @@ class EnhancedGallery {
       </div>
     `).join('');
 
-    // Update pagination
     this.updatePagination(filtered.length);
   }
 
-  /**
-   * Apply filters to NFT list
-   */
   applyFilters(nfts) {
     let filtered = [...nfts];
 
-    // Rarity filter
     if (this.currentFilters.rarity !== 'all') {
       const rarityMap = { 'common': 0, 'rare': 1, 'legendary': 2, 'mythic': 3 };
       filtered = filtered.filter(nft => nft.rarity === rarityMap[this.currentFilters.rarity]);
     }
 
-    // Search filter
     if (this.currentFilters.search) {
       const search = this.currentFilters.search.toLowerCase();
       filtered = filtered.filter(nft => 
@@ -3448,7 +3410,6 @@ class EnhancedGallery {
       );
     }
 
-    // Sort
     filtered.sort((a, b) => {
       switch (this.currentFilters.sort) {
         case 'newest':
@@ -3471,9 +3432,6 @@ class EnhancedGallery {
     return filtered;
   }
 
-  /**
-   * Update pagination controls
-   */
   updatePagination(totalItems) {
     const paginationContainer = document.getElementById('galleryPagination');
     if (!paginationContainer) return;
@@ -3494,7 +3452,6 @@ class EnhancedGallery {
       <div class="pagination-controls">
     `;
 
-    // Previous button
     paginationHTML += `
       <button class="pagination-btn ${this.currentPage === 1 ? 'disabled' : ''}" 
         onclick="galleryManager.goToPage(${this.currentPage - 1})"
@@ -3503,7 +3460,6 @@ class EnhancedGallery {
       </button>
     `;
 
-    // First page
     if (startPage > 1) {
       paginationHTML += `
         <button class="pagination-btn" onclick="galleryManager.goToPage(1)">1</button>
@@ -3511,7 +3467,6 @@ class EnhancedGallery {
       `;
     }
 
-    // Page numbers
     for (let i = startPage; i <= endPage; i++) {
       paginationHTML += `
         <button class="pagination-btn ${i === this.currentPage ? 'active' : ''}" 
@@ -3521,7 +3476,6 @@ class EnhancedGallery {
       `;
     }
 
-    // Last page
     if (endPage < this.totalPages) {
       paginationHTML += `
         ${endPage < this.totalPages - 1 ? '<span class="pagination-ellipsis">...</span>' : ''}
@@ -3529,7 +3483,6 @@ class EnhancedGallery {
       `;
     }
 
-    // Next button
     paginationHTML += `
       <button class="pagination-btn ${this.currentPage === this.totalPages ? 'disabled' : ''}" 
         onclick="galleryManager.goToPage(${this.currentPage + 1})"
@@ -3542,34 +3495,24 @@ class EnhancedGallery {
     paginationContainer.innerHTML = paginationHTML;
   }
 
-  /**
-   * Go to specific page
-   */
   goToPage(page) {
     if (page < 1 || page > this.totalPages || page === this.currentPage) return;
     this.currentPage = page;
     this.renderGallery();
     
-    // Scroll to top of gallery
     const galleryHeader = document.querySelector('.gallery-header');
     if (galleryHeader) {
       galleryHeader.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   }
 
-  /**
-   * Update filters
-   */
   updateFilter(filterType, value) {
     this.currentFilters[filterType] = value;
-    this.currentPage = 1; // Reset to first page
+    this.currentPage = 1;
     this.renderGallery();
     this.updateGalleryStats();
   }
 
-  /**
-   * Reset all filters
-   */
   resetFilters() {
     this.currentFilters = {
       rarity: 'all',
@@ -3578,7 +3521,6 @@ class EnhancedGallery {
     };
     this.currentPage = 1;
     
-    // Reset UI
     const rarityFilter = document.getElementById('rarityFilter');
     const sortFilter = document.getElementById('sortFilter');
     const searchInput = document.getElementById('searchInput');
@@ -3591,9 +3533,6 @@ class EnhancedGallery {
     this.updateGalleryStats();
   }
 
-  /**
-   * Update gallery statistics
-   */
   updateGalleryStats() {
     const statsContainer = document.getElementById('galleryStats');
     if (!statsContainer) return;
@@ -3626,17 +3565,11 @@ class EnhancedGallery {
     `;
   }
 
-  /**
-   * Get rarity icon
-   */
   getRarityIcon(rarity) {
     const icons = ['💎', '💠', '⭐', '👑'];
     return icons[rarity] || '💎';
   }
 
-  /**
-   * Format timestamp to readable date
-   */
   formatTimestamp(timestamp) {
     const date = new Date(timestamp * 1000);
     const now = new Date();
@@ -3651,9 +3584,6 @@ class EnhancedGallery {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   }
 
-  /**
-   * Export gallery data
-   */
   exportGalleryData() {
     const data = this.userNFTs.map(nft => ({
       tokenId: nft.tokenId,
@@ -3672,63 +3602,149 @@ class EnhancedGallery {
   }
 }
 
-// Initialize gallery manager
-let galleryManager = null;
+// 2. Add the missing viewNFTDetails function (place after GalleryManager class):
 
-// Initialize when gallery tab is opened
+function viewNFTDetails(tokenId) {
+  // Switch to mint tab and preview this NFT
+  switchTab('mint');
+  lastMintedTokenId = tokenId;
+  previewNft(tokenId);
+}
+
+// 3. Update the loadGallery function (replace existing):
+
 async function loadGallery() {
-  if (!galleryManager) {
-    galleryManager = new EnhancedGallery(wagmiConfig, contractDetails);
+  if (!galleryManager && wagmiConfig && contractDetails) {
+    galleryManager = new GalleryManager(wagmiConfig, contractDetails);
   }
   
-  if (userAddress) {
+  if (galleryManager && userAddress) {
     await galleryManager.loadUserGallery(userAddress);
   }
 }
 
-// Add event listeners for filters
-document.addEventListener('DOMContentLoaded', () => {
-  const rarityFilter = document.getElementById('rarityFilter');
-  const sortFilter = document.getElementById('sortFilter');
-  const searchInput = document.getElementById('searchInput');
-  const exportBtn = document.getElementById('exportGalleryBtn');
+// 4. Fix the achievements function - replace loadAchievementsBottom with this:
 
-  if (rarityFilter) {
-    rarityFilter.addEventListener('change', (e) => {
-      if (galleryManager) {
-        galleryManager.updateFilter('rarity', e.target.value);
-      }
-    });
+async function loadAchievementsBottom() {
+  const achievementsGrid = document.getElementById('achievementsGrid2');
+  const achievementCount = document.getElementById('achievementCount2');
+  const totalAchievements = document.getElementById('totalAchievements2');
+  
+  if (!achievementsGrid) return;
+  
+  // Get NFTs from galleryManager if available
+  let nftsForAchievements = [];
+  if (galleryManager && galleryManager.userNFTs) {
+    nftsForAchievements = galleryManager.userNFTs;
   }
-
-  if (sortFilter) {
-    sortFilter.addEventListener('change', (e) => {
-      if (galleryManager) {
-        galleryManager.updateFilter('sort', e.target.value);
-      }
-    });
-  }
-
-  if (searchInput) {
-    let searchTimeout;
-    searchInput.addEventListener('input', (e) => {
-      clearTimeout(searchTimeout);
-      searchTimeout = setTimeout(() => {
-        if (galleryManager) {
-          galleryManager.updateFilter('search', e.target.value);
+  
+  // If no NFTs in gallery, fetch them
+  if (nftsForAchievements.length === 0 && userAddress && contractDetails) {
+    try {
+      const balance = await readContract(wagmiConfig, {
+        address: contractDetails.address,
+        abi: contractDetails.abi,
+        functionName: 'balanceOf',
+        args: [userAddress]
+      });
+      
+      const nftCount = Number(balance);
+      
+      if (nftCount > 0) {
+        const totalSupply = await readContract(wagmiConfig, {
+          address: contractDetails.address,
+          abi: contractDetails.abi,
+          functionName: 'totalSupply'
+        });
+        
+        const total = Number(totalSupply);
+        const promises = [];
+        
+        for (let i = 1; i <= total && nftsForAchievements.length < nftCount; i++) {
+          promises.push(
+            readContract(wagmiConfig, {
+              address: contractDetails.address,
+              abi: contractDetails.abi,
+              functionName: 'ownerOf',
+              args: [BigInt(i)]
+            }).then(owner => {
+              if (owner.toLowerCase() === userAddress.toLowerCase()) {
+                return readContract(wagmiConfig, {
+                  address: contractDetails.address,
+                  abi: contractDetails.abi,
+                  functionName: 'tokenTraits',
+                  args: [BigInt(i)]
+                }).then(traits => ({
+                  tokenId: i,
+                  owner,
+                  rarity: Number(traits[1]),
+                  timestamp: Number(traits[2])
+                }));
+              }
+              return null;
+            }).catch(() => null)
+          );
         }
-      }, 300);
-    });
-  }
-
-  if (exportBtn) {
-    exportBtn.addEventListener('click', () => {
-      if (galleryManager) {
-        galleryManager.exportGalleryData();
+        
+        const results = await Promise.all(promises);
+        nftsForAchievements = results.filter(nft => nft !== null);
       }
-    });
+    } catch (e) {
+      console.error('Failed to load NFTs for achievements:', e);
+    }
   }
-});
+  
+  let unlockedCount = 0;
+  
+  const html = achievements.map(achievement => {
+    // Update check functions to use nftsForAchievements
+    let unlocked = false;
+    
+    if (achievement.id === 'first_mint') {
+      unlocked = userMintCount >= 1;
+    } else if (achievement.id === 'five_mints') {
+      unlocked = userMintCount >= 5;
+    } else if (achievement.id === 'ten_mints') {
+      unlocked = userMintCount >= 10;
+    } else if (achievement.id === 'rare_pull') {
+      unlocked = nftsForAchievements.some(nft => nft.rarity >= 1);
+    } else if (achievement.id === 'legendary_pull') {
+      unlocked = nftsForAchievements.some(nft => nft.rarity >= 2);
+    } else if (achievement.id === 'mythic_pull') {
+      unlocked = nftsForAchievements.some(nft => nft.rarity === 3);
+    } else if (achievement.id === 'early_adopter') {
+      unlocked = nftsForAchievements.some(nft => nft.tokenId <= 100);
+    } else if (achievement.id === 'lucky_token') {
+      const luckyNumbers = [77, 111, 222, 333, 444, 555, 666, 777, 888, 999];
+      unlocked = nftsForAchievements.some(nft => luckyNumbers.includes(nft.tokenId));
+    } else if (achievement.id === 'milestone_token') {
+      const milestones = [100, 250, 500, 1000, 2500, 5000];
+      unlocked = nftsForAchievements.some(nft => milestones.includes(nft.tokenId));
+    } else if (achievement.id === 'top_collector') {
+      unlocked = userMintCount >= 20;
+    }
+    
+    if (unlocked) unlockedCount++;
+    
+    return `
+      <div class="achievement-card ${unlocked ? 'unlocked' : 'locked'}">
+        <div class="achievement-icon">${achievement.icon}</div>
+        <div class="achievement-title">${achievement.title}</div>
+        <div class="achievement-description">${achievement.description}</div>
+        ${unlocked ? '<div class="achievement-reward">✅ Unlocked!</div>' : '<div class="achievement-reward" style="color: #6b7280;">🔒 Locked</div>'}
+      </div>
+    `;
+  }).join('');
+  
+  achievementsGrid.innerHTML = html;
+  if (achievementCount) achievementCount.textContent = unlockedCount;
+  if (totalAchievements) totalAchievements.textContent = achievements.length;
+  
+  safeLocalStorage.setItem('achievements', JSON.stringify({
+    unlocked: unlockedCount,
+    total: achievements.length,
+    timestamp: Date.now()
+  }));
 // ===== ACHIEVEMENTS SYSTEM =====
 const achievements = [
   {
@@ -3903,6 +3919,7 @@ async function loadAchievementsBottom() {
     timestamp: Date.now()
   }));
 }
+
 
 
 
