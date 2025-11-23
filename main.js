@@ -16,12 +16,14 @@ import {
   http,
   getBalance
 } from '@wagmi/core';
-import GalleryManager from './gallery.js';
 import { celo } from '@wagmi/core/chains';
 import { farcasterMiniApp } from '@farcaster/miniapp-wagmi-connector';
 import { createAppKit } from '@reown/appkit';
 import { WagmiAdapter } from '@reown/appkit-adapter-wagmi';
 import confetti from 'canvas-confetti';
+
+// Use explicit relative path for GalleryManager import
+import { GalleryManager } from './gallery.js';
 
 // Configuration
 const MAX_SUPPLY_FUNCTION_NAME = 'maxSupply';
@@ -58,10 +60,10 @@ let isFarcasterEnvironment = false;
 let wagmiConfig = null;
 let userMintCount = 0;
 let currentNFTData = null;
-let galleryManager = null;
 let accountChangeTimeout = null;
 let tradingViewLoaded = false;
 let lastAirdropAmount = null; // Store last airdrop amount for cast
+let galleryManager = null; // Add this line
 
 // Safe LocalStorage wrapper
 const safeLocalStorage = {
@@ -1980,15 +1982,14 @@ wagmiConfig = wagmiAdapter.wagmiConfig;
       contractDetails = await response.json();
       contractAddress = contractDetails.address;
       console.log('Contract loaded:', contractAddress);
+      
+      // Initialize GalleryManager after contract details are loaded
+      if (wagmiConfig && contractDetails) {
+        galleryManager = new GalleryManager(wagmiConfig, contractDetails);
+      }
     } catch (e) { 
       setStatus("Missing contract details.", 'error'); 
       console.error('Contract load error:', e);
-              
-        // Initialize Gallery Manager
-        if (wagmiConfig && contractDetails) {
-          galleryManager = new GalleryManager(wagmiConfig, contractDetails);
-          console.log('Gallery Manager initialized');
-        }
       
       const retryBtn = document.createElement('button');
       retryBtn.className = 'action-button';
@@ -2085,6 +2086,11 @@ watchAccount(wagmiConfig, {
           setStatus('Wallet connected successfully!', 'success');
           mintBtn.disabled = false;
           
+          // Reinitialize galleryManager with new account
+          if (wagmiConfig && contractDetails) {
+            galleryManager = new GalleryManager(wagmiConfig, contractDetails);
+          }
+          
           updateSupply(true);
           updateUserMintCount();
           
@@ -2121,6 +2127,9 @@ watchAccount(wagmiConfig, {
           showConnectButton();
           setStatus('Wallet disconnected. Please connect again.', 'warning');
           mintBtn.disabled = true;
+          
+          // Reset galleryManager
+          galleryManager = null;
           
           // Hide tabs and balance
           const tabNav = document.getElementById('tabNavigation');
@@ -3134,7 +3143,7 @@ let userNFTs = [];
 async function loadGallery() {
   const galleryGrid = document.getElementById('galleryGrid');
   
-  if (!userAddress || !contractDetails) {
+  if (!userAddress || !contractDetails || !galleryManager) {
     galleryGrid.innerHTML = '<div class="empty-state">Connect wallet to view your NFTs</div>';
     return;
   }
@@ -3142,61 +3151,13 @@ async function loadGallery() {
   galleryGrid.innerHTML = '<div class="empty-state">Loading your NFTs... ⏳</div>';
   
   try {
-    // Get user's NFT count
-    const balance = await readContract(wagmiConfig, {
-      address: contractDetails.address,
-      abi: contractDetails.abi,
-      functionName: 'balanceOf',
-      args: [userAddress]
-    });
+    // Use GalleryManager for more robust loading
+    userNFTs = await galleryManager.loadUserGallery(userAddress);
     
-    const nftCount = Number(balance);
-    
-    if (nftCount === 0) {
+    if (userNFTs.length === 0) {
       galleryGrid.innerHTML = '<div class="empty-state">You don\'t own any NFTs yet. Mint your first one! 🎨</div>';
       return;
     }
-    
-    // Get total supply to scan
-    const totalSupply = await readContract(wagmiConfig, {
-      address: contractDetails.address,
-      abi: contractDetails.abi,
-      functionName: 'totalSupply'
-    });
-    
-    const total = Number(totalSupply);
-    userNFTs = [];
-    
-    // Scan for user's NFTs
-    const promises = [];
-    for (let i = 1; i <= total && userNFTs.length < nftCount; i++) {
-      promises.push(
-        readContract(wagmiConfig, {
-          address: contractDetails.address,
-          abi: contractDetails.abi,
-          functionName: 'ownerOf',
-          args: [BigInt(i)]
-        }).then(owner => {
-          if (owner.toLowerCase() === userAddress.toLowerCase()) {
-            return readContract(wagmiConfig, {
-              address: contractDetails.address,
-              abi: contractDetails.abi,
-              functionName: 'tokenTraits',
-              args: [BigInt(i)]
-            }).then(traits => ({
-              tokenId: i,
-              owner,
-              rarity: Number(traits[1]),
-              timestamp: Number(traits[2])
-            }));
-          }
-          return null;
-        }).catch(() => null)
-      );
-    }
-    
-    const results = await Promise.all(promises);
-    userNFTs = results.filter(nft => nft !== null);
     
     renderGallery(userNFTs);
   } catch (e) {
@@ -3207,8 +3168,10 @@ async function loadGallery() {
 
 function renderGallery(nfts) {
   const galleryGrid = document.getElementById('galleryGrid');
-  const rarityFilter = document.getElementById('rarityFilter').value;
-  const sortFilter = document.getElementById('sortFilter').value;
+  const rarityFilter = document.getElementById('rarityFilter')?.value || 'all';
+  const sortFilter = document.getElementById('sortFilter')?.value || 'newest';
+  
+  if (!galleryGrid) return;
   
   // Filter by rarity
   let filtered = nfts;
@@ -3441,7 +3404,6 @@ async function loadAchievementsBottom() {
     timestamp: Date.now()
   }));
 }
-
 
 
 
