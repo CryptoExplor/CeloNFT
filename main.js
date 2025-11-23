@@ -22,9 +22,6 @@ import { createAppKit } from '@reown/appkit';
 import { WagmiAdapter } from '@reown/appkit-adapter-wagmi';
 import confetti from 'canvas-confetti';
 
-// Use explicit relative path for GalleryManager import
-import { GalleryManager } from './gallery.js';
-
 // Configuration
 const MAX_SUPPLY_FUNCTION_NAME = 'maxSupply';
 const PROJECT_ID = 'e0dd881bad824ac3418617434a79f917';
@@ -3404,6 +3401,7 @@ async function loadAchievementsBottom() {
     timestamp: Date.now()
   }));
 }
+
 
 
 
