@@ -1,4 +1,4 @@
-// api/notification.js
+// api/notification.js - FIXED VERSION
 // Auto-subscribe all users who add the miniapp to Farcaster notifications
 
 export const runtime = 'nodejs';
@@ -12,7 +12,7 @@ try {
   useKV = true;
   console.log('✅ KV loaded for notifications');
 } catch (e) {
-  console.warn('⚠️ KV not available for notifications');
+  console.warn('⚠️ KV not available for notifications - using memory fallback');
   useKV = false;
 }
 
@@ -49,7 +49,6 @@ async function getAllKeys(pattern) {
   const keys = [];
   if (useKV) {
     try {
-      // Use KV scan to get all matching keys
       const allKeys = await kv.keys(pattern);
       return allKeys;
     } catch (e) {
@@ -91,13 +90,13 @@ const NOTIFICATION_MESSAGES = [
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-vercel-cron');
 
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   try {
     // ===== AUTO-REGISTER USER (Called from main.js on app load) =====
-    if (req.method === 'POST' && req.body.action === 'register') {
+    if (req.method === 'POST' && req.body?.action === 'register') {
       const { fid, username } = req.body;
 
       if (!fid) {
@@ -107,7 +106,6 @@ export default async function handler(req, res) {
       const userKey = `notif_user_${fid}`;
       const existingUser = await get(userKey);
 
-      // Only register if not already registered
       if (!existingUser) {
         const userData = {
           fid,
@@ -138,12 +136,18 @@ export default async function handler(req, res) {
     }
 
     // ===== SEND DAILY NOTIFICATIONS (Cron Job) =====
-    if (req.method === 'POST' && req.body.action === 'sendDaily') {
-      // Verify cron secret for security
-      const cronSecret = req.headers['x-cron-secret'];
-      if (cronSecret !== process.env.CRON_SECRET) {
-        console.error('❌ Unauthorized cron request');
-        return res.status(401).json({ error: 'Unauthorized' });
+    // FIX: Support both POST with action AND GET with Vercel cron header
+    const isVercelCron = req.headers['x-vercel-cron'] === '1';
+    const isSendDaily = req.method === 'POST' && req.body?.action === 'sendDaily';
+    
+    if (isVercelCron || isSendDaily) {
+      // Verify authorization
+      if (!isVercelCron) {
+        const cronSecret = req.headers['x-cron-secret'];
+        if (cronSecret !== process.env.CRON_SECRET) {
+          console.error('❌ Unauthorized cron request');
+          return res.status(401).json({ error: 'Unauthorized' });
+        }
       }
 
       console.log('🔔 Starting daily notification batch...');
@@ -222,12 +226,8 @@ export default async function handler(req, res) {
     }
 
     // ===== GET USER STATUS =====
-    if (req.method === 'GET') {
+    if (req.method === 'GET' && req.query.fid) {
       const { fid } = req.query;
-
-      if (!fid) {
-        return res.status(400).json({ error: 'Missing fid' });
-      }
 
       const userData = await get(`notif_user_${fid}`);
 
@@ -250,16 +250,16 @@ export default async function handler(req, res) {
 async function sendFarcasterNotification(fid, title, body) {
   try {
     const FARCASTER_API_KEY = process.env.FARCASTER_API_KEY;
+    const FARCASTER_SIGNER_UUID = process.env.FARCASTER_SIGNER_UUID;
     
-    if (!FARCASTER_API_KEY) {
-      throw new Error('FARCASTER_API_KEY not configured');
+    if (!FARCASTER_API_KEY || !FARCASTER_SIGNER_UUID) {
+      throw new Error('FARCASTER_API_KEY or FARCASTER_SIGNER_UUID not configured');
     }
 
     // Combine title and body for the message
     const message = `${title}\n\n${body}\n\n🎨 Mint now: https://celo-nft-phi.vercel.app/`;
 
-    // Farcaster API endpoint for sending notifications
-    // Using Neynar API (most common Farcaster API provider)
+    // Using Neynar API v2
     const response = await fetch('https://api.neynar.com/v2/farcaster/cast', {
       method: 'POST',
       headers: {
@@ -267,10 +267,10 @@ async function sendFarcasterNotification(fid, title, body) {
         'api_key': FARCASTER_API_KEY
       },
       body: JSON.stringify({
-        signer_uuid: process.env.FARCASTER_SIGNER_UUID, // Your app's signer
+        signer_uuid: FARCASTER_SIGNER_UUID,
         text: message,
         parent: {
-          fid: fid // Send as reply to user's feed
+          fid: fid
         }
       })
     });
