@@ -1,25 +1,25 @@
-// api/notification.js – Option A (Neynar Frame Notifications)
+// api/notification.js – Fixed version with better error handling
 // Sends real Farcaster Mini App notifications via Neynar's /frame/notifications API
-// and tracks per-FID state in Vercel KV (with an in-memory fallback).
 
 export const runtime = 'nodejs';
 
 let kv;
 let useKV = false;
 
+// Try to load KV with better error handling
 try {
-  const { kv: vercelKv } = require('@vercel/kv');
+  const { kv: vercelKv } = await import('@vercel/kv');
   kv = vercelKv;
   useKV = true;
   console.log('✅ KV loaded for notifications');
 } catch (e) {
-  console.warn('⚠️ KV not available for notifications - using memory fallback only');
+  console.warn('⚠️ KV not available - using memory fallback:', e.message);
   useKV = false;
 }
 
-// Simple in-memory fallback (non-persistent, but keeps local dev working)
-const memoryUsers = new Map(); // key -> user object
-const memoryUserSet = new Set(); // set of fid strings
+// Simple in-memory fallback
+const memoryUsers = new Map();
+const memoryUserSet = new Set();
 
 // ---- Helper: KV-backed JSON set/get for users ----
 
@@ -32,6 +32,7 @@ function userKey(fid) {
 
 async function saveUser(user) {
   const key = userKey(user.fid);
+  
   // Persist to KV if available
   if (useKV && kv) {
     try {
@@ -41,20 +42,25 @@ async function saveUser(user) {
       console.error('KV saveUser failed:', e.message || e);
     }
   }
+  
   // Always mirror in memory
   memoryUsers.set(key, user);
   memoryUserSet.add(String(user.fid));
+  
+  console.log(`💾 Saved user ${user.fid} to storage`);
 }
 
 async function loadUser(fid) {
   const key = userKey(fid);
 
-  // Try KV
+  // Try KV first
   if (useKV && kv) {
     try {
       const raw = await kv.get(key);
       if (raw) {
-        return typeof raw === 'string' ? JSON.parse(raw) : raw;
+        const user = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        console.log(`📖 Loaded user ${fid} from KV`);
+        return user;
       }
     } catch (e) {
       console.error('KV loadUser failed:', e.message || e);
@@ -63,13 +69,16 @@ async function loadUser(fid) {
 
   // Fallback to memory
   const user = memoryUsers.get(key);
+  if (user) {
+    console.log(`📖 Loaded user ${fid} from memory`);
+  }
   return user || null;
 }
 
 async function getRegisteredFids() {
   if (useKV && kv) {
     try {
-      const fids = await kv.smembers(USER_SET_KEY); // array of strings
+      const fids = await kv.smembers(USER_SET_KEY);
       return (fids || [])
         .map((f) => Number(f))
         .filter((n) => Number.isInteger(n) && n > 0);
@@ -110,7 +119,7 @@ const NOTIFICATION_MESSAGES = [
   {
     id: 'free-daily-mint',
     title: '🎁 Free Daily Mint + Rewards!',
-    body: "Don't miss today’s free NFT mint with instant CELO airdrop. Claim yours now! 🎉"
+    body: "Don't miss today's free NFT mint with instant CELO airdrop. Claim yours now! 🎉"
   }
 ];
 
@@ -119,37 +128,28 @@ function pickRandomMessage() {
   return NOTIFICATION_MESSAGES[idx];
 }
 
-// ---- Neynar Frame Notifications sender (Option A core) ----
+// ---- Neynar Frame Notifications sender ----
 
 async function sendMiniAppNotificationsToFids(targetFids, message, uuid) {
   const apiKey = process.env.NEYNAR_API_KEY;
-  const miniAppUrl =
-    process.env.MINIAPP_URL || 'https://celo-nft-phi.vercel.app/';
+  const miniAppUrl = process.env.MINIAPP_URL || 'https://celo-nft-phi.vercel.app/';
 
   if (!apiKey) {
     throw new Error('NEYNAR_API_KEY is not configured');
   }
 
-  if (!Array.isArray(targetFids)) {
-    throw new Error('targetFids must be an array');
+  if (!Array.isArray(targetFids) || targetFids.length === 0) {
+    throw new Error('targetFids must be a non-empty array');
   }
 
-  // Per Neynar docs, max 100 fids per call
-  // We will enforce that at the caller level, but assert here as well.
   if (targetFids.length > 100) {
     throw new Error('targetFids length must be <= 100');
   }
 
-  const notificationUuid =
-    uuid ||
-    (globalThis.crypto?.randomUUID
-      ? globalThis.crypto.randomUUID()
-      : `celo-nft-${Date.now()}-${Math.random().toString(16).slice(2)}`);
+  const notificationUuid = uuid || `celo-nft-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
   const payload = {
     target_fids: targetFids,
-    // You can add filters here if needed (e.g. minimum_user_score, location, etc.)
-    // filters: { minimum_user_score: 0.0 },
     notification: {
       title: message.title,
       body: message.body,
@@ -157,6 +157,8 @@ async function sendMiniAppNotificationsToFids(targetFids, message, uuid) {
       uuid: notificationUuid
     }
   };
+
+  console.log(`📤 Sending notification to ${targetFids.length} users:`, payload);
 
   const response = await fetch(
     'https://api.neynar.com/v2/farcaster/frame/notifications/',
@@ -170,17 +172,14 @@ async function sendMiniAppNotificationsToFids(targetFids, message, uuid) {
     }
   );
 
+  const responseText = await response.text();
+  console.log(`📥 Neynar response (${response.status}):`, responseText);
+
   if (!response.ok) {
-    let errorBody = '';
-    try {
-      errorBody = await response.text();
-    } catch (_) {}
-    throw new Error(
-      `Neynar notifications API error: ${response.status} - ${errorBody}`
-    );
+    throw new Error(`Neynar API error: ${response.status} - ${responseText}`);
   }
 
-  const data = await response.json();
+  const data = JSON.parse(responseText);
 
   const deliveries = Array.isArray(data.notification_deliveries)
     ? data.notification_deliveries
@@ -190,12 +189,16 @@ async function sendMiniAppNotificationsToFids(targetFids, message, uuid) {
     .filter((d) => d.status === 'success')
     .map((d) => d.fid);
 
+  console.log(`✅ Successfully sent to ${successfulFids.length} users`);
+
   return { successfulFids, deliveries };
 }
 
 // ---- Main API handler ----
 
 export default async function handler(req, res) {
+  console.log(`📨 Notification API called: ${req.method} ${req.url}`);
+  
   // CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
@@ -209,14 +212,31 @@ export default async function handler(req, res) {
   }
 
   try {
-    // ===== AUTO-REGISTER USER (called from main.js on app load) =====
+    // ===== HEALTH CHECK =====
+    if (req.method === 'GET' && !req.query.fid) {
+      return res.json({
+        status: 'ok',
+        timestamp: new Date().toISOString(),
+        kv_enabled: useKV,
+        env_check: {
+          neynar_api_key: !!process.env.NEYNAR_API_KEY,
+          cron_secret: !!process.env.CRON_SECRET,
+          miniapp_url: !!process.env.MINIAPP_URL
+        }
+      });
+    }
+
+    // ===== AUTO-REGISTER USER =====
     if (req.method === 'POST' && req.body?.action === 'register') {
       const { fid, username } = req.body;
 
       const fidNum = Number(fid);
       if (!fidNum || !Number.isInteger(fidNum) || fidNum <= 0) {
+        console.error('❌ Invalid FID:', fid);
         return res.status(400).json({ error: 'Invalid fid' });
       }
+
+      console.log(`🔔 Registration request for FID ${fidNum}`);
 
       const existingUser = await loadUser(fidNum);
 
@@ -233,9 +253,7 @@ export default async function handler(req, res) {
 
         await saveUser(userData);
 
-        console.log(
-          `✅ Auto-registered user ${fidNum} (${userData.username}) for notifications`
-        );
+        console.log(`✅ Auto-registered user ${fidNum} (${userData.username})`);
 
         return res.json({
           success: true,
@@ -243,7 +261,7 @@ export default async function handler(req, res) {
           isNew: true
         });
       } else {
-        // Optionally refresh username
+        // Update username if changed
         if (username && existingUser.username !== username) {
           existingUser.username = username;
           await saveUser(existingUser);
@@ -258,7 +276,7 @@ export default async function handler(req, res) {
       }
     }
 
-    // ===== ENABLE / DISABLE USER (unsubscribe / resubscribe) =====
+    // ===== ENABLE / DISABLE USER =====
     if (req.method === 'POST' && req.body?.action === 'setEnabled') {
       const { fid, enabled } = req.body;
       const fidNum = Number(fid);
@@ -278,9 +296,7 @@ export default async function handler(req, res) {
       user.enabled = Boolean(enabled);
       await saveUser(user);
 
-      console.log(
-        `${user.enabled ? '✅ Enabled' : '🚫 Disabled'} notifications for ${fidNum}`
-      );
+      console.log(`${user.enabled ? '✅ Enabled' : '🚫 Disabled'} notifications for ${fidNum}`);
 
       return res.json({
         success: true,
@@ -288,13 +304,12 @@ export default async function handler(req, res) {
       });
     }
 
-    // ===== SEND DAILY NOTIFICATIONS (Cron job via Neynar) =====
+    // ===== SEND DAILY NOTIFICATIONS =====
     const isVercelCron = req.headers['x-vercel-cron'] === '1';
-    const isSendDaily =
-      req.method === 'POST' && req.body?.action === 'sendDaily';
+    const isSendDaily = req.method === 'POST' && req.body?.action === 'sendDaily';
 
     if (isVercelCron || isSendDaily) {
-      // Authorization: Vercel scheduled cron OR signed manual trigger
+      // Authorization
       if (!isVercelCron) {
         const cronSecret = req.headers['x-cron-secret'];
         if (!cronSecret || cronSecret !== process.env.CRON_SECRET) {
@@ -303,7 +318,7 @@ export default async function handler(req, res) {
         }
       }
 
-      console.log('🔔 Starting daily Neynar notification batch...');
+      console.log('🔔 Starting daily notification batch...');
 
       const now = Date.now();
       const oneDayAgo = now - 24 * 60 * 60 * 1000;
@@ -311,10 +326,24 @@ export default async function handler(req, res) {
       const allFids = await getRegisteredFids();
       console.log(`📊 Found ${allFids.length} registered users`);
 
-      const eligibleFids = [];
-      const userCache = new Map(); // fid -> user object
+      if (allFids.length === 0) {
+        const summary = {
+          success: true,
+          sent: 0,
+          skipped: 0,
+          errors: 0,
+          total: 0,
+          timestamp: new Date().toISOString(),
+          message: 'No registered users yet'
+        };
+        console.log('📧 Notification batch complete:', summary);
+        return res.json(summary);
+      }
 
-      // Filter by user.enabled and lastNotification < 24h
+      const eligibleFids = [];
+      const userCache = new Map();
+
+      // Filter eligible users
       for (const fidNum of allFids) {
         try {
           const user = await loadUser(fidNum);
@@ -335,7 +364,7 @@ export default async function handler(req, res) {
         }
       }
 
-      console.log(`✅ Eligible users for today: ${eligibleFids.length}`);
+      console.log(`✅ Eligible users: ${eligibleFids.length}`);
 
       if (eligibleFids.length === 0) {
         const summary = {
@@ -347,7 +376,7 @@ export default async function handler(req, res) {
           timestamp: new Date().toISOString(),
           message: 'No eligible users for daily notification'
         };
-        console.log('📧 Daily notification batch complete:', summary);
+        console.log('📧 Notification batch complete:', summary);
         return res.json(summary);
       }
 
@@ -355,7 +384,7 @@ export default async function handler(req, res) {
       const todayStr = new Date().toISOString().slice(0, 10);
       const baseUuid = `celo-nft-daily-${todayStr}-${message.id}`;
 
-      const batchSize = 100; // Neynar limit per call
+      const batchSize = 100;
       let sentCount = 0;
       let errorCount = 0;
 
@@ -370,34 +399,27 @@ export default async function handler(req, res) {
             batchUuid
           );
 
-          // Update per-user metadata for successfully notified fids
+          // Update user metadata
           for (const fid of successfulFids) {
-            const user =
-              userCache.get(fid) || (await loadUser(fid)) || {
-                fid,
-                username: `User ${fid}`,
-                registeredAt: now,
-                totalNotificationsSent: 0,
-                enabled: true
-              };
+            const user = userCache.get(fid) || (await loadUser(fid)) || {
+              fid,
+              username: `User ${fid}`,
+              registeredAt: now,
+              totalNotificationsSent: 0,
+              enabled: true
+            };
 
             user.lastNotification = now;
-            user.totalNotificationsSent =
-              (user.totalNotificationsSent || 0) + 1;
+            user.totalNotificationsSent = (user.totalNotificationsSent || 0) + 1;
 
             await saveUser(user);
           }
 
           sentCount += successfulFids.length;
-          console.log(
-            `📨 Sent batch to ${batchFids.length} fids (success: ${successfulFids.length})`
-          );
+          console.log(`📨 Batch sent: ${successfulFids.length}/${batchFids.length} successful`);
         } catch (e) {
           errorCount++;
-          console.error(
-            `❌ Neynar notifications API failed for batch starting at index ${i}:`,
-            e.message || e
-          );
+          console.error(`❌ Batch failed at index ${i}:`, e.message || e);
         }
       }
 
@@ -419,6 +441,7 @@ export default async function handler(req, res) {
     if (req.method === 'GET' && req.query.fid) {
       const fid = Array.isArray(req.query.fid) ? req.query.fid[0] : req.query.fid;
       const fidNum = Number(fid);
+      
       if (!fidNum || !Number.isInteger(fidNum) || fidNum <= 0) {
         return res.status(400).json({ error: 'Invalid fid' });
       }
@@ -434,10 +457,13 @@ export default async function handler(req, res) {
     }
 
     return res.status(405).json({ error: 'Method not allowed' });
+    
   } catch (err) {
     console.error('💥 Notification API error:', err);
-    return res
-      .status(500)
-      .json({ error: 'Server error', message: err.message || 'Unknown error' });
+    return res.status(500).json({ 
+      error: 'Server error', 
+      message: err.message || 'Unknown error',
+      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    });
   }
 }
