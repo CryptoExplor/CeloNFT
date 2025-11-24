@@ -1954,7 +1954,7 @@ document.head.appendChild(notificationStyles);
     await sdk.actions.addMiniApp();
 
         // 🔔 AUTO-REGISTER FOR NOTIFICATIONS (silent, in background)
-        await autoRegisterForNotificatio();
+        await autoRegisterForNotifications();
     
   } catch (e) {
     console.log('Farcaster SDK not available or failed to initialize:', e);
@@ -3528,6 +3528,7 @@ async function loadAchievementsBottom() {
     timestamp: Date.now()
   }));
 }
+
 
 
 
