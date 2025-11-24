@@ -1855,12 +1855,107 @@ if ('IntersectionObserver' in window) {
   initTradingView();
 }
 
+
+// ===== AUTO-REGISTER FOR NOTIFICATIONS =====
+async function autoRegisterForNotifications() {
+    if (!isFarcasterEnvironment || !sdk?.context?.user?.fid) {
+          console.log('Not in Farcaster environment, skipping notification registration');
+          return;
+        }
+
+    try {
+          const fid = sdk.context.user.fid;
+          const username = sdk.context.user.username || sdk.context.user.displayName || `User ${fid}`;
+
+          console.log(`🔔 Auto-registering user ${fid} (${username}) for notifications...`);
+
+          const response = await fetch('/api/notification', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                            action: 'register',
+                            fid: fid,
+                            username: username
+                                    })
+                        });
+
+          const data = await response.json();
+
+          if (data.success) {
+                  if (data.isNew) {
+                            console.log('✅ Successfully registered for daily notifications');
+
+                            // Optional: Show a subtle success message
+                            const tempMsg = document.createElement('div');
+                            tempMsg.style.cssText = `
+                                      position: fixed;
+                                        top: 20px;
+                                                  right: 20px;
+                                                            background: linear-gradient(135deg, #10b981, #059669);
+                                                                      color: white;
+                                                                                padding: 12px 20px;
+                                                                                          border-radius: 8px;
+                                                                                                    font-size: 0.9rem;
+                                                                                                              box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+                                                                                                                        z-index: 10000;
+                                                                                                                                  animation: slideIn 0.3s ease-out;
+          `;
+                            tempMsg.textContent = '🔔 Daily reminders enabled!';
+                            document.body.appendChild(tempMsg);
+
+                    setTimeout(() => {
+                                tempMsg.style.animation = 'slideOut 0.3s ease-out';
+                                setTimeout(() => tempMsg.remove(), 300);
+                              }, 3000);
+                          } else {
+                            console.log('ℹ️ Already registered for notifications');
+                          }
+                } else {
+                  console.error('❌ Failed to register for notifications:', data.error);
+                }
+        } catch (e) {
+        console.error('💥 Notification registration error:', e);
+        }
+  }
+
+// Add CSS for notification animations
+const notificationStyles = document.createElement('style');
+notificationStyles.textContent = `
+  @keyframes slideIn {
+      from {
+            transform: translateX(400px);
+                  opacity: 0;
+                      }
+                          to {
+                                transform: translateX(0);
+                                      opacity: 1;
+                                          }
+                                            }
+
+                                              @keyframes slideOut {
+                                                  from {
+                                                        transform: translateX(0);
+                                                              opacity: 1;
+                                                                  }
+                                                                      to {
+                                                                            transform: translateX(400px);
+                                                                                  opacity: 0;
+                                                                                      }
+                                                                                        }
+                                                                                        `;
+document.head.appendChild(notificationStyles);
 (async () => {
   try {
     await sdk.actions.ready({ disableNativeGestures: true });
     console.log('Farcaster SDK initialized successfully');
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    await new Promise(resolve => setTimeout(resolve, 1000)); 
+    
+        // Add miniapp to user's app list
     await sdk.actions.addMiniApp();
+
+        // 🔔 AUTO-REGISTER FOR NOTIFICATIONS (silent, in background)
+        await autoRegisterForNotificatio();
+    
   } catch (e) {
     console.log('Farcaster SDK not available or failed to initialize:', e);
   }
@@ -3433,6 +3528,7 @@ async function loadAchievementsBottom() {
     timestamp: Date.now()
   }));
 }
+
 
 
 
