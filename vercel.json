@@ -6,10 +6,10 @@
       "permanent": false
     }
   ],
-  "crons": [
+  "rewrites": [
     {
-      "path": "/api/notification",
-      "schedule": "0 10 * * *"
+      "source": "/api/:path*",
+      "destination": "/api/:path*"
     }
   ],
   "headers": [
@@ -21,6 +21,12 @@
           "value": "application/json"
         }
       ]
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/notification",
+      "schedule": "0 16 * * *"
     }
   ]
 }
