@@ -2998,30 +2998,45 @@ async function fetchHolderRarities(address, count, tokenOwners) {
     return rarities;
   }
   
-  // Fetch rarity for each token (limit to avoid timeout)
-  const rarityPromises = ownedTokens.slice(0, 50).map(tokenId =>
-    readContract(wagmiConfig, {
-      address: contractDetails.address,
-      abi: contractDetails.abi,
-      functionName: 'tokenTraits',
-      args: [BigInt(tokenId)]
-    })
-    .then(traits => Number(traits[1]))
-    .catch(() => 0) // Default to common on error
-  );
+  console.log(`Fetching rarities for ${address}: ${ownedTokens.length} tokens`);
   
-  const rarityValues = await Promise.all(rarityPromises);
+  // Process in batches to avoid overwhelming the RPC
+  const batchSize = 20;
+  for (let i = 0; i < ownedTokens.length; i += batchSize) {
+    const batch = ownedTokens.slice(i, i + batchSize);
+    
+    const rarityPromises = batch.map(tokenId =>
+      readContract(wagmiConfig, {
+        address: contractDetails.address,
+        abi: contractDetails.abi,
+        functionName: 'tokenTraits',
+        args: [BigInt(tokenId)]
+      })
+      .then(traits => Number(traits[1]))
+      .catch(err => {
+        console.warn(`Failed to fetch rarity for token ${tokenId}:`, err.message);
+        return 0; // Default to common on error
+      })
+    );
+    
+    const rarityValues = await Promise.all(rarityPromises);
+    
+    rarityValues.forEach(rarity => {
+      if (rarity === 3) rarities.mythic++;
+      else if (rarity === 2) rarities.legendary++;
+      else if (rarity === 1) rarities.rare++;
+      else rarities.common++;
+    });
+    
+    // Small delay between batches to avoid rate limiting
+    if (i + batchSize < ownedTokens.length) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+  }
   
-  rarityValues.forEach(rarity => {
-    if (rarity === 3) rarities.mythic++;
-    else if (rarity === 2) rarities.legendary++;
-    else if (rarity === 1) rarities.rare++;
-    else rarities.common++;
-  });
-  
+  console.log(`Rarities for ${address}:`, rarities);
   return rarities;
 }
-
 function renderLeaderboard(leaderboard) {
   const container = document.getElementById('leaderboardContainer');
   if (!container) return;
