@@ -2808,39 +2808,41 @@ async function fetchLeaderboard() {
           if (bitqueryData.success && bitqueryData.transfers && bitqueryData.transfers.length > 0) {
             console.log(`✅ Bitquery returned ${bitqueryData.transfers.length} transfers`);
             
-            // Process Bitquery transfers (different format than Etherscan)
-            const holderMap = new Map();
-            const tokenOwners = new Map();
+            // Process Bitquery transfers
+            const tokenTransferHistory = new Map();
             
             bitqueryData.transfers.forEach(transfer => {
               const tokenId = transfer.tokenId;
-              const from = transfer.sender.address.toLowerCase();
-              const to = transfer.receiver.address.toLowerCase();
-              const zeroAddress = '0x0000000000000000000000000000000000000000';
-              
-              // Handle transfer OUT
-              if (from !== zeroAddress) {
-                const currentOwner = tokenOwners.get(tokenId);
-                if (currentOwner === from) {
-                  const currentCount = holderMap.get(from) || 0;
-                  if (currentCount > 0) {
-                    holderMap.set(from, currentCount - 1);
-                    if (holderMap.get(from) === 0) {
-                      holderMap.delete(from);
-                    }
-                  }
-                }
+              if (!tokenTransferHistory.has(tokenId)) {
+                tokenTransferHistory.set(tokenId, []);
               }
-              
-              // Handle transfer IN
-              if (to !== zeroAddress) {
-                tokenOwners.set(tokenId, to);
-                holderMap.set(to, (holderMap.get(to) || 0) + 1);
-              }
+              tokenTransferHistory.get(tokenId).push({
+                from: transfer.sender.address.toLowerCase(),
+                to: transfer.receiver.address.toLowerCase(),
+                blockNumber: parseInt(transfer.block.height)
+              });
             });
             
+            // Determine current owners
+            const currentOwners = new Map();
+            const zeroAddress = '0x0000000000000000000000000000000000000000';
+            
+            for (const [tokenId, history] of tokenTransferHistory.entries()) {
+              history.sort((a, b) => a.blockNumber - b.blockNumber);
+              const lastTransfer = history[history.length - 1];
+              if (lastTransfer.to !== zeroAddress) {
+                currentOwners.set(tokenId, lastTransfer.to);
+              }
+            }
+            
+            // Build holder map
+            const holderMap = new Map();
+            for (const [tokenId, owner] of currentOwners.entries()) {
+              holderMap.set(owner, (holderMap.get(owner) || 0) + 1);
+            }
+            
             console.log(`Bitquery: Found ${holderMap.size} unique holders`);
-            console.log(`Bitquery: Tracked ${tokenOwners.size} unique tokens`);
+            console.log(`Bitquery: Tracked ${currentOwners.size} unique tokens`);
             
             // Get top holders
             const topHolders = Array.from(holderMap.entries())
@@ -2850,7 +2852,7 @@ async function fetchLeaderboard() {
             // Fetch rarities
             const holderData = await Promise.all(
               topHolders.map(async ([address, count]) => {
-                const rarities = await fetchHolderRarities(address, count, tokenOwners);
+                const rarities = await fetchHolderRarities(address, count, currentOwners);
                 return {
                   address,
                   shortAddress: `${address.slice(0, 6)}...${address.slice(-4)}`,
@@ -2892,47 +2894,61 @@ async function fetchLeaderboard() {
       if (data.status === '1' && data.result && Array.isArray(data.result) && data.result.length > 0) {
         console.log(`✅ tokennfttx returned ${data.result.length} transfer events`);
        
-        // Build holder map from transfer events
-        const holderMap = new Map();
-        const tokenOwners = new Map(); // Track current owner of each token
-       
-        // Process transfers in chronological order (oldest first)
+        // Process transfers in chronological order
         const transfers = [...data.result].reverse();
-       
+        
+        // First pass: Build the complete transfer history for each token
+        const tokenTransferHistory = new Map(); // tokenId -> array of transfers
+        
         transfers.forEach(tx => {
           const tokenId = tx.tokenID;
-          const from = tx.from.toLowerCase();
-          const to = tx.to.toLowerCase();
-          const zeroAddress = '0x0000000000000000000000000000000000000000';
-         
-          // Handle transfer OUT (from someone to someone else)
-          if (from !== zeroAddress) {
-            const currentOwner = tokenOwners.get(tokenId);
-            // Only decrement if this address currently owns this token
-            if (currentOwner === from) {
-              const currentCount = holderMap.get(from) || 0;
-              if (currentCount > 0) {
-                holderMap.set(from, currentCount - 1);
-                if (holderMap.get(from) === 0) {
-                  holderMap.delete(from);
-                }
-              }
-            }
+          if (!tokenTransferHistory.has(tokenId)) {
+            tokenTransferHistory.set(tokenId, []);
           }
-         
-          // Handle transfer IN (mint or receive)
-          if (to !== zeroAddress) {
-            // Update token ownership to new owner
-            tokenOwners.set(tokenId, to);
-            // Increment new owner's count
-            holderMap.set(to, (holderMap.get(to) || 0) + 1);
-          }
+          tokenTransferHistory.get(tokenId).push({
+            from: tx.from.toLowerCase(),
+            to: tx.to.toLowerCase(),
+            blockNumber: parseInt(tx.blockNumber),
+            timeStamp: parseInt(tx.timeStamp)
+          });
         });
+        
+        // Second pass: Determine current owner of each token
+        const currentOwners = new Map(); // tokenId -> current owner address
+        const zeroAddress = '0x0000000000000000000000000000000000000000';
+        
+        for (const [tokenId, history] of tokenTransferHistory.entries()) {
+          // Sort by block number and timestamp to ensure correct order
+          history.sort((a, b) => {
+            if (a.blockNumber !== b.blockNumber) {
+              return a.blockNumber - b.blockNumber;
+            }
+            return a.timeStamp - b.timeStamp;
+          });
+          
+          // The last transfer's "to" address is the current owner
+          const lastTransfer = history[history.length - 1];
+          
+          if (lastTransfer.to !== zeroAddress) {
+            currentOwners.set(tokenId, lastTransfer.to);
+          }
+        }
+        
+        // Third pass: Build holder map from current ownership state
+        const holderMap = new Map();
+        
+        for (const [tokenId, owner] of currentOwners.entries()) {
+          holderMap.set(owner, (holderMap.get(owner) || 0) + 1);
+        }
        
         console.log(`Processed ${transfers.length} transfers`);
-        console.log(`Found ${holderMap.size} unique holders`);
-        console.log(`Unique tokens tracked: ${tokenOwners.size}`);
-        console.log(`Sample holders:`, Array.from(holderMap.entries()).slice(0, 5).map(([addr, count]) => `${addr.slice(0, 8)}...: ${count} NFTs`));
+        console.log(`Found ${tokenTransferHistory.size} unique tokens`);
+        console.log(`Found ${holderMap.size} unique current holders`);
+        console.log(`Sample holders:`, 
+          Array.from(holderMap.entries())
+            .slice(0, 5)
+            .map(([addr, count]) => `${addr.slice(0, 8)}...: ${count} NFTs`)
+        );
        
         // Get top holders
         const topHolders = Array.from(holderMap.entries())
@@ -2942,7 +2958,15 @@ async function fetchLeaderboard() {
         // Fetch rarity data for each holder
         const holderData = await Promise.all(
           topHolders.map(async ([address, count]) => {
-            const rarities = await fetchHolderRarities(address, count, tokenOwners);
+            // Create a map of tokens owned by this address
+            const ownedTokens = new Map();
+            for (const [tokenId, owner] of currentOwners.entries()) {
+              if (owner === address) {
+                ownedTokens.set(tokenId, owner);
+              }
+            }
+            
+            const rarities = await fetchHolderRarities(address, count, ownedTokens);
            
             return {
               address,
@@ -2982,7 +3006,6 @@ async function fetchLeaderboard() {
     return [];
   }
 }
-
 // Fallback method: scan blockchain directly
 async function fetchLeaderboardFromBlockchain() {
   try {
