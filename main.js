@@ -2771,9 +2771,6 @@ window.addEventListener('beforeunload', () => {
   stopRecentMintsPolling();
 });
 
-// ===== UPDATED LEADERBOARD SYSTEM WITH NEW ETHERSCAN API =====
-// This replaces the fetchLeaderboard() function in main.js
-
 // ===== LEADERBOARD SYSTEM =====
 let leaderboardCache = null;
 let leaderboardLastFetch = 0;
@@ -2793,9 +2790,98 @@ async function fetchLeaderboard() {
       return [];
     }
    
-    console.log('Fetching leaderboard data using Etherscan API V2...');
+    console.log('Fetching leaderboard data...');
    
-    // ✅ METHOD 1: Try tokennfttx (NFT Transfer events) - Most reliable for V2
+    // ✅ TRY BITQUERY FIRST (if configured) - Most reliable
+    if (process.env.BITQUERY_API_KEY) {
+      try {
+        console.log('Trying Bitquery API (most reliable)...');
+        const bitqueryResponse = await fetch('/api/bitquery', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contractAddress: contractDetails.address })
+        });
+        
+        if (bitqueryResponse.ok) {
+          const bitqueryData = await bitqueryResponse.json();
+          
+          if (bitqueryData.success && bitqueryData.transfers && bitqueryData.transfers.length > 0) {
+            console.log(`✅ Bitquery returned ${bitqueryData.transfers.length} transfers`);
+            
+            // Process Bitquery transfers (different format than Etherscan)
+            const holderMap = new Map();
+            const tokenOwners = new Map();
+            
+            bitqueryData.transfers.forEach(transfer => {
+              const tokenId = transfer.tokenId;
+              const from = transfer.sender.address.toLowerCase();
+              const to = transfer.receiver.address.toLowerCase();
+              const zeroAddress = '0x0000000000000000000000000000000000000000';
+              
+              // Handle transfer OUT
+              if (from !== zeroAddress) {
+                const currentOwner = tokenOwners.get(tokenId);
+                if (currentOwner === from) {
+                  const currentCount = holderMap.get(from) || 0;
+                  if (currentCount > 0) {
+                    holderMap.set(from, currentCount - 1);
+                    if (holderMap.get(from) === 0) {
+                      holderMap.delete(from);
+                    }
+                  }
+                }
+              }
+              
+              // Handle transfer IN
+              if (to !== zeroAddress) {
+                tokenOwners.set(tokenId, to);
+                holderMap.set(to, (holderMap.get(to) || 0) + 1);
+              }
+            });
+            
+            console.log(`Bitquery: Found ${holderMap.size} unique holders`);
+            console.log(`Bitquery: Tracked ${tokenOwners.size} unique tokens`);
+            
+            // Get top holders
+            const topHolders = Array.from(holderMap.entries())
+              .sort((a, b) => b[1] - a[1])
+              .slice(0, 15);
+            
+            // Fetch rarities
+            const holderData = await Promise.all(
+              topHolders.map(async ([address, count]) => {
+                const rarities = await fetchHolderRarities(address, count, tokenOwners);
+                return {
+                  address,
+                  shortAddress: `${address.slice(0, 6)}...${address.slice(-4)}`,
+                  count,
+                  rarities
+                };
+              })
+            );
+            
+            const leaderboard = holderData
+              .filter(h => h.count > 0)
+              .sort((a, b) => {
+                if (b.count !== a.count) return b.count - a.count;
+                if (b.rarities.mythic !== a.rarities.mythic) return b.rarities.mythic - a.rarities.mythic;
+                return b.rarities.legendary - a.rarities.legendary;
+              })
+              .slice(0, 10);
+            
+            leaderboardCache = leaderboard;
+            leaderboardLastFetch = now;
+            
+            console.log(`✅ Leaderboard from Bitquery: ${leaderboard.length} collectors`);
+            return leaderboard;
+          }
+        }
+      } catch (e) {
+        console.warn('Bitquery attempt failed:', e.message);
+      }
+    }
+    
+    // ✅ METHOD 1: Try tokennfttx (NFT Transfer events) - Etherscan V2
     try {
       const transferUrl = `/api/celoscan?module=account&action=tokennfttx&contractaddress=${contractDetails.address}&page=1&offset=10000&sort=desc`;
      
@@ -2819,21 +2905,34 @@ async function fetchLeaderboard() {
           const to = tx.to.toLowerCase();
           const zeroAddress = '0x0000000000000000000000000000000000000000';
          
-          // Update token ownership
-          if (from !== zeroAddress && tokenOwners.get(tokenId) === from) {
-            // Remove from previous owner
-            holderMap.set(from, (holderMap.get(from) || 1) - 1);
-            if (holderMap.get(from) <= 0) holderMap.delete(from);
+          // Handle transfer OUT (from someone to someone else)
+          if (from !== zeroAddress) {
+            const currentOwner = tokenOwners.get(tokenId);
+            // Only decrement if this address currently owns this token
+            if (currentOwner === from) {
+              const currentCount = holderMap.get(from) || 0;
+              if (currentCount > 0) {
+                holderMap.set(from, currentCount - 1);
+                if (holderMap.get(from) === 0) {
+                  holderMap.delete(from);
+                }
+              }
+            }
           }
          
+          // Handle transfer IN (mint or receive)
           if (to !== zeroAddress) {
-            // Add to new owner
+            // Update token ownership to new owner
             tokenOwners.set(tokenId, to);
+            // Increment new owner's count
             holderMap.set(to, (holderMap.get(to) || 0) + 1);
           }
         });
        
+        console.log(`Processed ${transfers.length} transfers`);
         console.log(`Found ${holderMap.size} unique holders`);
+        console.log(`Unique tokens tracked: ${tokenOwners.size}`);
+        console.log(`Sample holders:`, Array.from(holderMap.entries()).slice(0, 5).map(([addr, count]) => `${addr.slice(0, 8)}...: ${count} NFTs`));
        
         // Get top holders
         const topHolders = Array.from(holderMap.entries())
@@ -3037,6 +3136,7 @@ async function fetchHolderRarities(address, count, tokenOwners) {
   console.log(`Rarities for ${address}:`, rarities);
   return rarities;
 }
+
 function renderLeaderboard(leaderboard) {
   const container = document.getElementById('leaderboardContainer');
   if (!container) return;
@@ -3104,6 +3204,7 @@ document.addEventListener('DOMContentLoaded', () => {
 window.addEventListener('beforeunload', () => {
   stopLeaderboardPolling();
 });
+
 // ===== WALLET BALANCE DISPLAY =====
 let celoPrice = 0;
 
