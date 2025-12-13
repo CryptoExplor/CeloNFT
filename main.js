@@ -2771,153 +2771,200 @@ window.addEventListener('beforeunload', () => {
   stopRecentMintsPolling();
 });
 
-// ===== UPDATED LEADERBOARD SYSTEM WITH NEW ETHERSCAN API =====
-// This replaces the fetchLeaderboard() function in main.js
+// =====================
+// LEADERBOARD SYSTEM
+// =====================
 
-// ===== LEADERBOARD SYSTEM =====
 let leaderboardCache = null;
 let leaderboardLastFetch = 0;
-const LEADERBOARD_CACHE_TTL = 120000; // 2 minutes (matches polling interval)
+const LEADERBOARD_CACHE_TTL = 120000; // 2 minutes
 
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
+
+// =====================
+// FETCH ALL NFT TRANSFERS (PAGINATED)
+// =====================
+async function fetchAllNFTTransfers() {
+  const allTransfers = [];
+  let page = 1;
+  const maxPages = 25;
+
+  console.log('🔍 Fetching ALL NFT transfer history...');
+
+  while (page <= maxPages) {
+    const url = `/api/celoscan?module=account&action=tokennfttx&contractaddress=${contractDetails.address}&page=${page}&offset=10000&sort=asc`;
+
+    const res = await fetch(url);
+    const data = await res.json();
+
+    if (data.status !== '1' || !Array.isArray(data.result) || data.result.length === 0) {
+      break;
+    }
+
+    console.log(`✅ Page ${page}: ${data.result.length} transfers`);
+    allTransfers.push(...data.result);
+
+    if (data.result.length < 10000) break;
+    page++;
+  }
+
+  console.log(`✅ Total transfers fetched: ${allTransfers.length}`);
+  return allTransfers;
+}
+
+// =====================
+// BUILD HOLDER MAP (CORRECT LOGIC)
+// =====================
+function buildHolderMap(transfers) {
+  const tokenOwners = new Map(); // tokenId (Number) → owner
+
+  transfers.forEach(tx => {
+    const tokenId = Number(tx.tokenID);
+    const to = tx.to.toLowerCase();
+
+    if (to === ZERO_ADDRESS) {
+      tokenOwners.delete(tokenId); // burned
+    } else {
+      tokenOwners.set(tokenId, to); // last owner wins
+    }
+  });
+
+  const holderMap = new Map();
+  for (const owner of tokenOwners.values()) {
+    holderMap.set(owner, (holderMap.get(owner) || 0) + 1);
+  }
+
+  console.log(`🏆 Found ${holderMap.size} unique holders`);
+  return { holderMap, tokenOwners };
+}
+
+// =====================
+// FETCH HOLDER RARITIES
+// =====================
+async function fetchHolderRarities(address, tokenOwners) {
+  const rarities = { mythic: 0, legendary: 0, rare: 0, common: 0 };
+  const ownedTokens = [];
+
+  for (const [tokenId, owner] of tokenOwners.entries()) {
+    if (owner === address) ownedTokens.push(tokenId);
+  }
+
+  if (ownedTokens.length === 0) return rarities;
+
+  const batchSize = 20;
+  for (let i = 0; i < ownedTokens.length; i += batchSize) {
+    const batch = ownedTokens.slice(i, i + batchSize);
+
+    const results = await Promise.all(
+      batch.map(tokenId =>
+        readContract(wagmiConfig, {
+          address: contractDetails.address,
+          abi: contractDetails.abi,
+          functionName: 'tokenTraits',
+          args: [BigInt(tokenId)]
+        })
+          .then(traits => Number(traits[1]))
+          .catch(() => 0)
+      )
+    );
+
+    results.forEach(r => {
+      if (r === 3) rarities.mythic++;
+      else if (r === 2) rarities.legendary++;
+      else if (r === 1) rarities.rare++;
+      else rarities.common++;
+    });
+
+    if (i + batchSize < ownedTokens.length) {
+      await new Promise(r => setTimeout(r, 80));
+    }
+  }
+
+  return rarities;
+}
+
+// =====================
+// MAIN LEADERBOARD FETCH
+// =====================
 async function fetchLeaderboard() {
   try {
-    // Return cached data if fresh
     const now = Date.now();
-    if (leaderboardCache && (now - leaderboardLastFetch) < LEADERBOARD_CACHE_TTL) {
-      console.log('Using cached leaderboard data');
+    if (leaderboardCache && now - leaderboardLastFetch < LEADERBOARD_CACHE_TTL) {
+      console.log('⚡ Using cached leaderboard');
       return leaderboardCache;
     }
-   
-    if (!contractDetails || !wagmiConfig) {
-      console.log('Contract details or wagmi config not ready for leaderboard');
-      return [];
+
+    if (!contractDetails || !wagmiConfig) return [];
+
+    console.log('🏆 Building leaderboard (API → verified)...');
+
+    // ---- Primary: API Transfers ----
+    const transfers = await fetchAllNFTTransfers();
+    if (!transfers.length) throw new Error('No transfers from API');
+
+    const { holderMap, tokenOwners } = buildHolderMap(transfers);
+
+    // ---- Sanity check ----
+    if (holderMap.size < 10) {
+      throw new Error('Holder count too low, fallback needed');
     }
-   
-    console.log('Fetching leaderboard data using Etherscan API V2...');
-   
-    // ✅ METHOD 1: Try tokennfttx (NFT Transfer events) - Most reliable for V2
-    try {
-      const transferUrl = `/api/celoscan?module=account&action=tokennfttx&contractaddress=${contractDetails.address}&page=1&offset=10000&sort=desc`;
-     
-      console.log('Trying tokennfttx (NFT transfers) endpoint...');
-      const response = await fetch(transferUrl);
-      const data = await response.json();
-     
-      if (data.status === '1' && data.result && Array.isArray(data.result) && data.result.length > 0) {
-        console.log(`✅ tokennfttx returned ${data.result.length} transfer events`);
-       
-        // Build holder map from transfer events
-        const holderMap = new Map();
-        const tokenOwners = new Map(); // Track current owner of each token
-       
-        // Process transfers in chronological order (oldest first)
-        const transfers = [...data.result].reverse();
-       
-        transfers.forEach(tx => {
-          const tokenId = tx.tokenID;
-          const from = tx.from.toLowerCase();
-          const to = tx.to.toLowerCase();
-          const zeroAddress = '0x0000000000000000000000000000000000000000';
-         
-          // Update token ownership
-          if (from !== zeroAddress && tokenOwners.get(tokenId) === from) {
-            // Remove from previous owner
-            holderMap.set(from, (holderMap.get(from) || 1) - 1);
-            if (holderMap.get(from) <= 0) holderMap.delete(from);
-          }
-         
-          if (to !== zeroAddress) {
-            // Add to new owner
-            tokenOwners.set(tokenId, to);
-            holderMap.set(to, (holderMap.get(to) || 0) + 1);
-          }
-        });
-       
-        console.log(`Found ${holderMap.size} unique holders`);
-       
-        // Get top holders
-        const topHolders = Array.from(holderMap.entries())
-          .sort((a, b) => b[1] - a[1])
-          .slice(0, 15);
-       
-        // Fetch rarity data for each holder
-        const holderData = await Promise.all(
-          topHolders.map(async ([address, count]) => {
-            const rarities = await fetchHolderRarities(address, count, tokenOwners);
-           
-            return {
-              address,
-              shortAddress: `${address.slice(0, 6)}...${address.slice(-4)}`,
-              count,
-              rarities
-            };
-          })
-        );
-       
-        // Final sort with rarity tiebreakers
-        const leaderboard = holderData
-          .filter(h => h.count > 0)
-          .sort((a, b) => {
-            if (b.count !== a.count) return b.count - a.count;
-            if (b.rarities.mythic !== a.rarities.mythic) return b.rarities.mythic - a.rarities.mythic;
-            return b.rarities.legendary - a.rarities.legendary;
-          })
-          .slice(0, 10);
-       
-        leaderboardCache = leaderboard;
-        leaderboardLastFetch = now;
-       
-        console.log(`✅ Leaderboard updated: ${leaderboard.length} collectors`);
-        return leaderboard;
-      }
-    } catch (e) {
-      console.warn('tokennfttx failed:', e.message);
-    }
-   
-    // METHOD 2: Fallback to blockchain scan
-    console.log('API methods failed, falling back to blockchain scan...');
+
+    // ---- Top holders ----
+    const topHolders = [...holderMap.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 15);
+
+    const holderData = await Promise.all(
+      topHolders.map(async ([address, count]) => {
+        const rarities = await fetchHolderRarities(address, tokenOwners);
+        return {
+          address,
+          shortAddress: `${address.slice(0, 6)}...${address.slice(-4)}`,
+          count,
+          rarities
+        };
+      })
+    );
+
+    const leaderboard = holderData
+      .filter(h => h.count > 0)
+      .sort((a, b) => {
+        if (b.count !== a.count) return b.count - a.count;
+        if (b.rarities.mythic !== a.rarities.mythic)
+          return b.rarities.mythic - a.rarities.mythic;
+        return b.rarities.legendary - a.rarities.legendary;
+      })
+      .slice(0, 10);
+
+    leaderboardCache = leaderboard;
+    leaderboardLastFetch = now;
+
+    console.log(`✅ Leaderboard ready (${leaderboard.length})`);
+    return leaderboard;
+
+  } catch (err) {
+    console.warn('⚠️ API leaderboard failed, falling back:', err.message);
     return await fetchLeaderboardFromBlockchain();
-   
-  } catch (e) {
-    console.error('Leaderboard fetch error:', e);
-    return [];
   }
 }
 
-// Fallback method: scan blockchain directly
+// =====================
+// BLOCKCHAIN FALLBACK (AUTHORITATIVE)
+// =====================
 async function fetchLeaderboardFromBlockchain() {
   try {
-    if (!contractDetails || !wagmiConfig) return [];
-    
-    const totalSupply = await readContract(wagmiConfig, {
+    const totalSupply = Number(await readContract(wagmiConfig, {
       address: contractDetails.address,
       abi: contractDetails.abi,
       functionName: 'totalSupply'
-    });
-    
-    const total = Number(totalSupply);
-    if (total === 0) return [];
-    
-    console.log(`Scanning all ${total} tokens from blockchain...`);
-    
+    }));
+
     const holderMap = new Map();
     const rarityMap = new Map();
-    
-    // Process ALL tokens, not just last 200
-    const chunkSize = 20;
-    const totalChunks = Math.ceil(total / chunkSize);
-    
-    for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
-      const start = chunkIndex * chunkSize + 1;
-      const end = Math.min((chunkIndex + 1) * chunkSize, total);
-      
-      const tokenIds = [];
-      for (let i = start; i <= end; i++) {
-        tokenIds.push(i);
-      }
-      
-      const promises = tokenIds.map(tokenId =>
-        Promise.all([
+
+    for (let tokenId = 1; tokenId <= totalSupply; tokenId++) {
+      try {
+        const [owner, traits] = await Promise.all([
           readContract(wagmiConfig, {
             address: contractDetails.address,
             abi: contractDetails.abi,
@@ -2930,163 +2977,54 @@ async function fetchLeaderboardFromBlockchain() {
             functionName: 'tokenTraits',
             args: [BigInt(tokenId)]
           })
-        ]).then(([owner, traits]) => ({ owner, rarity: Number(traits[1]) }))
-        .catch(e => {
-          console.log(`Token ${tokenId} fetch failed:`, e.message);
-          return null;
-        })
-      );
-      
-      const results = await Promise.all(promises);
-      
-      results.forEach(result => {
-        if (result && result.owner) {
-          const { owner, rarity } = result;
-          const ownerLower = owner.toLowerCase();
-          
-          holderMap.set(ownerLower, (holderMap.get(ownerLower) || 0) + 1);
-          
-          if (!rarityMap.has(ownerLower)) {
-            rarityMap.set(ownerLower, { mythic: 0, legendary: 0, rare: 0, common: 0 });
-          }
-          const rarities = rarityMap.get(ownerLower);
-          if (rarity === 3) rarities.mythic++;
-          else if (rarity === 2) rarities.legendary++;
-          else if (rarity === 1) rarities.rare++;
-          else rarities.common++;
-        }
-      });
-      
-      console.log(`Processed chunk ${chunkIndex + 1}/${totalChunks}`);
+        ]);
+
+        const o = owner.toLowerCase();
+        const r = Number(traits[1]);
+
+        holderMap.set(o, (holderMap.get(o) || 0) + 1);
+        if (!rarityMap.has(o))
+          rarityMap.set(o, { mythic: 0, legendary: 0, rare: 0, common: 0 });
+
+        if (r === 3) rarityMap.get(o).mythic++;
+        else if (r === 2) rarityMap.get(o).legendary++;
+        else if (r === 1) rarityMap.get(o).rare++;
+        else rarityMap.get(o).common++;
+
+      } catch {}
     }
-    
-    const leaderboard = Array.from(holderMap.entries())
+
+    return [...holderMap.entries()]
       .map(([address, count]) => ({
         address,
         shortAddress: `${address.slice(0, 6)}...${address.slice(-4)}`,
         count,
-        rarities: rarityMap.get(address) || { mythic: 0, legendary: 0, rare: 0, common: 0 }
+        rarities: rarityMap.get(address)
       }))
-      .sort((a, b) => {
-        if (b.count !== a.count) return b.count - a.count;
-        if (b.rarities.mythic !== a.rarities.mythic) return b.rarities.mythic - a.rarities.mythic;
-        return b.rarities.legendary - a.rarities.legendary;
-      })
+      .sort((a, b) => b.count - a.count)
       .slice(0, 10);
-    
-    console.log(`Blockchain scan complete: ${leaderboard.length} collectors`);
-    return leaderboard;
-    
+
   } catch (e) {
-    console.error('Blockchain scan error:', e);
+    console.error('❌ Blockchain fallback failed:', e);
     return [];
   }
 }
 
-async function fetchHolderRarities(address, count, tokenOwners) {
-  const rarities = { mythic: 0, legendary: 0, rare: 0, common: 0 };
-  
-  // Get all tokens owned by this address from the tokenOwners map
-  const ownedTokens = [];
-  for (const [tokenId, owner] of tokenOwners.entries()) {
-    if (owner === address) {
-      ownedTokens.push(tokenId);
-    }
-  }
-  
-  if (ownedTokens.length === 0) {
-    return rarities;
-  }
-  
-  console.log(`Fetching rarities for ${address}: ${ownedTokens.length} tokens`);
-  
-  // Process in batches to avoid overwhelming the RPC
-  const batchSize = 20;
-  for (let i = 0; i < ownedTokens.length; i += batchSize) {
-    const batch = ownedTokens.slice(i, i + batchSize);
-    
-    const rarityPromises = batch.map(tokenId =>
-      readContract(wagmiConfig, {
-        address: contractDetails.address,
-        abi: contractDetails.abi,
-        functionName: 'tokenTraits',
-        args: [BigInt(tokenId)]
-      })
-      .then(traits => Number(traits[1]))
-      .catch(err => {
-        console.warn(`Failed to fetch rarity for token ${tokenId}:`, err.message);
-        return 0; // Default to common on error
-      })
-    );
-    
-    const rarityValues = await Promise.all(rarityPromises);
-    
-    rarityValues.forEach(rarity => {
-      if (rarity === 3) rarities.mythic++;
-      else if (rarity === 2) rarities.legendary++;
-      else if (rarity === 1) rarities.rare++;
-      else rarities.common++;
-    });
-    
-    // Small delay between batches to avoid rate limiting
-    if (i + batchSize < ownedTokens.length) {
-      await new Promise(resolve => setTimeout(resolve, 100));
-    }
-  }
-  
-  console.log(`Rarities for ${address}:`, rarities);
-  return rarities;
-}
-function renderLeaderboard(leaderboard) {
-  const container = document.getElementById('leaderboardContainer');
-  if (!container) return;
-  
-  if (leaderboard.length === 0) {
-    container.innerHTML = '<div class="empty-state">No data yet. Be the first collector! 🎯</div>';
-    return;
-  }
-  
-  const medals = ['🥇', '🥈', '🥉'];
-  
-  container.innerHTML = leaderboard.map((holder, index) => {
-    const rank = index + 1;
-    const medal = medals[index] || `#${rank}`;
-    const isYou = userAddress && holder.address === userAddress.toLowerCase();
-    
-    return `
-      <div class="leaderboard-item ${isYou ? 'your-rank' : ''}" style="animation: slideUp ${0.1 * (index + 1)}s ease-out;">
-        <div class="rank-badge">${medal}</div>
-        <div class="holder-info">
-          <div class="holder-address">${isYou ? '👑 You' : holder.shortAddress}</div>
-          <div class="holder-rarities">
-            ${holder.rarities.mythic > 0 ? `<span class="rarity-count mythic" title="Mythic">${holder.rarities.mythic}M</span>` : ''}
-            ${holder.rarities.legendary > 0 ? `<span class="rarity-count legendary" title="Legendary">${holder.rarities.legendary}L</span>` : ''}
-            ${holder.rarities.rare > 0 ? `<span class="rarity-count rare" title="Rare">${holder.rarities.rare}R</span>` : ''}
-          </div>
-        </div>
-        <div class="holder-count">${holder.count} NFTs</div>
-      </div>
-    `;
-  }).join('');
-}
+// =====================
+// RENDER + POLLING (UNCHANGED)
+// =====================
 
 async function updateLeaderboard() {
   const leaderboard = await fetchLeaderboard();
   renderLeaderboard(leaderboard);
 }
 
-// Auto-refresh leaderboard every 2 minutes
 let leaderboardInterval = null;
 
 function startLeaderboardPolling() {
   if (leaderboardInterval) return;
-  
-  // Initial load with delay to ensure contract is ready
-  setTimeout(() => {
-    updateLeaderboard();
-  }, 2000);
-  
-  leaderboardInterval = setInterval(updateLeaderboard, 120000); // Every 2 minutes
+  setTimeout(updateLeaderboard, 2000);
+  leaderboardInterval = setInterval(updateLeaderboard, 120000);
 }
 
 function stopLeaderboardPolling() {
@@ -3096,14 +3034,9 @@ function stopLeaderboardPolling() {
   }
 }
 
-// Start on page load
-document.addEventListener('DOMContentLoaded', () => {
-  startLeaderboardPolling();
-});
+document.addEventListener('DOMContentLoaded', startLeaderboardPolling);
+window.addEventListener('beforeunload', stopLeaderboardPolling);
 
-window.addEventListener('beforeunload', () => {
-  stopLeaderboardPolling();
-});
 // ===== WALLET BALANCE DISPLAY =====
 let celoPrice = 0;
 
