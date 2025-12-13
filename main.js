@@ -2888,11 +2888,26 @@ async function fetchLeaderboard() {
       const transferUrl = `/api/celoscan?module=account&action=tokennfttx&contractaddress=${contractDetails.address}&page=1&offset=100000&sort=desc`;
      
       console.log('Trying tokennfttx (NFT transfers) endpoint...');
+      console.log('Fetch URL:', transferUrl);
+      
       const response = await fetch(transferUrl);
+      
+      console.log('Response status:', response.status, response.statusText);
+      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+      
       const data = await response.json();
+      
+      console.log('API Response:', {
+        status: data.status,
+        message: data.message,
+        resultType: Array.isArray(data.result) ? 'array' : typeof data.result,
+        resultLength: Array.isArray(data.result) ? data.result.length : 'N/A',
+        error: data.error || 'none'
+      });
      
       if (data.status === '1' && data.result && Array.isArray(data.result) && data.result.length > 0) {
         console.log(`✅ tokennfttx returned ${data.result.length} transfer events`);
+        console.log('Sample transfer:', data.result[0]);
        
         // Process transfers in chronological order
         const transfers = [...data.result].reverse();
@@ -3017,6 +3032,7 @@ async function fetchLeaderboard() {
       }
     } catch (e) {
       console.warn('tokennfttx failed:', e.message);
+      console.error('Full error:', e);
     }
    
     // METHOD 2: Fallback to blockchain scan
@@ -3028,7 +3044,6 @@ async function fetchLeaderboard() {
     return [];
   }
 }
-
 // Fallback method: scan blockchain directly
 async function fetchLeaderboardFromBlockchain() {
   try {
