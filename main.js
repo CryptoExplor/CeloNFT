@@ -2883,31 +2883,50 @@ async function fetchLeaderboard() {
       }
     }
     
-    // ✅ METHOD 1: Try tokennfttx (NFT Transfer events) - Etherscan V2
+    // ✅ METHOD 1: Try tokennfttx (NFT Transfer events) - Etherscan V2 with PAGINATION
     try {
-      const transferUrl = `/api/celoscan?module=account&action=tokennfttx&contractaddress=${contractDetails.address}&page=1&offset=100000&sort=desc`;
+      console.log('Trying tokennfttx (NFT transfers) endpoint with pagination...');
+      
+      // Fetch all transfers with pagination (max 10,000 per page)
+      const allTransfers = [];
+      const pageSize = 10000; // Maximum allowed by API
+      let page = 1;
+      let hasMorePages = true;
+      
+      while (hasMorePages && page <= 10) { // Max 10 pages = 100k transfers
+        const transferUrl = `/api/celoscan?module=account&action=tokennfttx&contractaddress=${contractDetails.address}&page=${page}&offset=${pageSize}&sort=asc`;
+        
+        console.log(`Fetching page ${page}...`);
+        
+        const response = await fetch(transferUrl);
+        const data = await response.json();
+        
+        if (data.status === '1' && data.result && Array.isArray(data.result) && data.result.length > 0) {
+          console.log(`✅ Page ${page} returned ${data.result.length} transfers`);
+          allTransfers.push(...data.result);
+          
+          // Check if there are more pages
+          if (data.result.length < pageSize) {
+            hasMorePages = false; // Last page (partial results)
+          } else {
+            page++;
+          }
+        } else {
+          console.log(`No more results on page ${page}`);
+          hasMorePages = false;
+        }
+        
+        // Safety: avoid infinite loops
+        if (page > 10) {
+          console.log('⚠️ Reached maximum pages (10)');
+          break;
+        }
+      }
+      
+      console.log(`✅ Total transfers fetched: ${allTransfers.length}`);
      
-      console.log('Trying tokennfttx (NFT transfers) endpoint...');
-      console.log('Fetch URL:', transferUrl);
-      
-      const response = await fetch(transferUrl);
-      
-      console.log('Response status:', response.status, response.statusText);
-      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
-      
-      const data = await response.json();
-      
-      console.log('API Response:', {
-        status: data.status,
-        message: data.message,
-        resultType: Array.isArray(data.result) ? 'array' : typeof data.result,
-        resultLength: Array.isArray(data.result) ? data.result.length : 'N/A',
-        error: data.error || 'none'
-      });
-     
-      if (data.status === '1' && data.result && Array.isArray(data.result) && data.result.length > 0) {
-        console.log(`✅ tokennfttx returned ${data.result.length} transfer events`);
-        console.log('Sample transfer:', data.result[0]);
+      if (allTransfers.length > 0) {
+        console.log('Sample transfer:', allTransfers[0]);
        
         // Process transfers in chronological order
         const transfers = [...data.result].reverse();
