@@ -2885,7 +2885,7 @@ async function fetchLeaderboard() {
     
     // ✅ METHOD 1: Try tokennfttx (NFT Transfer events) - Etherscan V2
     try {
-      const transferUrl = `/api/celoscan?module=account&action=tokennfttx&contractaddress=${contractDetails.address}&page=1&offset=10000&sort=desc`;
+      const transferUrl = `/api/celoscan?module=account&action=tokennfttx&contractaddress=${contractDetails.address}&page=1&offset=100000&sort=desc`;
      
       console.log('Trying tokennfttx (NFT transfers) endpoint...');
       const response = await fetch(transferUrl);
@@ -2901,15 +2901,19 @@ async function fetchLeaderboard() {
         const tokenTransferHistory = new Map(); // tokenId -> array of transfers
         
         transfers.forEach(tx => {
-          const tokenId = tx.tokenID;
+          // Normalize tokenID - might be string or number
+          const tokenId = String(tx.tokenID);
+          const from = tx.from.toLowerCase();
+          const to = tx.to.toLowerCase();
+          
           if (!tokenTransferHistory.has(tokenId)) {
             tokenTransferHistory.set(tokenId, []);
           }
           tokenTransferHistory.get(tokenId).push({
-            from: tx.from.toLowerCase(),
-            to: tx.to.toLowerCase(),
-            blockNumber: parseInt(tx.blockNumber),
-            timeStamp: parseInt(tx.timeStamp)
+            from: from,
+            to: to,
+            blockNumber: parseInt(tx.blockNumber) || 0,
+            timeStamp: parseInt(tx.timeStamp) || 0
           });
         });
         
@@ -2944,9 +2948,27 @@ async function fetchLeaderboard() {
         console.log(`Processed ${transfers.length} transfers`);
         console.log(`Found ${tokenTransferHistory.size} unique tokens`);
         console.log(`Found ${holderMap.size} unique current holders`);
+        
+        // Debug: Check for duplicate addresses or issues
+        const allAddresses = new Set();
+        for (const tx of transfers) {
+          allAddresses.add(tx.to.toLowerCase());
+          if (tx.from.toLowerCase() !== '0x0000000000000000000000000000000000000000') {
+            allAddresses.add(tx.from.toLowerCase());
+          }
+        }
+        console.log(`Total unique addresses in transfers: ${allAddresses.size}`);
+        
+        // Debug: Show distribution
+        const holderCounts = Array.from(holderMap.values());
+        const totalNFTs = holderCounts.reduce((sum, count) => sum + count, 0);
+        console.log(`Total NFTs tracked: ${totalNFTs}`);
+        console.log(`Should equal currentOwners.size: ${currentOwners.size}`);
+        
         console.log(`Sample holders:`, 
           Array.from(holderMap.entries())
-            .slice(0, 5)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 10)
             .map(([addr, count]) => `${addr.slice(0, 8)}...: ${count} NFTs`)
         );
        
@@ -3006,6 +3028,7 @@ async function fetchLeaderboard() {
     return [];
   }
 }
+
 // Fallback method: scan blockchain directly
 async function fetchLeaderboardFromBlockchain() {
   try {
