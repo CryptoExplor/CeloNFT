@@ -2772,6 +2772,9 @@ window.addEventListener('beforeunload', () => {
 });
 
 // ===== LEADERBOARD SYSTEM =====
+// Replace the entire leaderboard section in main.js (lines ~2750-3100)
+// with this complete fixed version
+
 let leaderboardCache = null;
 let leaderboardLastFetch = 0;
 const LEADERBOARD_CACHE_TTL = 120000; // 2 minutes (matches polling interval)
@@ -2928,8 +2931,9 @@ async function fetchLeaderboard() {
       if (allTransfers.length > 0) {
         console.log('Sample transfer:', allTransfers[0]);
        
+        // ✅ FIX: Use allTransfers instead of data.result
         // Process transfers in chronological order
-        const transfers = [...data.result].reverse();
+        const transfers = [...allTransfers].reverse();
         
         // First pass: Build the complete transfer history for each token
         const tokenTransferHistory = new Map(); // tokenId -> array of transfers
@@ -3063,6 +3067,7 @@ async function fetchLeaderboard() {
     return [];
   }
 }
+
 // Fallback method: scan blockchain directly
 async function fetchLeaderboardFromBlockchain() {
   try {
@@ -3284,7 +3289,6 @@ document.addEventListener('DOMContentLoaded', () => {
 window.addEventListener('beforeunload', () => {
   stopLeaderboardPolling();
 });
-
 // ===== WALLET BALANCE DISPLAY =====
 let celoPrice = 0;
 
