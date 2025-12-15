@@ -2890,38 +2890,58 @@ async function fetchLeaderboard() {
     try {
       console.log('Trying tokennfttx (NFT transfers) endpoint with pagination...');
       
-      // Fetch all transfers with pagination (max 10,000 per page)
+      // Fetch all transfers with pagination
       const allTransfers = [];
-      const pageSize = 10000; // Maximum allowed by API
+      const pageSize = 1000; // Reduce from 10000 to 1000 for better reliability
       let page = 1;
       let hasMorePages = true;
+      const maxPages = 50; // Allow up to 50 pages = 50k transfers
       
-      while (hasMorePages && page <= 10) { // Max 10 pages = 100k transfers
+      while (hasMorePages && page <= maxPages) {
         const transferUrl = `/api/celoscan?module=account&action=tokennfttx&contractaddress=${contractDetails.address}&page=${page}&offset=${pageSize}&sort=asc`;
         
-        console.log(`Fetching page ${page}...`);
+        console.log(`📄 Fetching page ${page}/${maxPages}...`);
         
-        const response = await fetch(transferUrl);
-        const data = await response.json();
-        
-        if (data.status === '1' && data.result && Array.isArray(data.result) && data.result.length > 0) {
-          console.log(`✅ Page ${page} returned ${data.result.length} transfers`);
-          allTransfers.push(...data.result);
+        try {
+          const response = await fetch(transferUrl);
           
-          // Check if there are more pages
-          if (data.result.length < pageSize) {
-            hasMorePages = false; // Last page (partial results)
-          } else {
-            page++;
+          if (!response.ok) {
+            console.error(`❌ HTTP ${response.status} on page ${page}`);
+            break;
           }
-        } else {
-          console.log(`No more results on page ${page}`);
-          hasMorePages = false;
+          
+          const data = await response.json();
+          
+          // Check for valid response
+          if (data.status === '1' && data.result && Array.isArray(data.result) && data.result.length > 0) {
+            console.log(`✅ Page ${page} returned ${data.result.length} transfers`);
+            allTransfers.push(...data.result);
+            
+            // Check if this is the last page
+            if (data.result.length < pageSize) {
+              console.log(`✅ Reached last page (partial results: ${data.result.length})`);
+              hasMorePages = false;
+            } else {
+              page++;
+              // Small delay to avoid rate limiting
+              await new Promise(resolve => setTimeout(resolve, 200));
+            }
+          } else if (data.status === '0') {
+            // API returned status 0 - could be end of data or error
+            console.log(`⚠️ API status 0 on page ${page}: ${data.message || 'No more data'}`);
+            hasMorePages = false;
+          } else {
+            console.log(`⚠️ Unexpected response on page ${page}`);
+            hasMorePages = false;
+          }
+        } catch (fetchError) {
+          console.error(`❌ Fetch error on page ${page}:`, fetchError.message);
+          break;
         }
         
         // Safety: avoid infinite loops
-        if (page > 10) {
-          console.log('⚠️ Reached maximum pages (10)');
+        if (page > maxPages) {
+          console.log(`⚠️ Reached maximum pages (${maxPages})`);
           break;
         }
       }
@@ -2930,10 +2950,15 @@ async function fetchLeaderboard() {
      
       if (allTransfers.length > 0) {
         console.log('Sample transfer:', allTransfers[0]);
+        console.log(`📊 Processing ${allTransfers.length} transfers for ${contractDetails.address}`);
        
         // ✅ FIX: Use allTransfers instead of data.result
-        // Process transfers in chronological order
-        const transfers = [...allTransfers].reverse();
+        // Process transfers in chronological order (oldest first)
+        const transfers = [...allTransfers].sort((a, b) => {
+          const blockDiff = parseInt(a.blockNumber) - parseInt(b.blockNumber);
+          if (blockDiff !== 0) return blockDiff;
+          return parseInt(a.timeStamp) - parseInt(b.timeStamp);
+        });
         
         // First pass: Build the complete transfer history for each token
         const tokenTransferHistory = new Map(); // tokenId -> array of transfers
@@ -3000,10 +3025,32 @@ async function fetchLeaderboard() {
         // Debug: Show distribution
         const holderCounts = Array.from(holderMap.values());
         const totalNFTs = holderCounts.reduce((sum, count) => sum + count, 0);
-        console.log(`Total NFTs tracked: ${totalNFTs}`);
-        console.log(`Should equal currentOwners.size: ${currentOwners.size}`);
+        console.log(`📊 Total NFTs tracked: ${totalNFTs}`);
+        console.log(`📊 Unique tokens: ${currentOwners.size}`);
+        console.log(`📊 Unique holders: ${holderMap.size}`);
         
-        console.log(`Sample holders:`, 
+        // Verify against blockchain total supply
+        try {
+          const totalSupply = await readContract(wagmiConfig, {
+            address: contractDetails.address,
+            abi: contractDetails.abi,
+            functionName: 'totalSupply'
+          });
+          const onChainTotal = Number(totalSupply);
+          console.log(`🔗 On-chain total supply: ${onChainTotal}`);
+          
+          if (totalNFTs < onChainTotal) {
+            console.warn(`⚠️ Missing ${onChainTotal - totalNFTs} NFTs from transfers! Using blockchain fallback...`);
+            // If we're missing significant data, use blockchain scan instead
+            if (onChainTotal - totalNFTs > 50) {
+              throw new Error('Too many missing transfers, falling back to blockchain scan');
+            }
+          }
+        } catch (e) {
+          console.log('Could not verify total supply:', e.message);
+        }
+        
+        console.log(`🏆 Sample holders:`, 
           Array.from(holderMap.entries())
             .sort((a, b) => b[1] - a[1])
             .slice(0, 10)
@@ -3054,12 +3101,33 @@ async function fetchLeaderboard() {
         return leaderboard;
       }
     } catch (e) {
-      console.warn('tokennfttx failed:', e.message);
+      console.warn('❌ tokennfttx failed:', e.message);
       console.error('Full error:', e);
     }
    
-    // METHOD 2: Fallback to blockchain scan
-    console.log('API methods failed, falling back to blockchain scan...');
+    // ✅ METHOD 2: Try direct totalSupply check and fallback
+    console.log('⚠️ API methods incomplete or failed, checking blockchain...');
+    
+    try {
+      const totalSupply = await readContract(wagmiConfig, {
+        address: contractDetails.address,
+        abi: contractDetails.abi,
+        functionName: 'totalSupply'
+      });
+      const total = Number(totalSupply);
+      console.log(`🔗 Blockchain shows ${total} total NFTs minted`);
+      
+      // If we have data but it's incomplete, still use blockchain scan
+      if (total > 0) {
+        console.log('📡 Falling back to complete blockchain scan for accuracy...');
+        return await fetchLeaderboardFromBlockchain();
+      }
+    } catch (e) {
+      console.error('Could not check total supply:', e);
+    }
+   
+    // METHOD 3: Final fallback
+    console.log('🔄 All methods failed, using blockchain scan...');
     return await fetchLeaderboardFromBlockchain();
    
   } catch (e) {
@@ -3068,7 +3136,7 @@ async function fetchLeaderboard() {
   }
 }
 
-// Fallback method: scan blockchain directly
+// Fallback method: scan blockchain directly (OPTIMIZED)
 async function fetchLeaderboardFromBlockchain() {
   try {
     if (!contractDetails || !wagmiConfig) return [];
@@ -3082,14 +3150,16 @@ async function fetchLeaderboardFromBlockchain() {
     const total = Number(totalSupply);
     if (total === 0) return [];
     
-    console.log(`Scanning all ${total} tokens from blockchain...`);
+    console.log(`🔍 Scanning ${total} tokens from blockchain...`);
     
     const holderMap = new Map();
     const rarityMap = new Map();
     
-    // Process ALL tokens, not just last 200
-    const chunkSize = 20;
+    // Optimize chunk size based on total
+    const chunkSize = total > 500 ? 50 : 20; // Larger chunks for big collections
     const totalChunks = Math.ceil(total / chunkSize);
+    
+    console.log(`📦 Processing in ${totalChunks} chunks of ${chunkSize} tokens each...`);
     
     for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
       const start = chunkIndex * chunkSize + 1;
@@ -3114,9 +3184,9 @@ async function fetchLeaderboardFromBlockchain() {
             functionName: 'tokenTraits',
             args: [BigInt(tokenId)]
           })
-        ]).then(([owner, traits]) => ({ owner, rarity: Number(traits[1]) }))
+        ]).then(([owner, traits]) => ({ tokenId, owner, rarity: Number(traits[1]) }))
         .catch(e => {
-          console.log(`Token ${tokenId} fetch failed:`, e.message);
+          console.log(`⚠️ Token ${tokenId} fetch failed:`, e.message);
           return null;
         })
       );
@@ -3141,8 +3211,20 @@ async function fetchLeaderboardFromBlockchain() {
         }
       });
       
-      console.log(`Processed chunk ${chunkIndex + 1}/${totalChunks}`);
+      // Progress indicator
+      const progress = Math.round((chunkIndex + 1) / totalChunks * 100);
+      console.log(`⏳ Progress: ${progress}% (Chunk ${chunkIndex + 1}/${totalChunks})`);
+      
+      // Small delay to avoid rate limiting
+      if (chunkIndex < totalChunks - 1) {
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
     }
+    
+    const totalTracked = Array.from(holderMap.values()).reduce((sum, count) => sum + count, 0);
+    console.log(`✅ Blockchain scan complete!`);
+    console.log(`📊 Total NFTs tracked: ${totalTracked}/${total}`);
+    console.log(`👥 Unique holders: ${holderMap.size}`);
     
     const leaderboard = Array.from(holderMap.entries())
       .map(([address, count]) => ({
@@ -3158,11 +3240,15 @@ async function fetchLeaderboardFromBlockchain() {
       })
       .slice(0, 10);
     
-    console.log(`Blockchain scan complete: ${leaderboard.length} collectors`);
+    // Cache the result
+    leaderboardCache = leaderboard;
+    leaderboardLastFetch = Date.now();
+    
+    console.log(`🏆 Top 10 collectors ready!`);
     return leaderboard;
     
   } catch (e) {
-    console.error('Blockchain scan error:', e);
+    console.error('❌ Blockchain scan error:', e);
     return [];
   }
 }
@@ -3289,6 +3375,7 @@ document.addEventListener('DOMContentLoaded', () => {
 window.addEventListener('beforeunload', () => {
   stopLeaderboardPolling();
 });
+
 // ===== WALLET BALANCE DISPLAY =====
 let celoPrice = 0;
 
