@@ -3039,15 +3039,26 @@ async function fetchLeaderboard() {
           const onChainTotal = Number(totalSupply);
           console.log(`🔗 On-chain total supply: ${onChainTotal}`);
           
-          if (totalNFTs < onChainTotal) {
-            console.warn(`⚠️ Missing ${onChainTotal - totalNFTs} NFTs from transfers! Using blockchain fallback...`);
-            // If we're missing significant data, use blockchain scan instead
-            if (onChainTotal - totalNFTs > 50) {
-              throw new Error('Too many missing transfers, falling back to blockchain scan');
+          const missingNFTs = onChainTotal - totalNFTs;
+          
+          if (missingNFTs > 0) {
+            console.warn(`⚠️ Missing ${missingNFTs} NFTs from transfers! Using blockchain fallback...`);
+            
+            // If we're missing significant data (more than 50 NFTs or >5%), use blockchain scan
+            const missingPercentage = (missingNFTs / onChainTotal) * 100;
+            if (missingNFTs > 50 || missingPercentage > 5) {
+              console.log(`📡 Missing ${missingPercentage.toFixed(1)}% of NFTs - switching to blockchain scan...`);
+              // Don't throw error, just fall through to blockchain scan method below
+              return await fetchLeaderboardFromBlockchain();
+            } else {
+              console.log(`✓ Only ${missingNFTs} NFTs missing (${missingPercentage.toFixed(1)}%), continuing with API data...`);
             }
+          } else {
+            console.log(`✓ All ${onChainTotal} NFTs accounted for!`);
           }
         } catch (e) {
-          console.log('Could not verify total supply:', e.message);
+          console.log('⚠️ Could not verify total supply:', e.message);
+          // Continue with what we have
         }
         
         console.log(`🏆 Sample holders:`, 
@@ -3057,6 +3068,15 @@ async function fetchLeaderboard() {
             .map(([addr, count]) => `${addr.slice(0, 8)}...: ${count} NFTs`)
         );
        
+        // Only proceed with API data if it's reasonably complete
+        // This check happens after verification above
+        const shouldProceed = holderMap.size > 0 && currentOwners.size > 0;
+        
+        if (!shouldProceed) {
+          console.log('⚠️ Insufficient data from API, falling back to blockchain scan...');
+          return await fetchLeaderboardFromBlockchain();
+        }
+        
         // Get top holders
         const topHolders = Array.from(holderMap.entries())
           .sort((a, b) => b[1] - a[1])
@@ -3105,29 +3125,8 @@ async function fetchLeaderboard() {
       console.error('Full error:', e);
     }
    
-    // ✅ METHOD 2: Try direct totalSupply check and fallback
-    console.log('⚠️ API methods incomplete or failed, checking blockchain...');
-    
-    try {
-      const totalSupply = await readContract(wagmiConfig, {
-        address: contractDetails.address,
-        abi: contractDetails.abi,
-        functionName: 'totalSupply'
-      });
-      const total = Number(totalSupply);
-      console.log(`🔗 Blockchain shows ${total} total NFTs minted`);
-      
-      // If we have data but it's incomplete, still use blockchain scan
-      if (total > 0) {
-        console.log('📡 Falling back to complete blockchain scan for accuracy...');
-        return await fetchLeaderboardFromBlockchain();
-      }
-    } catch (e) {
-      console.error('Could not check total supply:', e);
-    }
-   
-    // METHOD 3: Final fallback
-    console.log('🔄 All methods failed, using blockchain scan...');
+    // ✅ METHOD 2: Fallback to complete blockchain scan
+    console.log('📡 Falling back to complete blockchain scan for accuracy...');
     return await fetchLeaderboardFromBlockchain();
    
   } catch (e) {
