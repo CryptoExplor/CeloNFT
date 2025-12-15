@@ -1,100 +1,171 @@
-// api/notification.js – Fixed version with better error handling
-// Sends real Farcaster Mini App notifications via Neynar's /frame/notifications API
+// api/notification.js – FIXED VERSION WITH PROPER KV STORAGE
+// Complete rewrite with robust error handling
 
 export const runtime = 'nodejs';
 
-let kv;
+// ===== KV STORAGE INITIALIZATION =====
+let kv = null;
 let useKV = false;
 
-// Try to load KV with better error handling
-try {
-  const { kv: vercelKv } = await import('@vercel/kv');
-  kv = vercelKv;
-  useKV = true;
-  console.log('✅ KV loaded for notifications');
-} catch (e) {
-  console.warn('⚠️ KV not available - using memory fallback:', e.message);
-  useKV = false;
+async function initializeKV() {
+  if (kv !== null) return useKV;
+  
+  try {
+    const vercelKV = await import('@vercel/kv');
+    kv = vercelKV.kv;
+    
+    // Test connection
+    await kv.ping();
+    
+    useKV = true;
+    console.log('✅ Vercel KV initialized for notifications');
+    return true;
+  } catch (e) {
+    console.warn('⚠️ KV not available, using memory fallback:', e.message);
+    useKV = false;
+    return false;
+  }
 }
 
-// Simple in-memory fallback
+// In-memory fallback
 const memoryUsers = new Map();
 const memoryUserSet = new Set();
 
-// ---- Helper: KV-backed JSON set/get for users ----
+// ===== STORAGE WRAPPER =====
+class NotificationStorage {
+  constructor() {
+    this.initialized = false;
+    this.USER_KEY_PREFIX = 'notif_user_';
+    this.USER_SET_KEY = 'notif_users';
+  }
 
-const USER_KEY_PREFIX = 'notif_user_';
-const USER_SET_KEY = 'notif_users';
-
-function userKey(fid) {
-  return `${USER_KEY_PREFIX}${fid}`;
-}
-
-async function saveUser(user) {
-  const key = userKey(user.fid);
-  
-  // Persist to KV if available
-  if (useKV && kv) {
-    try {
-      await kv.set(key, JSON.stringify(user));
-      await kv.sadd(USER_SET_KEY, String(user.fid));
-    } catch (e) {
-      console.error('KV saveUser failed:', e.message || e);
+  async init() {
+    if (!this.initialized) {
+      await initializeKV();
+      this.initialized = true;
     }
   }
-  
-  // Always mirror in memory
-  memoryUsers.set(key, user);
-  memoryUserSet.add(String(user.fid));
-  
-  console.log(`💾 Saved user ${user.fid} to storage`);
-}
 
-async function loadUser(fid) {
-  const key = userKey(fid);
+  userKey(fid) {
+    return `${this.USER_KEY_PREFIX}${fid}`;
+  }
 
-  // Try KV first
-  if (useKV && kv) {
-    try {
-      const raw = await kv.get(key);
-      if (raw) {
-        const user = typeof raw === 'string' ? JSON.parse(raw) : raw;
-        console.log(`📖 Loaded user ${fid} from KV`);
-        return user;
+  async saveUser(user) {
+    await this.init();
+    
+    const key = this.userKey(user.fid);
+    const data = JSON.stringify(user);
+    
+    console.log(`💾 Saving user ${user.fid}...`);
+    
+    // Try KV first
+    if (useKV && kv) {
+      try {
+        await kv.set(key, data);
+        await kv.sadd(this.USER_SET_KEY, String(user.fid));
+        console.log(`✅ KV saved user ${user.fid}`);
+      } catch (e) {
+        console.error('❌ KV save failed:', e.message);
       }
-    } catch (e) {
-      console.error('KV loadUser failed:', e.message || e);
     }
+    
+    // Always save to memory as backup
+    memoryUsers.set(key, user);
+    memoryUserSet.add(String(user.fid));
+    console.log(`✅ Memory saved user ${user.fid}`);
+    
+    return true;
   }
 
-  // Fallback to memory
-  const user = memoryUsers.get(key);
-  if (user) {
-    console.log(`📖 Loaded user ${fid} from memory`);
+  async loadUser(fid) {
+    await this.init();
+    
+    const key = this.userKey(fid);
+    console.log(`🔍 Loading user ${fid}...`);
+    
+    // Try KV first
+    if (useKV && kv) {
+      try {
+        const raw = await kv.get(key);
+        if (raw) {
+          const user = typeof raw === 'string' ? JSON.parse(raw) : raw;
+          console.log(`✅ KV loaded user ${fid}`);
+          return user;
+        }
+      } catch (e) {
+        console.error('❌ KV load failed:', e.message);
+      }
+    }
+    
+    // Fallback to memory
+    const user = memoryUsers.get(key);
+    if (user) {
+      console.log(`✅ Memory loaded user ${fid}`);
+      return user;
+    }
+    
+    console.log(`❌ User ${fid} not found`);
+    return null;
   }
-  return user || null;
+
+  async getRegisteredFids() {
+    await this.init();
+    
+    console.log('📋 Getting registered FIDs...');
+    
+    // Try KV first
+    if (useKV && kv) {
+      try {
+        const fids = await kv.smembers(this.USER_SET_KEY);
+        if (fids && fids.length > 0) {
+          const validFids = fids
+            .map(f => Number(f))
+            .filter(n => Number.isInteger(n) && n > 0);
+          console.log(`✅ KV returned ${validFids.length} FIDs`);
+          return validFids;
+        }
+      } catch (e) {
+        console.error('❌ KV smembers failed:', e.message);
+      }
+    }
+    
+    // Fallback to memory
+    const fids = Array.from(memoryUserSet)
+      .map(f => Number(f))
+      .filter(n => Number.isInteger(n) && n > 0);
+    console.log(`✅ Memory returned ${fids.length} FIDs`);
+    return fids;
+  }
+
+  async deleteUser(fid) {
+    await this.init();
+    
+    const key = this.userKey(fid);
+    console.log(`🗑️ Deleting user ${fid}...`);
+    
+    // Try KV first
+    if (useKV && kv) {
+      try {
+        await kv.del(key);
+        await kv.srem(this.USER_SET_KEY, String(fid));
+        console.log(`✅ KV deleted user ${fid}`);
+      } catch (e) {
+        console.error('❌ KV delete failed:', e.message);
+      }
+    }
+    
+    // Always delete from memory
+    memoryUsers.delete(key);
+    memoryUserSet.delete(String(fid));
+    console.log(`✅ Memory deleted user ${fid}`);
+    
+    return true;
+  }
 }
 
-async function getRegisteredFids() {
-  if (useKV && kv) {
-    try {
-      const fids = await kv.smembers(USER_SET_KEY);
-      return (fids || [])
-        .map((f) => Number(f))
-        .filter((n) => Number.isInteger(n) && n > 0);
-    } catch (e) {
-      console.error('KV smembers failed:', e.message || e);
-    }
-  }
+const storage = new NotificationStorage();
 
-  // Memory fallback
-  return Array.from(memoryUserSet)
-    .map((f) => Number(f))
-    .filter((n) => Number.isInteger(n) && n > 0);
-}
-
-// ---- Notification content ----
-
+// ===== NOTIFICATION MESSAGES =====
 const NOTIFICATION_MESSAGES = [
   {
     id: 'daily-mint',
@@ -128,8 +199,7 @@ function pickRandomMessage() {
   return NOTIFICATION_MESSAGES[idx];
 }
 
-// ---- Neynar Frame Notifications sender ----
-
+// ===== NEYNAR API SENDER =====
 async function sendMiniAppNotificationsToFids(targetFids, message, uuid) {
   const apiKey = process.env.NEYNAR_API_KEY;
   const miniAppUrl = process.env.MINIAPP_URL || 'https://celo-nft-phi.vercel.app/';
@@ -158,7 +228,7 @@ async function sendMiniAppNotificationsToFids(targetFids, message, uuid) {
     }
   };
 
-  console.log(`📤 Sending notification to ${targetFids.length} users:`, payload);
+  console.log(`📤 Sending notification to ${targetFids.length} users`);
 
   const response = await fetch(
     'https://api.neynar.com/v2/farcaster/frame/notifications/',
@@ -186,44 +256,69 @@ async function sendMiniAppNotificationsToFids(targetFids, message, uuid) {
     : [];
 
   const successfulFids = deliveries
-    .filter((d) => d.status === 'success')
-    .map((d) => d.fid);
+    .filter(d => d.status === 'success')
+    .map(d => d.fid);
 
   console.log(`✅ Successfully sent to ${successfulFids.length} users`);
 
   return { successfulFids, deliveries };
 }
 
-// ---- Main API handler ----
-
+// ===== MAIN API HANDLER =====
 export default async function handler(req, res) {
-  console.log(`📨 Notification API called: ${req.method} ${req.url}`);
+  console.log(`📨 Notification API: ${req.method} ${req.url}`);
   
   // CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
-  res.setHeader(
-    'Access-Control-Allow-Headers',
-    'Content-Type, x-vercel-cron, x-cron-secret'
-  );
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-vercel-cron, x-cron-secret');
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
 
   try {
+    // Initialize storage
+    await storage.init();
+
     // ===== HEALTH CHECK =====
-    if (req.method === 'GET' && !req.query.fid) {
+    if (req.method === 'GET' && !req.query.fid && !req.query.health) {
       return res.json({
         status: 'ok',
         timestamp: new Date().toISOString(),
-        kv_enabled: useKV,
+        storage: useKV ? 'kv' : 'memory',
         env_check: {
           neynar_api_key: !!process.env.NEYNAR_API_KEY,
           cron_secret: !!process.env.CRON_SECRET,
           miniapp_url: !!process.env.MINIAPP_URL
         }
       });
+    }
+
+    // ===== STORAGE HEALTH CHECK =====
+    if (req.method === 'GET' && req.query.health === 'true') {
+      const testKey = 'health_check_' + Date.now();
+      const testValue = { test: true, timestamp: Date.now() };
+      
+      try {
+        await storage.saveUser({ fid: 999999, username: 'test', ...testValue });
+        const retrieved = await storage.loadUser(999999);
+        await storage.deleteUser(999999);
+        
+        return res.json({
+          status: 'healthy',
+          storage: useKV ? 'kv' : 'memory',
+          writeSuccess: true,
+          readSuccess: !!retrieved,
+          deleteSuccess: true
+        });
+      } catch (e) {
+        return res.json({
+          status: 'degraded',
+          storage: useKV ? 'kv' : 'memory',
+          error: e.message
+        });
+      }
     }
 
     // ===== AUTO-REGISTER USER =====
@@ -238,7 +333,7 @@ export default async function handler(req, res) {
 
       console.log(`🔔 Registration request for FID ${fidNum}`);
 
-      const existingUser = await loadUser(fidNum);
+      const existingUser = await storage.loadUser(fidNum);
 
       if (!existingUser) {
         const now = Date.now();
@@ -251,32 +346,35 @@ export default async function handler(req, res) {
           totalNotificationsSent: 0
         };
 
-        await saveUser(userData);
+        await storage.saveUser(userData);
 
         console.log(`✅ Auto-registered user ${fidNum} (${userData.username})`);
 
         return res.json({
           success: true,
           message: 'Registered for daily reminders',
-          isNew: true
+          isNew: true,
+          storage: useKV ? 'kv' : 'memory'
         });
       } else {
         // Update username if changed
         if (username && existingUser.username !== username) {
           existingUser.username = username;
-          await saveUser(existingUser);
+          await storage.saveUser(existingUser);
+          console.log(`✅ Updated username for ${fidNum}`);
         }
 
         console.log(`ℹ️ User ${fidNum} already registered`);
         return res.json({
           success: true,
           message: 'Already registered',
-          isNew: false
+          isNew: false,
+          storage: useKV ? 'kv' : 'memory'
         });
       }
     }
 
-    // ===== ENABLE / DISABLE USER =====
+    // ===== ENABLE/DISABLE NOTIFICATIONS =====
     if (req.method === 'POST' && req.body?.action === 'setEnabled') {
       const { fid, enabled } = req.body;
       const fidNum = Number(fid);
@@ -285,7 +383,7 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'Invalid fid' });
       }
 
-      const user = (await loadUser(fidNum)) || {
+      const user = await storage.loadUser(fidNum) || {
         fid: fidNum,
         username: `User ${fidNum}`,
         registeredAt: Date.now(),
@@ -294,13 +392,14 @@ export default async function handler(req, res) {
       };
 
       user.enabled = Boolean(enabled);
-      await saveUser(user);
+      await storage.saveUser(user);
 
       console.log(`${user.enabled ? '✅ Enabled' : '🚫 Disabled'} notifications for ${fidNum}`);
 
       return res.json({
         success: true,
-        enabled: user.enabled
+        enabled: user.enabled,
+        storage: useKV ? 'kv' : 'memory'
       });
     }
 
@@ -323,7 +422,7 @@ export default async function handler(req, res) {
       const now = Date.now();
       const oneDayAgo = now - 24 * 60 * 60 * 1000;
 
-      const allFids = await getRegisteredFids();
+      const allFids = await storage.getRegisteredFids();
       console.log(`📊 Found ${allFids.length} registered users`);
 
       if (allFids.length === 0) {
@@ -346,15 +445,18 @@ export default async function handler(req, res) {
       // Filter eligible users
       for (const fidNum of allFids) {
         try {
-          const user = await loadUser(fidNum);
+          const user = await storage.loadUser(fidNum);
           if (!user) continue;
+          
           userCache.set(fidNum, user);
 
           if (user.enabled === false) {
+            console.log(`⏭️ User ${fidNum} disabled notifications`);
             continue;
           }
 
           if (user.lastNotification && user.lastNotification > oneDayAgo) {
+            console.log(`⏭️ User ${fidNum} already notified today`);
             continue;
           }
 
@@ -401,7 +503,7 @@ export default async function handler(req, res) {
 
           // Update user metadata
           for (const fid of successfulFids) {
-            const user = userCache.get(fid) || (await loadUser(fid)) || {
+            const user = userCache.get(fid) || await storage.loadUser(fid) || {
               fid,
               username: `User ${fid}`,
               registeredAt: now,
@@ -412,7 +514,7 @@ export default async function handler(req, res) {
             user.lastNotification = now;
             user.totalNotificationsSent = (user.totalNotificationsSent || 0) + 1;
 
-            await saveUser(user);
+            await storage.saveUser(user);
           }
 
           sentCount += successfulFids.length;
@@ -430,7 +532,8 @@ export default async function handler(req, res) {
         errors: errorCount,
         total: allFids.length,
         timestamp: new Date().toISOString(),
-        notificationTitle: message.title
+        notificationTitle: message.title,
+        storage: useKV ? 'kv' : 'memory'
       };
 
       console.log('📧 Daily notification batch complete:', summary);
@@ -446,16 +549,18 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'Invalid fid' });
       }
 
-      const userData = await loadUser(fidNum);
+      const userData = await storage.loadUser(fidNum);
 
       return res.json({
         registered: !!userData,
         enabled: userData ? userData.enabled !== false : false,
         lastNotification: userData ? userData.lastNotification : null,
-        totalSent: userData ? userData.totalNotificationsSent || 0 : 0
+        totalSent: userData ? userData.totalNotificationsSent || 0 : 0,
+        storage: useKV ? 'kv' : 'memory'
       });
     }
 
+    // Unknown request
     return res.status(405).json({ error: 'Method not allowed' });
     
   } catch (err) {
