@@ -3619,7 +3619,7 @@ function renderGallery(nfts) {
   const rarityColors = ['#9ca3af', '#3b82f6', '#f59e0b', '#ec4899'];
   
   galleryGrid.innerHTML = filtered.map(nft => `
-    <div class="gallery-item" onclick="viewNFTDetails(${nft.tokenId})">
+    <div class="gallery-item" data-token-id="${nft.tokenId}">
       <div class="gallery-item-image">
         <div style="display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; background: #000; color: #49dfb5; font-size: 2rem;">
           #${nft.tokenId}
@@ -3633,7 +3633,14 @@ function renderGallery(nfts) {
       </div>
     </div>
   `).join('');
-}
+  
+  // Add click listeners after rendering
+  galleryGrid.querySelectorAll('.gallery-item').forEach(item => {
+    item.addEventListener('click', () => {
+      const tokenId = parseInt(item.dataset.tokenId);
+      viewNFTDetails(tokenId);
+    });
+  });
 
 function viewNFTDetails(tokenId) {
   // Switch to mint tab and preview this NFT
@@ -3641,6 +3648,10 @@ function viewNFTDetails(tokenId) {
   lastMintedTokenId = tokenId;
   previewNft(tokenId);
 }
+
+// Expose to global scope for onclick handlers
+window.viewNFTDetails = viewNFTDetails;
+
 
 // Add filter listeners
 document.getElementById('rarityFilter')?.addEventListener('change', () => {
