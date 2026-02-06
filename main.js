@@ -855,7 +855,7 @@ async function showPredictionModal() {
     modal.onclick = (e) => {
       if (e.target === modal) {
         cleanup();
-        resolve({ skip: true });
+        resolve({ skip: true, cancelled: true });
       }
     };
   });
@@ -2269,6 +2269,11 @@ mintBtn.addEventListener('click', async () => {
     const predictionResult = await showPredictionModal();
     
     console.log('Prediction result:', predictionResult);
+
+    if (predictionResult.cancelled) {
+      setStatus('Mint cancelled.', 'info');
+      return;
+    }
     
     statusBox.innerHTML = '';
     statusBox.className = 'status-box';
