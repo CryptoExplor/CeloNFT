@@ -3656,7 +3656,7 @@ function viewNFTDetails(tokenId) {
 
 // Expose to global scope for onclick handlers
 window.viewNFTDetails = viewNFTDetails;
-
+}
 
 // Add filter listeners
 document.getElementById('rarityFilter')?.addEventListener('change', () => {
