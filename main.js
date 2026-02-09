@@ -3841,4 +3841,3 @@ async function loadAchievementsBottom() {
     timestamp: Date.now()
   }));
 }
-}
